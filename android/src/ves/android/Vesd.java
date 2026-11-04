@@ -1,0 +1,350 @@
+package ves.android;
+
+import android.media.AudioFormat;
+import android.media.AudioTrack;
+import android.os.SystemClock;
+
+import org.json.JSONObject;
+
+import java.util.Map;
+
+import ves.core.AudioPolicy;
+import ves.core.Settings;
+import ves.core.Sig;
+import ves.core.SignalState;
+import ves.core.VesCore;
+import ves.hmg.HmgClient;
+import ves.hmg.Prefs;
+
+/**
+ * vesd: the virtual engine sound service (HMG-API mod service, app_process,
+ * user system). Reads the car's data stream (hscan_mux; HMG-API vehicle readings
+ * as a fallback), renders the sound with ves.core and plays it on Android stream
+ * 12 (navigation), opening the MICOM's mixing channel only while there is sound and
+ * no voice (navigation prompt, call, voice recognition ...) is speaking.
+ */
+public final class Vesd implements MicomAudio.Events {
+    static final int RATE = 22050, BLOCK = 220; // 10 ms
+    static final int ANDROID_STREAM_NAVI = 12;
+
+    final VesCore core = new VesCore(RATE);
+    final MicomAudio micom = new MicomAudio();
+    final HmgClient hmg = new HmgClient(5000);
+    final HscanReader hscan = new HscanReader(core.framer(), core);
+    final Probe probe = new Probe(this);
+
+    volatile int ownType = MicomAudio.NAVI_SOUNDEFFECT;
+    volatile boolean pathOpen;
+    volatile String settingsText = "";
+    volatile String lastError = "";
+    volatile boolean fallbackActive;
+    volatile long fallbackPolls;
+    volatile long underruns, opens, closes, blocks;
+    volatile boolean exclusive; // a probe owns the audio path
+    volatile Settings override; // a probe's settings (null: the owner's)
+    volatile boolean skipStartupClose; // probe stuck test: leave a crashed holder's channel as it is, once
+    private Settings ownerSettings = Settings.fromMap(new java.util.HashMap<String, String>());
+
+    public static void main(String[] args) {
+        Out.log("vesd starting (rate " + RATE + ")");
+        try {
+            new Vesd().run(args);
+        } catch (Throwable t) {
+            Out.log("vesd: fatal " + t);
+            t.printStackTrace(System.out);
+            System.exit(1);
+        }
+    }
+
+    void run(String[] args) throws Exception {
+        if (!micom.connect()) Out.log("micom: " + MicomAudio.SERVICE + " not found (will retry)");
+        loadSettings(true);
+        boolean skipCleanup = probe.consumeStuckFlag();
+        if (!skipCleanup) cleanupPath("startup");
+        else {
+            skipStartupClose = true;
+            Out.log("startup: cleanup skipped once (probe stuck test)");
+        }
+        registerListener();
+        thread("hscan", hscan);
+        thread("settings", new Runnable() {
+            public void run() {
+                while (true) {
+                    SystemClock.sleep(2000);
+                    loadSettings(false);
+                    if (!micom.alive()) {
+                        if (micom.connect()) registerListener();
+                    }
+                }
+            }
+        });
+        thread("fallback", new Runnable() {
+            public void run() {
+                fallbackLoop();
+            }
+        });
+        thread("control", new Control(this));
+        audioLoop();
+    }
+
+    static Thread thread(String name, Runnable r) {
+        Thread t = new Thread(r, "ves-" + name);
+        t.setDaemon(true);
+        t.start();
+        return t;
+    }
+
+    // ---- settings
+
+    void loadSettings(boolean first) {
+        try {
+            String t = hmg.settingsJson();
+            if (t == null) {
+                if (first) Out.log("settings: hmgapid refused (is the mod enabled?)");
+                return;
+            }
+            if (t.equals(settingsText)) return;
+            settingsText = t;
+            JSONObject o = new JSONObject(t.length() == 0 ? "{}" : t);
+            Map<String, String> m = Prefs.toMap(o);
+            Settings s = Settings.fromMap(m);
+            int type = parseType(m.get(Prefs.AUDIO_TYPE), MicomAudio.NAVI_SOUNDEFFECT);
+            synchronized (core) {
+                ownerSettings = s;
+                if (override == null) core.setSettings(s);
+            }
+            if (type != ownType) {
+                cleanupPath("audio type change");
+                ownType = type;
+                micom.setOwnType(type);
+            }
+            Out.log("settings: " + s + " type=0x" + Integer.toHexString(type));
+        } catch (Throwable e) {
+            lastError = "settings: " + e;
+            if (first) Out.log(lastError);
+        }
+    }
+
+    static int parseType(String v, int def) {
+        if (v == null) return def;
+        try {
+            v = v.trim();
+            int t = v.startsWith("0x") ? Integer.parseInt(v.substring(2), 16) : Integer.parseInt(v);
+            switch (t) {
+                case MicomAudio.NAVI_SOUNDEFFECT:
+                case MicomAudio.SYSTEM_ALARM:
+                case MicomAudio.TTS_EFFECT_SOUND:
+                case MicomAudio.NAVI:
+                    return t;
+                default:
+                    return def;
+            }
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
+
+    void setOverride(Settings s) {
+        synchronized (core) {
+            override = s;
+            core.setSettings(s != null ? s : ownerSettings);
+        }
+    }
+
+    Settings ownerSettings() {
+        synchronized (core) {
+            return ownerSettings;
+        }
+    }
+
+    // ---- MICOM listener
+
+    void registerListener() {
+        try {
+            micom.register(this, ownType);
+            Out.log("micom: listener registered");
+        } catch (Throwable e) {
+            lastError = "micom register: " + e;
+            Out.log(lastError);
+        }
+    }
+
+    public void onYield(String source, boolean start, String raw) {
+        long now = SystemClock.uptimeMillis();
+        synchronized (core) {
+            if (start) core.onYieldStart(source, now);
+            else core.onYieldEnd(source, now);
+        }
+        Out.log("micom: " + raw + " -> " + (start ? "yield " : "resume ") + source);
+        probe.event(raw + (start ? " yield " : " end ") + source);
+    }
+
+    public void onOther(String raw) {
+        probe.event(raw);
+    }
+
+    // ---- the path
+
+    void openPath(String why) {
+        try {
+            boolean ok = micom.startAudio(ownType);
+            pathOpen = true;
+            opens++;
+            Out.log("path: startAudio(0x" + Integer.toHexString(ownType) + ")=" + ok + " (" + why + ")");
+            probe.event("startAudio 0x" + Integer.toHexString(ownType) + " " + ok);
+        } catch (Throwable e) {
+            lastError = "startAudio: " + e;
+            Out.log(lastError);
+        }
+    }
+
+    void cleanupPath(String why) {
+        try {
+            boolean ok = micom.endAudio(ownType);
+            if (pathOpen || !"startup".equals(why)) Out.log("path: endAudio(0x" + Integer.toHexString(ownType) + ")=" + ok + " (" + why + ")");
+            probe.event("endAudio 0x" + Integer.toHexString(ownType) + " " + ok + " " + why);
+        } catch (Throwable e) {
+            lastError = "endAudio: " + e;
+        }
+        if (pathOpen) closes++;
+        pathOpen = false;
+    }
+
+    // ---- fallback: HMG-API's readings when the stream is silent
+
+    void fallbackLoop() {
+        while (true) {
+            long now = SystemClock.uptimeMillis();
+            boolean stale = !hscan.connected || now - hscan.lastDataMs > 1000;
+            if (!stale || hscan.paused) {
+                if (fallbackActive) Out.log("fallback: off (stream is back)");
+                fallbackActive = false;
+                SystemClock.sleep(500);
+                continue;
+            }
+            if (!fallbackActive) Out.log("fallback: on (no hscan data)");
+            fallbackActive = true;
+            try {
+                Map<String, String> v = hmg.vehicle("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure");
+                long t = SystemClock.uptimeMillis();
+                fallbackPolls++;
+                synchronized (core) {
+                    SignalState s = core.signals();
+                    put(s, Sig.SPEED_KPH, v.get("speed"), t);
+                    put(s, Sig.PEDAL_PCT, v.get("pedal.accel"), t);
+                    put(s, Sig.READY, v.get("hv.ready"), t);
+                    put(s, Sig.BRAKE_BAR, v.get("brake.pressure"), t);
+                    String p = v.get("gear.park");
+                    // the fallback only knows "in P or not": not-P counts as D
+                    if ("1".equals(p)) s.set(Sig.GEAR, Sig.GEAR_P, t);
+                    else if ("0".equals(p)) s.set(Sig.GEAR, Sig.GEAR_D, t);
+                }
+            } catch (Throwable e) {
+                lastError = "fallback: " + e;
+            }
+            SystemClock.sleep(200);
+        }
+    }
+
+    static void put(SignalState s, int sig, String v, long t) {
+        if (v == null || v.equals("-")) return;
+        try {
+            s.set(sig, Double.parseDouble(v), t);
+        } catch (NumberFormatException ignored) {
+        }
+    }
+
+    // ---- the sound
+
+    void audioLoop() {
+        int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        int bytes = Math.max(min, RATE / 10 * 2); // >= 100 ms
+        AudioTrack track = null;
+        short[] buf = new short[BLOCK];
+        boolean playing = false;
+        long written = 0;
+        while (true) {
+            long now = SystemClock.uptimeMillis();
+            int act;
+            synchronized (core) {
+                act = core.renderBlock(buf, BLOCK, now);
+            }
+            blocks++;
+            if (exclusive) {
+                // a probe test owns the path: keep the model running, stay closed and quiet
+                if (pathOpen) cleanupPath("probe");
+                if (playing && track != null) {
+                    track.pause();
+                    track.flush();
+                    playing = false;
+                }
+                SystemClock.sleep(10);
+                continue;
+            }
+            if (act == AudioPolicy.ACT_OPEN) {
+                if (track == null) {
+                    try {
+                        track = new AudioTrack(ANDROID_STREAM_NAVI, RATE, AudioFormat.CHANNEL_OUT_MONO,
+                                AudioFormat.ENCODING_PCM_16BIT, bytes, AudioTrack.MODE_STREAM);
+                        Out.log("track: stream 12, " + bytes + " bytes, state " + track.getState());
+                    } catch (Throwable e) {
+                        lastError = "AudioTrack: " + e;
+                        Out.log(lastError);
+                        track = null;
+                    }
+                }
+                openPath("sound");
+                if (track != null) {
+                    track.play();
+                    playing = true;
+                    written = 0;
+                }
+            } else if (act == AudioPolicy.ACT_CLOSE && skipStartupClose && !pathOpen) {
+                skipStartupClose = false; // the core's first-tick cleanup, skipped for the stuck test
+            } else if (act == AudioPolicy.ACT_CLOSE) {
+                if (playing && track != null) {
+                    track.pause();
+                    track.flush();
+                }
+                playing = false;
+                cleanupPath(pathOpen ? "silence or voice" : "startup");
+            }
+            if (playing && track != null) {
+                int head = track.getPlaybackHeadPosition();
+                if (written > BLOCK * 4 && written - (head & 0xffffffffL) <= 0) underruns++;
+                int n = track.write(buf, 0, BLOCK);
+                if (n > 0) written += n;
+                else SystemClock.sleep(10);
+            } else {
+                SystemClock.sleep(10);
+            }
+        }
+    }
+
+    String status() {
+        StringBuilder b = new StringBuilder();
+        synchronized (core) {
+            b.append(core.status()).append('\n');
+            SignalState s = core.signals();
+            long now = SystemClock.uptimeMillis();
+            b.append("signals");
+            for (int i = 0; i < Sig.COUNT; i++) b.append(' ').append(Sig.name(i)).append('=').append(fmt(s.get(i, now)));
+            b.append('\n');
+            b.append("settings ").append(core.settings()).append(override != null ? " (probe)" : "").append('\n');
+        }
+        b.append("path open=").append(pathOpen ? 1 : 0).append(" type=0x").append(Integer.toHexString(ownType))
+                .append(" opens=").append(opens).append(" closes=").append(closes).append(" underruns=").append(underruns).append('\n');
+        b.append("hscan connected=").append(hscan.connected ? 1 : 0).append(" bytes=").append(hscan.bytes)
+                .append(" age_ms=").append(hscan.lastDataMs == 0 ? -1 : SystemClock.uptimeMillis() - hscan.lastDataMs)
+                .append(" fallback=").append(fallbackActive ? 1 : 0).append(" polls=").append(fallbackPolls).append('\n');
+        b.append("micom alive=").append(micom.alive() ? 1 : 0).append('\n');
+        b.append("probe ").append(probe.state()).append('\n');
+        if (lastError.length() > 0) b.append("last_error ").append(lastError).append('\n');
+        return b.toString();
+    }
+
+    static String fmt(double v) {
+        if (Double.isNaN(v)) return "-";
+        return String.valueOf(Math.round(v * 100) / 100.0);
+    }
+}
