@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.jihoonseo.ves"
+    android:versionCode="1"
+    android:versionName="0.1.0">
+
+    <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19" />
+
+    <application android:label="@string/app_name" android:icon="@drawable/ic_ves" android:allowBackup="false"
+        android:theme="@android:style/Theme.Holo.NoActionBar">
+        <activity android:name="ves.app.MainActivity" android:label="@string/app_name"
+            android:launchMode="singleTask" android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name="ves.app.ProbeActivity" android:label="@string/probe_name"
+            android:screenOrientation="landscape" />
+        <!-- the side-panel page (mod.json provides.panel) and the star key / widget actions -->
+        <receiver android:name="ves.app.VesWidget" android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="io.github.jihoonseo.ves.TOGGLE" />
+                <action android:name="io.github.jihoonseo.ves.VOL_UP" />
+                <action android:name="io.github.jihoonseo.ves.VOL_DOWN" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/ves_widget" />
+        </receiver>
+    </application>
+</manifest>

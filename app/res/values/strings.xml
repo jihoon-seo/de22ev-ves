@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">엔진 사운드</string>
+    <string name="probe_name">엔진 사운드 점검</string>
+</resources>
