@@ -1,0 +1,16 @@
+# build outputs
+/build/
+/dist/
+*.class
+*.dex
+*.jar
+*.zip
+
+# private signing keys: never commit (keys/author.key.pub is public and tracked)
+*.key
+*.pem
+keys/*
+!keys/author.key.pub
+!keys/uuid.txt
+*.p12
+*.pass
