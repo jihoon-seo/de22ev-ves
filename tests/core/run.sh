@@ -8,8 +8,8 @@ set -u
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT" || exit 1
 
-JDK_BIN="${JDK_BIN:-C:/Users/jhseo/tools/jdk-21.0.13+9/bin}"
-if [ -x "$JDK_BIN/javac" ] || [ -x "$JDK_BIN/javac.exe" ]; then
+JDK_BIN="${JDK_BIN:-${JAVA_HOME:+$JAVA_HOME/bin}}"
+if [ -n "$JDK_BIN" ] && { [ -x "$JDK_BIN/javac" ] || [ -x "$JDK_BIN/javac.exe" ]; }; then
     JAVAC="$JDK_BIN/javac"
     JAVA="$JDK_BIN/java"
 else
