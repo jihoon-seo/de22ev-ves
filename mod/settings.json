@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "settings": [
+    {
+      "key": "enabled",
+      "type": "toggle",
+      "default": false,
+      "title": "가상 엔진 사운드",
+      "description": "실내 스피커로만 나옵니다. 차 밖 보행자 경고음은 바뀌지 않습니다."
+    },
+    {
+      "key": "volume",
+      "type": "number",
+      "default": 40,
+      "title": "볼륨 (0-100)",
+      "description": "엔진 사운드 자체의 크기입니다. 차 볼륨과 따로 움직이고, 100에서도 상한이 있습니다."
+    },
+    {
+      "key": "profile",
+      "type": "choice",
+      "default": "ice_smooth",
+      "title": "소리 종류",
+      "options": [
+        { "value": "ice_smooth", "title": "내연기관 (부드럽게, 변속 없음)" },
+        { "value": "ice_shift", "title": "내연기관 (가상 변속)" },
+        { "value": "ev_future", "title": "EV 미래형" }
+      ]
+    },
+    {
+      "key": "mode",
+      "type": "choice",
+      "default": "idle_regen",
+      "title": "정차·회생 동작",
+      "description": "P/N/R이거나 Ready가 아니면 항상 무음입니다.",
+      "options": [
+        { "value": "idle_regen", "title": "정차 시 작은 공회전 + 회생제동 소리" },
+        { "value": "stop_silent_regen", "title": "정차 시 무음 + 회생제동 소리" },
+        { "value": "accel_only", "title": "가속할 때만" },
+        { "value": "drive_all", "title": "주행 중 항상 (회생제동 소리 없음)" }
+      ]
+    },
+    {
+      "key": "idle_level",
+      "type": "choice",
+      "default": "30",
+      "title": "공회전 크기 (주행 소리 대비)",
+      "options": [
+        { "value": "10", "title": "10%" },
+        { "value": "20", "title": "20%" },
+        { "value": "30", "title": "30%" },
+        { "value": "40", "title": "40%" },
+        { "value": "50", "title": "50%" },
+        { "value": "60", "title": "60%" }
+      ]
+    },
+    {
+      "key": "regen_level",
+      "type": "choice",
+      "default": "50",
+      "title": "회생제동 소리 크기",
+      "options": [
+        { "value": "0", "title": "끔" },
+        { "value": "25", "title": "25%" },
+        { "value": "50", "title": "50%" },
+        { "value": "75", "title": "75%" },
+        { "value": "100", "title": "100%" }
+      ]
+    },
+    {
+      "key": "response",
+      "type": "choice",
+      "default": "normal",
+      "title": "페달 반응",
+      "options": [
+        { "value": "soft", "title": "부드럽게" },
+        { "value": "normal", "title": "보통" },
+        { "value": "sport", "title": "스포티" }
+      ]
+    },
+    {
+      "key": "fade_above",
+      "type": "choice",
+      "default": "0",
+      "title": "고속에서 줄이기",
+      "description": "이 속도부터 20 km/h에 걸쳐 소리를 줄여 끕니다.",
+      "options": [
+        { "value": "0", "title": "끔" },
+        { "value": "60", "title": "60 km/h부터" },
+        { "value": "80", "title": "80 km/h부터" },
+        { "value": "100", "title": "100 km/h부터" },
+        { "value": "120", "title": "120 km/h부터" }
+      ]
+    },
+    {
+      "key": "audio_type",
+      "type": "choice",
+      "default": "0x45",
+      "title": "오디오 채널 (고급)",
+      "description": "차량 점검 결과에 따라 고릅니다. 모르면 기본값으로 두세요.",
+      "options": [
+        { "value": "0x45", "title": "내비 효과음 채널 (기본)" },
+        { "value": "0x46", "title": "시스템 알림 채널" },
+        { "value": "0x39", "title": "TTS 효과음 채널" },
+        { "value": "0x3", "title": "내비 음성 채널" }
+      ]
+    }
+  ]
+}

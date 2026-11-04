@@ -1,0 +1,30 @@
+Virtual engine sound (HMG-API mod de22ev-ves 0.1.0) - for DE22EV.KOR V039 260902 only, test version
+
+What it does
+- Makes an engine-like sound live from speed, accelerator pedal and motor power (read only) and plays
+  it through the cabin speakers.
+- Uses the same mixing channel as the stock navigation prompts, so it plays over radio, Bluetooth and
+  Android Auto music. It pauses for navigation prompts, calls and voice recognition.
+- Does not touch the exterior pedestrian warning sound (VESS) or any vehicle control, and changes no
+  system file.
+- Off after install.
+Requires: NEMESIS, HMG-API 1.0.0-beta.5 (hooks on). The mod is signed with its author's own key, so
+install.txt carries a trusted-author warning; the install goes ahead.
+
+USB stick
+- Unzip and put NEMESIS.data, NEMESIS.sh and the VES_MOD folder at the top of the USB stick.
+- The first line of VES_MOD/MODE.txt: install (default) / status / uninstall
+
+Steps
+1. Install: start the car, wait about a minute after boot, insert the stick and choose Yes.
+   STATUS.txt: INSTALLED_RESTART_THE_CAR.
+2. Turn the car off, lock it, wait 5 minutes or more, then start it (the menu tile, the star key action
+   and the split-screen widget attach at this boot).
+3. Open "엔진 사운드" (Engine sound) from the all-apps menu > "차량 점검" (car check) with the stick in,
+   and follow the screens (test tones, navigation prompt overlap, chimes, then a short drive recording).
+   Everything but the drive recording is done parked. Don't touch the screen while driving.
+4. Send the VES folder (probe-... folders) from the stick. If something is wrong, set MODE.txt to
+   status, insert the stick, choose Yes and send the VES_MOD_* folder too.
+
+Remove (MODE.txt = uninstall): turns the mod off and removes it and its app. Stock behaviour from the
+next boot.

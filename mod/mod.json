@@ -1,0 +1,75 @@
+{
+  "id": "de22ev-ves",
+  "name": "DE22EV KR virtual engine sound (cabin)",
+  "version": "0.1.0",
+  "hmgapi": ">=1.0.0",
+  "authors": [
+    "local build"
+  ],
+  "license": "MIT",
+  "description": "Engine-like sound inside the cabin, made live from speed, accelerator pedal and motor power (read only), on the navigation mixing channel; steps aside for navigation prompts, calls and voice recognition. Off until you turn it on. Includes a guided car check (USB log). Never touches the exterior pedestrian warning sound.",
+  "system": {
+    "model": "DE22EV",
+    "region": "KOR",
+    "firmware": "260902",
+    "platform": "tcc897x",
+    "android": "4.4.2"
+  },
+  "apps": [
+    { "apk": "app/EngineSound.apk", "package": "io.github.jihoonseo.ves" }
+  ],
+  "services": [
+    {
+      "name": "vesd",
+      "jar": "vesd.jar",
+      "class": "ves.android.Vesd",
+      "user": "system",
+      "start": "android",
+      "restart": true
+    }
+  ],
+  "usb": [
+    "VES"
+  ],
+  "vehicle": {
+    "read": [
+      "speed",
+      "pedal.accel",
+      "brake.pressure",
+      "hv.ready",
+      "gear.park",
+      "moving"
+    ]
+  },
+  "provides": {
+    "launcher": [
+      {
+        "id": "ves",
+        "package": "io.github.jihoonseo.ves",
+        "class": "ves.app.MainActivity",
+        "title": "엔진 사운드",
+        "icon": "tile.png",
+        "icon_night": "tile.png"
+      }
+    ],
+    "star_key": [
+      {
+        "id": "toggle",
+        "title": "엔진 사운드 켜기/끄기",
+        "broadcast": "io.github.jihoonseo.ves.TOGGLE"
+      }
+    ],
+    "panel": [
+      {
+        "title": "엔진 사운드",
+        "widget": "io.github.jihoonseo.ves/ves.app.VesWidget"
+      }
+    ]
+  },
+  "logs": {
+    "tags": [
+      "MicomAudioService",
+      "AudioServiceHelper"
+    ]
+  }
+}
