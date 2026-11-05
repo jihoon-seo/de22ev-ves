@@ -2191,6 +2191,43 @@ public final class TestMain {
             }
         });
 
+        // ---------------- L4 the real AudioTrack (Android 4.4 AudioFlinger): a streaming track starts playing
+        // only once its buffer is full, and goes back to filling after an underrun. 0.2.0-0.2.2 kept 80 ms
+        // queued in a 186 ms buffer: playback never started, vesd waited forever (stuck on "idle", silent;
+        // drive 2026-11-05).
+        l.add(new T("L4_pacer_with_fill_to_start_track") {
+            void run() {
+                int max = 4096, block = 220;
+                WritePacer w = new WritePacer(1764, block, max);
+                long written = 0, played = 0;
+                boolean running = false;
+                long playedAtEnd;
+                int writes = 0, maxFill = 0, lateFill = 0;
+                long t = 0;
+                for (int step = 0; step < 4000; step++, t += 5) { // 20 s in 5 ms polls
+                    int n = w.framesToWrite(written, played, t);
+                    if (n > 0 && written - played + n <= max) {
+                        written += n;
+                        writes++;
+                    }
+                    if (!running && written - played >= max - block) running = true; // AudioFlinger: full -> start
+                    if (running) {
+                        played += 110; // 5 ms at 22050 Hz
+                        if (played >= written) { // underrun: the track waits to be filled again
+                            played = written;
+                            running = false;
+                        }
+                    }
+                    int fill = (int) (written - played);
+                    maxFill = Math.max(maxFill, fill);
+                    if (t > 5000) lateFill = Math.max(lateFill, fill);
+                }
+                playedAtEnd = played;
+                check(playedAtEnd > 22050 * 15, "it plays (" + playedAtEnd + " frames in 20 s)");
+                check(lateFill <= 1764 + 2 * block, "once running, about 80 ms queued: " + lateFill);
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {

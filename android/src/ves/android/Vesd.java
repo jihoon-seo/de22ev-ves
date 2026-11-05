@@ -340,7 +340,7 @@ public final class Vesd implements MicomAudio.Events {
         while (true) {
             if (playing && track != null && !exclusive) {
                 long head = track.getPlaybackHeadPosition() & 0xffffffffL;
-                if (pacer.framesToWrite(written, head) == 0) {
+                if (pacer.framesToWrite(written, head, SystemClock.uptimeMillis()) == 0) {
                     SystemClock.sleep(4);
                     continue;
                 }

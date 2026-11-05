@@ -25,6 +25,26 @@ public final class WritePacer {
         return fill <= target ? block : 0;
     }
 
+    /**
+     * With the clock: Android 4.4's AudioFlinger starts a streaming track only once its buffer is full, and
+     * after an underrun waits to be filled again. While the play position doesn't move (STALL_MS), fill the
+     * whole buffer; once it moves, pace to the target. (0.2.0-0.2.2 paced from the start: the track never
+     * started, vesd waited forever, stuck and silent.)
+     */
+    public int framesToWrite(long written, long played, long nowMs) {
+        if (played != lastPlayed || lastMoveMs == Long.MIN_VALUE) {
+            lastPlayed = played;
+            lastMoveMs = nowMs;
+        }
+        boolean stalled = nowMs - lastMoveMs >= STALL_MS || played == 0;
+        long fill = written - played;
+        if (stalled) return fill + block <= max ? block : 0;
+        return fill <= target ? block : 0;
+    }
+
+    static final long STALL_MS = 60;
+    private long lastPlayed = -1, lastMoveMs = Long.MIN_VALUE;
+
     public void underrun() {
         underruns++;
         target = Math.min(max - block, (int) (target * 1.25) + 1);
