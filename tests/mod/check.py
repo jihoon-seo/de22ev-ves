@@ -47,8 +47,11 @@ for const, key in pk.items():
         want = 'true' if defaults[key] else 'false'
     check('default %s' % key, val == want, 'Actions puts %s, settings.json has %s' % (val, want))
 
+# only channel 0x45 exists since 0.2.1: 0x46 kept the stock navigation's voice prompts from playing
+check('no audio channel choice', 'audio_type' not in keys, 'settings.json still offers audio_type')
+
 lists = {'profile': 'PROFILES', 'mode': 'MODES', 'idle_level': 'IDLE', 'regen_level': 'REGEN',
-         'response': 'RESPONSE', 'fade_above': 'FADE', 'audio_type': 'TYPES',
+         'response': 'RESPONSE', 'fade_above': 'FADE',
          'behavior': 'BEHAVIORS', 'pops': 'POPS', 'sound': 'SOUNDS'}
 
 # every key ves.core.Settings reads is a setting the owner can change (0.2.0: behavior, pops, sound)

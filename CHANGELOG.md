@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+From the first real drive with 0.1.2 (2026-11-05):
+
+- The audio channel setting is gone: the sound plays on the navigation-effect channel 0x45 only.
+  On the system-alarm channel 0x46 the stock navigation's voice prompts did not play at all. A
+  stored 0x46 is ignored, which also ends the silence that followed a channel change mid-drive
+  (the path was closed for the old channel and not reopened until the next pause).
+
 ## 0.2.0
 
 From the second car check (2026-11-05) and the owner's wishes after it:

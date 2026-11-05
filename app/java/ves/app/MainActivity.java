@@ -33,7 +33,7 @@ import ves.hmg.VesLink;
 public final class MainActivity extends Activity {
     private final Handler h = new Handler();
     private TextView status, volume;
-    private Button power, sound, profile, behavior, pops, mode, idle, regen, response, fade, type;
+    private Button power, sound, profile, behavior, pops, mode, idle, regen, response, fade;
     private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
 
@@ -89,7 +89,6 @@ public final class MainActivity extends Activity {
         LinearLayout r3 = row(root);
         response = setting(r3, Prefs.RESPONSE, Actions.RESPONSE);
         fade = setting(r3, Prefs.FADE_ABOVE, Actions.FADE);
-        type = setting(root, Prefs.AUDIO_TYPE, Actions.TYPES);
 
         Button probe = big(root, "차량 점검 (주차 상태에서)", 0);
         probe.setOnClickListener(new View.OnClickListener() {
@@ -303,7 +302,6 @@ public final class MainActivity extends Activity {
         response.setText("반응: " + Actions.name(o.optString(Prefs.RESPONSE), Actions.RESPONSE, Actions.RESPONSE_NAMES));
         String f = o.optString(Prefs.FADE_ABOVE);
         fade.setText("0".equals(f) ? "고속 줄임: 끔" : "고속 줄임: " + f + " km/h부터");
-        type.setText("오디오 채널: " + Actions.name(o.optString(Prefs.AUDIO_TYPE), Actions.TYPES, Actions.TYPE_NAMES));
     }
 
     // ---- small view helpers

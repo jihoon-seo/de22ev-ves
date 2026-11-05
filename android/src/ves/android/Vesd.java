@@ -115,7 +115,8 @@ public final class Vesd implements MicomAudio.Events {
             JSONObject o = new JSONObject(t.length() == 0 ? "{}" : t);
             Map<String, String> m = Prefs.toMap(o);
             Settings s = Settings.fromMap(m);
-            int type = parseType(m.get(Prefs.AUDIO_TYPE), MicomAudio.NAVI_SOUNDEFFECT);
+            // channel 0x45 only (0.2.1): 0x46 kept the stock navigation's voice prompts from playing
+            int type = MicomAudio.NAVI_SOUNDEFFECT;
             synchronized (core) {
                 ownerSettings = s;
                 if (override == null) core.setSettings(s);
@@ -165,10 +166,9 @@ public final class Vesd implements MicomAudio.Events {
             v = v.trim();
             int t = v.startsWith("0x") ? Integer.parseInt(v.substring(2), 16) : Integer.parseInt(v);
             switch (t) {
-                // 0x39 (TTS effect) takes the music source over and 0x3 (navigation voice) reports a
-                // navigation prompt (car check 2026-11-05): not used, an old setting falls back to 0x45
+                // only 0x45: 0x46 blocked the stock navigation voice, 0x39 took the music source, 0x3
+                // reports a navigation prompt (car checks and drive, 2026-11-05)
                 case MicomAudio.NAVI_SOUNDEFFECT:
-                case MicomAudio.SYSTEM_ALARM:
                     return t;
                 default:
                     return def;

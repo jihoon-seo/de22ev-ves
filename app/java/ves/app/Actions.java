@@ -36,10 +36,6 @@ final class Actions {
     static final String[] RESPONSE = { "soft", "normal", "sport" };
     static final String[] RESPONSE_NAMES = { "부드럽게", "보통", "스포티" };
     static final String[] FADE = { "0", "60", "80", "100", "120" };
-    // car check 2026-11-05: 0x39 (TTS effect) takes the music source over (Bluetooth didn't come back);
-    // 0x3 (navigation voice) makes the head unit report a navigation prompt. Neither is offered.
-    static final String[] TYPES = { "0x45", "0x46" };
-    static final String[] TYPE_NAMES = { "내비 효과음 채널 (기본)", "시스템 알림 채널 (음악이 작아짐)" };
 
     private static final HmgClient HMG = new HmgClient(5000);
 
@@ -57,7 +53,6 @@ final class Actions {
             if (!o.has(Prefs.REGEN_LEVEL)) o.put(Prefs.REGEN_LEVEL, "50");
             if (!o.has(Prefs.RESPONSE)) o.put(Prefs.RESPONSE, "normal");
             if (!o.has(Prefs.FADE_ABOVE)) o.put(Prefs.FADE_ABOVE, "0");
-            if (!o.has(Prefs.AUDIO_TYPE)) o.put(Prefs.AUDIO_TYPE, "0x45");
             if (!o.has(Prefs.BEHAVIOR)) o.put(Prefs.BEHAVIOR, "ice");
             if (!o.has(Prefs.POPS)) o.put(Prefs.POPS, "soft");
             if (!o.has(Prefs.SOUND)) o.put(Prefs.SOUND, "synth");
