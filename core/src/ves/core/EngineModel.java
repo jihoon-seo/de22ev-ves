@@ -8,7 +8,14 @@ package ves.core;
  * READY NaN (stale) or != 1 (not_ready); GEAR NaN (stale), P (park), N (neutral), R (reverse), any other
  * non-drive code (gear_none, e.g. 9); speed NaN (SPEED_KPH, falling back to MOTOR_SPEED_KPH) (stale).
  *
- * <h3>Modes</h3>
+ * <h3>Behaviour ice (default since 0.2.0)</h3>
+ * Sound whenever Ready, like an ICE car: P and N idle at idleLevel% and rev freely with the pedal (800 + 3700 x
+ * pedal rpm, at most 4500); R plays at half the idle level, rpm 800 + 30 x km/h; stopped or creeping under
+ * 5 km/h with the foot off: idle; foot off above 5 km/h: engine braking (overrun timbre: regen param &gt;= 0.75,
+ * more with regenerative kW; gain max(idleLevel, regenLevel% x (0.6 + 0.4 min(1, km/h / 60)))), rpm falling
+ * with speed as the profile computes it; otherwise drive. Only Ready off and stale data silence it.
+ *
+ * <h3>Modes (behaviour classic: the 0.1.x rules, P/N/R silent)</h3>
  * idle_regen: stopped (&lt;1 km/h) in D/B/ECO idles at idleLevel% (of full drive gain 1.0); moving, a regen voice
  * (darker, regenLevel%) while motor kW &lt; 0 or, without pedal, accel &lt; -0.05 g; otherwise drive.
  * stop_silent_regen: like idle_regen but silent when stopped. accel_only: sound only while pedal &gt; 3% or motor
@@ -28,7 +35,7 @@ package ves.core;
  * 1000 + 50 * km/h (MOTOR_SPEED_KPH, fallback SPEED_KPH), max 9000.
  */
 public final class EngineModel {
-    static final double IDLE_RPM = 800, MAX_RPM = 6500;
+    static final double IDLE_RPM = 800, MAX_RPM = 6500, FREE_REV_RPM = 4500;
     static final double[] RATIO = {0, 150, 98, 68, 50, 37, 27};
     static final double SHIFT_S = 0.25;
     static final long DWELL_MS = 700, KICK_DWELL_MS = 300, ACCEL_HANG_MS = 1000;
@@ -106,6 +113,19 @@ public final class EngineModel {
             else if (!Sig.isDrive(g)) gate = "gear_none";
             else if (Double.isNaN(speed)) gate = "stale";
         }
+        // ICE-like (default): P and N idle (and rev freely), R plays quietly; only Ready off / stale data silence
+        boolean ice = !"classic".equals(st.behavior);
+        boolean parked = false, reversing = false;
+        if (ice && gate != null) {
+            if (gate.equals("park") || gate.equals("neutral")) {
+                parked = true;
+                gate = null;
+            } else if (gate.equals("reverse")) {
+                reversing = true;
+                gate = null;
+            }
+            if (gate == null && Double.isNaN(speed)) speed = mspeed = 0; // standing in P: speed may be unknown
+        }
 
         // ---- response
         // car check 2 found normal "a little late": normal and sport follow the pedal faster since 0.2.0
@@ -163,6 +183,10 @@ public final class EngineModel {
             if (!Double.isNaN(kw) && kw < 0) regenRaw = Math.min(1, -kw / 40.0);
             if (!Double.isNaN(acc) && acc < -0.05) regenRaw = Math.max(regenRaw, Math.min(1, (-acc - 0.05) / 0.15));
         }
+        // ICE-like: foot off while rolling is engine braking (overrun timbre), stronger with regen
+        boolean coasting = ice && !parked && !reversing && !stopped && pRaw < 0.02 && sp > 5;
+        if (coasting) regenRaw = Math.max(0.75, regenRaw);
+        else if (ice) regenRaw = 0;
         regen += (regenRaw - regen) * alpha(dt, 0.2);
 
         // ---- mode
@@ -173,7 +197,27 @@ public final class EngineModel {
         double tg;
         String reason;
         double outRegen = regenVoice ? regen : 0;
-        if (mode.equals("accel_only")) {
+        if (ice) {
+            outRegen = regen;
+            double overrunG = Math.max(idleG, clamp(st.regenLevel, 0, 100) / 100.0 * (0.6 + 0.4 * Math.min(1, sp / 60.0)));
+            if (parked) {
+                tg = pRaw > 0.02 ? Math.max(idleG, driveG) : idleG;
+                reason = pRaw > 0.02 ? "rev" : "idle";
+            } else if (reversing) {
+                tg = 0.5 * idleG;
+                reason = "reverse";
+            } else if (stopped || (pRaw < 0.02 && sp <= 5)) {
+                // stopped, or creeping with the foot off: idle
+                tg = pRaw > 0.02 ? Math.max(idleG, driveG) : idleG;
+                reason = pRaw > 0.02 ? "drive" : "idle";
+            } else if (coasting) {
+                tg = overrunG;
+                reason = "overrun";
+            } else {
+                tg = idleG + (driveG - idleG) * Math.min(1, sp / 8.0);
+                reason = "drive";
+            }
+        } else if (mode.equals("accel_only")) {
             outRegen = 0;
             if (pRaw > 0.03 || (!Double.isNaN(kw) && kw > 2)) lastAccelActive = nowMs;
             if (nowMs - lastAccelActive <= ACCEL_HANG_MS) {
@@ -222,7 +266,14 @@ public final class EngineModel {
         double loadMul = 1;
         int vg = 0;
         boolean sh = false;
-        if (profile == Profile.EV_FUTURE) {
+        if (ice && (parked || reversing) && profile != Profile.EV_FUTURE) {
+            // standing: free revs up to 4500 in P/N, a slow crawl in R; the gearbox waits in 1st
+            double target = parked ? IDLE_RPM + (FREE_REV_RPM - IDLE_RPM) * pRaw : IDLE_RPM + 30 * sp;
+            target = clamp(target, IDLE_RPM, FREE_REV_RPM);
+            rpm += (target - rpm) * alpha(dt, target > rpm ? 0.15 : 0.5);
+            gear = 1;
+            shifting = false;
+        } else if (profile == Profile.EV_FUTURE) {
             double target = Math.min(9000, 1000 + 50 * ev2);
             rpm += (target - rpm) * alpha(dt, 0.15);
         } else if (profile == Profile.ICE_SHIFT) {
@@ -234,7 +285,7 @@ public final class EngineModel {
             target = clamp(target, IDLE_RPM, MAX_RPM);
             rpm += (target - rpm) * alpha(dt, target > rpm ? tauRpmUp : 0.45);
         }
-        if (profile != Profile.ICE_SHIFT) {
+        if (profile != Profile.ICE_SHIFT && !(ice && (parked || reversing))) {
             // keep the gearbox consistent for a later switch to ICE_SHIFT
             gear = bestGear(sp, L);
             shifting = false;

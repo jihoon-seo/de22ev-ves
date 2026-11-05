@@ -13,6 +13,8 @@ import java.util.Map;
  * idle_level     0..60  (% of drive gain)          default 30   (alias idleLevel)
  * regen_level    0..100                            default 50   (alias regenLevel)
  * response       soft|normal|sport                 default normal
+ * behavior       ice|classic: ice (0.2.0 default) sounds whenever Ready (idle in P/N/D, quiet in R, engine
+ *                braking when coasting); classic keeps the 0.1.x modes (P/N/R silent, mode decides)  default ice
  * fade_above     0 = off, else km/h (fade to silence over +20 km/h)  default 0
  *                (aliases fade_above_kph, fadeAboveKph; clamp 0..250)
  * </pre>
@@ -20,11 +22,13 @@ import java.util.Map;
 public final class Settings {
     public static final String[] MODES = {"idle_regen", "stop_silent_regen", "accel_only", "drive_all"};
     public static final String[] RESPONSES = {"soft", "normal", "sport"};
+    public static final String[] BEHAVIORS = {"ice", "classic"};
 
     public boolean enabled = false;
     public int volume = 40;
     public Profile profile = Profile.ICE_SMOOTH;
     public String mode = "idle_regen";
+    public String behavior = "ice";
     public int idleLevel = 30;
     public int regenLevel = 50;
     public String response = "normal";
@@ -39,6 +43,7 @@ public final class Settings {
         s.volume = integer(get(m, "volume", null), 40, 0, 100);
         s.profile = Profile.parse(get(m, "profile", null));
         s.mode = choice(get(m, "mode", null), MODES, "idle_regen");
+        s.behavior = choice(get(m, "behavior", null), BEHAVIORS, "ice");
         s.idleLevel = integer(get(m, "idle_level", "idleLevel"), 30, 0, 60);
         s.regenLevel = integer(get(m, "regen_level", "regenLevel"), 50, 0, 100);
         s.response = choice(get(m, "response", null), RESPONSES, "normal");
@@ -55,6 +60,7 @@ public final class Settings {
         s.volume = clamp(volume, 0, 100);
         s.profile = profile != null ? profile : Profile.ICE_SMOOTH;
         s.mode = choice(mode, MODES, "idle_regen");
+        s.behavior = choice(behavior, BEHAVIORS, "ice");
         s.idleLevel = clamp(idleLevel, 0, 60);
         s.regenLevel = clamp(regenLevel, 0, 100);
         s.response = choice(response, RESPONSES, "normal");
@@ -104,7 +110,7 @@ public final class Settings {
         if (this == o) return true;
         if (!(o instanceof Settings)) return false;
         Settings s = (Settings) o;
-        return enabled == s.enabled && volume == s.volume && profile == s.profile && eqs(mode, s.mode)
+        return enabled == s.enabled && volume == s.volume && profile == s.profile && eqs(mode, s.mode) && eqs(behavior, s.behavior)
                 && idleLevel == s.idleLevel && regenLevel == s.regenLevel && eqs(response, s.response)
                 && fadeAboveKph == s.fadeAboveKph;
     }
@@ -118,6 +124,7 @@ public final class Settings {
         h = h * 31 + volume;
         h = h * 31 + (profile == null ? 0 : profile.ordinal() + 1);
         h = h * 31 + (mode == null ? 0 : mode.hashCode());
+        h = h * 31 + (behavior == null ? 0 : behavior.hashCode());
         h = h * 31 + idleLevel;
         h = h * 31 + regenLevel;
         h = h * 31 + (response == null ? 0 : response.hashCode());
@@ -127,7 +134,7 @@ public final class Settings {
 
     public String toString() {
         return "enabled=" + enabled + " volume=" + volume + " profile=" + (profile == null ? "null" : profile.key())
-                + " mode=" + mode + " idle_level=" + idleLevel + " regen_level=" + regenLevel + " response=" + response
+                + " behavior=" + behavior + " mode=" + mode + " idle_level=" + idleLevel + " regen_level=" + regenLevel + " response=" + response
                 + " fade_above=" + fadeAboveKph;
     }
 }

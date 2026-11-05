@@ -140,12 +140,23 @@ public final class TestMain {
     static final String O1_WANT = "ICE_SMOOTH=4afaa3acacd639b1 ICE_SHIFT=b73cf032a167a19f EV_FUTURE=54180ef1274a9222";
     static final int BLOCK = 220; // 10 ms
 
+    /** the classic modes (0.1.x behaviour: P/N/R silent, mode decides stops and regen) */
     static Settings settings(Profile p, int volume, String mode) {
         Settings s = new Settings();
         s.enabled = true;
         s.volume = volume;
         s.profile = p;
         s.mode = mode;
+        s.behavior = "classic";
+        return s;
+    }
+
+    /** the ICE-like default (0.2.0): sound whenever Ready */
+    static Settings iceSettings(Profile p, int volume) {
+        Settings s = new Settings();
+        s.enabled = true;
+        s.volume = volume;
+        s.profile = p;
         return s;
     }
 
@@ -859,6 +870,16 @@ public final class TestMain {
                         check(r.opens == 0, "no reopen " + cs);
                         check(!r.c.lastParams().reason.equals("drive"), "reason " + r.c.lastParams().reason);
                     }
+                }
+                // the ICE-like default keeps sounding in P, N and R (only Ready off / stale data silence it)
+                for (double g : new double[] {Sig.GEAR_P, Sig.GEAR_N, Sig.GEAR_R}) {
+                    Rig ri = new Rig(iceSettings(Profile.ICE_SMOOTH, 70));
+                    ri.speed = 0;
+                    ri.gear = g;
+                    ri.run(3000);
+                    ri.resetStats();
+                    ri.run(1000);
+                    check(ri.rms() > 50, "ice: gear " + g + " not silent, rms " + Math.round(ri.rms()));
                 }
                 // never opens when not ready from the start
                 Rig r = new Rig(settings(Profile.ICE_SMOOTH, 70, "idle_regen"));
@@ -1707,6 +1728,100 @@ public final class TestMain {
                 eq(w.framesToWrite(5000, 0), 0, "buffer ahead: write nothing");
                 for (int k = 0; k < 4; k++) w.underrun();
                 check(w.target() > 1764 && w.target() <= 4096, "underruns raise the target: " + w.target());
+            }
+        });
+
+        // ---------------- B1-B5 ICE-like behaviour (owner after car check 2: silence while stopped or slowing
+        // down felt odd; idle in P, N and D whenever Ready, quiet in R, engine braking when coasting)
+        l.add(new T("B1_ice_idles_in_P_N_D") {
+            void run() {
+                double[] gears = {Sig.GEAR_P, Sig.GEAR_N, Sig.GEAR_D};
+                for (double g : gears) {
+                    Rig r = new Rig(iceSettings(Profile.ICE_SMOOTH, 60));
+                    r.speed = 0;
+                    r.pedal = 0;
+                    r.gear = g;
+                    r.run(3000);
+                    EngineParams o = r.c.lastParams();
+                    check("idle".equals(o.reason), "gear " + g + " reason " + o.reason);
+                    near(o.targetGain, 0.30, 0.03, "gear " + g + " idle gain");
+                    r.resetStats();
+                    r.run(1000);
+                    check(r.rms() > 100, "gear " + g + " audible idle rms " + Math.round(r.rms()));
+                }
+            }
+        });
+        l.add(new T("B2_ice_reverse_quiet") {
+            void run() {
+                Rig r = new Rig(iceSettings(Profile.ICE_SMOOTH, 60));
+                r.gear = Sig.GEAR_R;
+                r.speed = 4;
+                r.run(3000);
+                EngineParams o = r.c.lastParams();
+                check(o.targetGain > 0 && o.targetGain <= 0.5 * 0.30 + 0.01, "reverse gain " + o.targetGain + " (" + o.reason + ")");
+            }
+        });
+        l.add(new T("B3_ice_free_rev_parked") {
+            void run() {
+                Rig r = new Rig(iceSettings(Profile.ICE_SMOOTH, 60));
+                r.gear = Sig.GEAR_P;
+                r.speed = 0;
+                r.pedal = 50;
+                r.run(3000);
+                check(r.c.lastParams().rpm > 2500, "50% pedal in P revs: " + r.c.lastParams().rpm);
+                r.pedal = 100;
+                r.run(3000);
+                check(r.c.lastParams().rpm <= 4500 + 1, "rev limit in P: " + r.c.lastParams().rpm);
+                r.pedal = 0;
+                r.run(3000);
+                check(r.c.lastParams().rpm < 1000, "falls back to idle: " + r.c.lastParams().rpm);
+            }
+        });
+        l.add(new T("B4_ice_engine_braking") {
+            void run() {
+                for (Profile p : new Profile[] {Profile.ICE_SMOOTH, Profile.ICE_SHIFT}) {
+                    Rig r = new Rig(iceSettings(p, 60));
+                    r.speed = 60;
+                    r.pedal = 30;
+                    r.kw = 25;
+                    r.run(4000);
+                    r.pedal = 0;
+                    r.kw = -20;
+                    double prev = r.c.lastParams().rpm, maxRise = 0, minGain = 1, maxOverrun = 0;
+                    boolean rpmAboveIdle = true;
+                    for (int i = 0; i < 1000; i++) { // 10 s, 60 -> 0 km/h
+                        r.speed = Math.max(0, 60 - 6.0 * (i / 100.0));
+                        r.step();
+                        EngineParams o = r.c.lastParams();
+                        if (i > 30) maxRise = Math.max(maxRise, (o.rpm - prev) / prev);
+                        prev = o.rpm;
+                        if (i > 20) minGain = Math.min(minGain, o.targetGain);
+                        if (i > 100 && r.speed > 5) maxOverrun = Math.max(maxOverrun, o.regen);
+                        if (r.speed > 15 && i > 20 && o.rpm < 850) rpmAboveIdle = false;
+                    }
+                    check(maxRise <= 0.02, p + " rpm never jumps up while coasting: " + maxRise);
+                    check(minGain > 0, p + " sound all the way down: " + minGain);
+                    check(maxOverrun > 0.5, p + " overrun timbre: " + maxOverrun);
+                    check(rpmAboveIdle, p + " rpm above idle while above 15 km/h");
+                    check("idle".equals(r.c.lastParams().reason), p + " idles once stopped: " + r.c.lastParams().reason);
+                }
+            }
+        });
+        l.add(new T("B5_settings_behavior") {
+            void run() {
+                eq(new Settings().behavior.equals("ice") ? 1 : 0, 1, "ice is the default");
+                java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+                m.put("behavior", "classic");
+                check("classic".equals(Settings.fromMap(m).behavior), "classic parses");
+                m.put("behavior", "nonsense");
+                check("ice".equals(Settings.fromMap(m).behavior), "garbage -> ice");
+                Settings s = new Settings();
+                s.behavior = "classic";
+                check(s.copy().equals(s) && s.toString().contains("behavior=classic"), "copy/equals/toString");
+                Rig r = new Rig(settings(Profile.ICE_SMOOTH, 60, "drive_all"));
+                r.gear = Sig.GEAR_P;
+                r.run(3000);
+                check(r.c.lastParams().targetGain == 0, "classic keeps P silent");
             }
         });
 
