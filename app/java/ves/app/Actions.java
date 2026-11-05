@@ -29,6 +29,8 @@ final class Actions {
     static final String[] SOUND_NAMES = { "합성음", "4기통 터보", "V6", "V8", "직렬 6기통", "사용자 1", "사용자 2", "사용자 3" };
     static final String[] BEHAVIORS = { "ice", "classic" };
     static final String[] BEHAVIOR_NAMES = { "내연기관처럼", "예전 방식" };
+    static final String[] PROMPTS = { "duck", "pause" };
+    static final String[] PROMPTS_NAMES = { "작게 계속", "멈춤" };
     static final String[] POPS = { "off", "soft", "strong" };
     static final String[] POPS_NAMES = { "끔", "약하게", "강하게" };
     static final String[] IDLE = { "10", "20", "30", "40", "50", "60" };
@@ -55,6 +57,7 @@ final class Actions {
             if (!o.has(Prefs.FADE_ABOVE)) o.put(Prefs.FADE_ABOVE, "0");
             if (!o.has(Prefs.BEHAVIOR)) o.put(Prefs.BEHAVIOR, "ice");
             if (!o.has(Prefs.POPS)) o.put(Prefs.POPS, "soft");
+            if (!o.has(Prefs.PROMPTS)) o.put(Prefs.PROMPTS, "duck");
             if (!o.has(Prefs.SOUND)) o.put(Prefs.SOUND, "synth");
         } catch (org.json.JSONException e) {
             throw new IOException(e.getMessage());
@@ -148,7 +151,7 @@ final class Actions {
         String state = field(s, "state");
         String open = field(s, "open");
         String yield = field(s, "yield");
-        if (yield != null && yield.startsWith("1")) return "안내 음성 중 (잠시 멈춤)";
+        if (yield != null && yield.startsWith("1")) return s.contains(" duck=1") ? "안내 음성 중 (작게)" : "안내 음성 중 (잠시 멈춤)";
         if (state == null) return "";
         if (state.equals("not_ready")) return "Ready 아님";
         if (state.equals("park") || state.equals("neutral") || state.equals("reverse") || state.equals("gear_none")) return "P/N/R: 무음";

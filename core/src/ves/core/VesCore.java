@@ -77,8 +77,9 @@ public final class VesCore {
         return settings.copy();
     }
 
+    /** another source speaks: duck under it (setting prompts=duck and a duckable source) or step aside */
     public void onYieldStart(String src, long now) {
-        policy.onYieldStart(src, now);
+        policy.onYieldStart(src, now, "duck".equals(settings.prompts) && AudioPolicy.duckable(src));
     }
 
     public void onYieldEnd(String src, long now) {
@@ -102,10 +103,10 @@ public final class VesCore {
             who = start ? channel.onStart(now) : channel.onEnd(now, policy.isOpen());
         }
         if (who == SharedChannel.FOREIGN_START) {
-            policy.onYieldStart("shared", now);
+            onYieldStart("shared", now);
         } else if (who == SharedChannel.FOREIGN_END) {
-            policy.onYieldStart("shared", now); // no-op when its start was seen; closes our path when it wasn't
-            policy.onYieldEnd("shared", now);
+            policy.onYieldEnd("shared", now); // its start, if it was seen
+            policy.channelLost(now); // the channel is gone either way: close, open again when allowed
         }
         return who;
     }
@@ -235,6 +236,7 @@ public final class VesCore {
         String src = policy.activeSources(lastNow);
         if (src.length() > 0) b.append('(').append(src).append(')');
         b.append(" voice=").append(voice());
+        if (policy.ducking(lastNow)) b.append(" duck=1");
         b.append(" gear=").append(p.virtualGear);
         if (p.shifting) b.append('*');
         b.append(" kph=").append(EngineParams.r2(p.speedKph));

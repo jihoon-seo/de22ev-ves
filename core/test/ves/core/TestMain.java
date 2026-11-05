@@ -149,6 +149,7 @@ public final class TestMain {
         s.mode = mode;
         s.behavior = "classic";
         s.pops = "off"; // 0.1.x had none; P_pops tests them
+        s.prompts = "pause"; // 0.1.x stepped aside for prompts; Y_ tests the ducking
         return s;
     }
 
@@ -2093,6 +2094,100 @@ public final class TestMain {
                 double max = 0;
                 for (double p : ped) max = Math.max(max, p);
                 check(ped.length == 60 && ped[0] == 0 && ped[59] == 0 && max <= 80 && max >= 60, "6 s pedal ramp 0 -> " + max + " -> 0");
+            }
+        });
+
+        // ---------------- Y1-Y5 ducking (owner after the first drive: play quieter under prompts, like music)
+        l.add(new T("Y_duck_under_prompts") {
+            void run() {
+                // Y1 a navigation prompt: down to the duck level within 150 ms, stays open, back up quickly
+                AudioPolicy p = new AudioPolicy();
+                p.tick(0, true, 0);
+                p.tick(10, true, 0.3);
+                check(p.isOpen(), "open");
+                p.onYieldStart("navi", 1000, true);
+                for (long t = 1000; t < 4000; t += 10) {
+                    int a = p.tick(t, true, 0.3 * p.yieldGain(t));
+                    check(a != AudioPolicy.ACT_CLOSE, "Y1 no close while ducking at " + t);
+                    if (t >= 1150) near(p.yieldGain(t), AudioPolicy.DUCK_GAIN, 1e-9, "Y1 ducked at " + t);
+                }
+                p.onYieldEnd("navi", 4000);
+                check(!p.yielding(4010), "Y1 no hold-off after a duck");
+                near(p.yieldGain(4000 + AudioPolicy.RAMP_MS), 1, 1e-9, "Y1 back to full within the ramp");
+                // Y2 a call (not duckable) on top: silence and close as before
+                AudioPolicy q = new AudioPolicy();
+                q.tick(0, true, 0);
+                q.tick(10, true, 0.3);
+                q.onYieldStart("navi", 1000, true);
+                q.onYieldStart("btvoice", 2000, false);
+                boolean closed = false;
+                for (long t = 1000; t < 2300; t += 10) if (q.tick(t, true, 0.3 * q.yieldGain(t)) == AudioPolicy.ACT_CLOSE) closed = true;
+                check(closed && q.yieldGain(2200) == 0, "Y2 a call silences and closes");
+                // Y3 closed when a prompt starts: no OPEN until it ends (a startAudio could cut the prompt)
+                AudioPolicy c = new AudioPolicy();
+                c.tick(0, false, 0);
+                c.onYieldStart("navi", 1000, true);
+                for (long t = 1000; t < 3000; t += 10) check(c.tick(t, true, 0) != AudioPolicy.ACT_OPEN, "Y3 no open during a prompt");
+                c.onYieldEnd("navi", 3000);
+                boolean opened = false;
+                for (long t = 3000; t < 3100; t += 10) if (c.tick(t, true, 0) == AudioPolicy.ACT_OPEN) opened = true;
+                check(opened, "Y3 opens right after the prompt");
+                // Y4 duck disabled (prompts=pause): the old fade-to-silence
+                AudioPolicy d = new AudioPolicy();
+                d.tick(0, true, 0);
+                d.tick(10, true, 0.3);
+                d.onYieldStart("navi", 1000, false);
+                check(d.yieldGain(1200) == 0, "Y4 pause mode silences");
+                // Y7 car check 2: MICOM closes our channel ~6 ms BEFORE NavigationVoiceStart arrives: no reopen in
+                // that gap (a startAudio then could cut the prompt)
+                AudioPolicy lp = new AudioPolicy();
+                lp.tick(0, true, 0);
+                lp.tick(10, true, 0.3);
+                lp.channelLost(1000);
+                eq(lp.tick(1000, true, 0.3), AudioPolicy.ACT_CLOSE, "Y7 lost: close");
+                for (long t = 1010; t < 1000 + AudioPolicy.HOLDOFF_MS; t += 10) check(lp.tick(t, true, 0) != AudioPolicy.ACT_OPEN, "Y7 no reopen at " + t);
+                boolean re = false;
+                for (long t = 1000 + AudioPolicy.HOLDOFF_MS; t < 1000 + AudioPolicy.HOLDOFF_MS + 100; t += 10) if (lp.tick(t, true, 0) == AudioPolicy.ACT_OPEN) re = true;
+                check(re, "Y7 reopens after the pause when nothing speaks");
+                // Y5 the classification: prompts duck, calls / ringing / voice recognition don't
+                for (String s : new String[] {"navi", "tts", "shared", "dipo_alt", "a18", "a69"}) check(AudioPolicy.duckable(s), "Y5 " + s + " ducks");
+                for (String s : new String[] {"btvoice", "ring", "vr", "vui", "dipo_call", "dipo_siri", "btsiri", "lost", "a9", null}) check(!AudioPolicy.duckable(s), "Y5 " + s + " stops");
+            }
+        });
+        l.add(new T("Y6_duck_end_to_end") {
+            void run() {
+                Settings st = iceSettings(Profile.ICE_SMOOTH, 60);
+                st.pops = "off";
+                Rig r = new Rig(st);
+                r.speed = 40;
+                r.pedal = 30;
+                r.run(3000);
+                r.resetStats();
+                r.run(1000);
+                double full = r.rms();
+                r.c.onYieldStart("navi", r.t);
+                r.run(300);
+                r.resetStats();
+                r.run(1500);
+                double ducked = r.rms();
+                check(r.closes == 0 && ducked > full * 0.2 && ducked < full * 0.45, "ducked to ~30%: " + Math.round(ducked) + " of " + Math.round(full));
+                check(r.c.status().contains(" duck=1"), "status says ducking: " + r.c.status());
+                r.c.onYieldEnd("navi", r.t);
+                r.run(400);
+                r.resetStats();
+                r.run(500);
+                check(r.rms() > full * 0.8, "full again soon after: " + Math.round(r.rms()));
+                st.prompts = "pause";
+                r.c.setSettings(st);
+                r.c.onYieldStart("navi", r.t);
+                r.run(500);
+                r.resetStats();
+                r.run(500);
+                check(r.rms() == 0, "prompts=pause: silent under the prompt");
+                java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+                check("duck".equals(Settings.fromMap(m).prompts), "duck is the default");
+                m.put("prompts", "pause");
+                check("pause".equals(Settings.fromMap(m).prompts), "pause parses");
             }
         });
 

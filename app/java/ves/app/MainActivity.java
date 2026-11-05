@@ -33,7 +33,7 @@ import ves.hmg.VesLink;
 public final class MainActivity extends Activity {
     private final Handler h = new Handler();
     private TextView status, volume;
-    private Button power, sound, profile, behavior, pops, mode, idle, regen, response, fade;
+    private Button power, sound, profile, behavior, pops, prompts, mode, idle, regen, response, fade;
     private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
 
@@ -82,6 +82,7 @@ public final class MainActivity extends Activity {
         LinearLayout r1 = row(root);
         behavior = setting(r1, Prefs.BEHAVIOR, Actions.BEHAVIORS);
         pops = setting(r1, Prefs.POPS, Actions.POPS);
+        prompts = setting(root, Prefs.PROMPTS, Actions.PROMPTS);
         mode = setting(root, Prefs.MODE, Actions.MODES);
         LinearLayout r2 = row(root);
         idle = setting(r2, Prefs.IDLE_LEVEL, Actions.IDLE);
@@ -295,6 +296,7 @@ public final class MainActivity extends Activity {
         profile.setText("회전수: " + Actions.name(o.optString(Prefs.PROFILE), Actions.PROFILES, Actions.PROFILE_NAMES));
         behavior.setText("동작: " + Actions.name(o.optString(Prefs.BEHAVIOR), Actions.BEHAVIORS, Actions.BEHAVIOR_NAMES));
         pops.setText("배기 팝: " + Actions.name(o.optString(Prefs.POPS), Actions.POPS, Actions.POPS_NAMES));
+        prompts.setText("안내 음성 때: " + Actions.name(o.optString(Prefs.PROMPTS), Actions.PROMPTS, Actions.PROMPTS_NAMES));
         mode.setText("예전 방식 동작: " + Actions.name(o.optString(Prefs.MODE), Actions.MODES, Actions.MODE_NAMES));
         mode.setEnabled("classic".equals(o.optString(Prefs.BEHAVIOR)));
         idle.setText("공회전 크기 " + o.optString(Prefs.IDLE_LEVEL) + "%");

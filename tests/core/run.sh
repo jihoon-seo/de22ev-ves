@@ -52,7 +52,7 @@ for scen in city accel cruise navi ready_off; do
     "$JAVA" -cp "$CLS" ves.tools.Sweep "$WORK/$scen.csv" "$scen" > /dev/null || fail "sweep $scen"
     for prof in ice_smooth ice_shift ev_future; do
         M=$("$JAVA" -cp "$CLS" ves.tools.Replay "$WORK/$scen.csv" "$WORK/$scen-$prof.wav" \
-            profile=$prof volume=100 mode=idle_regen pops=off | tail -n 1) || fail "replay $scen $prof" # pops: P_pops
+            profile=$prof volume=100 mode=idle_regen pops=off prompts=pause | tail -n 1) || fail "replay $scen $prof" # pops: P_pops, ducking below
         echo "METRICS $scen $prof $M"
         peak=$(num "$M" peak); cap=$(num "$M" peak_cap); delta=$(num "$M" max_delta)
         silent=$(num "$M" silent_fraction); opens=$(num "$M" opens); closes=$(num "$M" closes)
@@ -86,6 +86,14 @@ for scen in city accel cruise navi ready_off; do
         fi
     done
 done
+
+# ducking (prompts=duck, the default since 0.2.2): the navigation prompt plays over the engine sound at 30 %,
+# the path stays open
+M=$("$JAVA" -cp "$CLS" ves.tools.Replay "$WORK/navi.csv" "$WORK/navi-duck.wav" profile=ice_smooth volume=100 \
+    mode=idle_regen pops=off prompts=duck | tail -n 1) || fail "replay navi duck"
+echo "METRICS navi duck $M"
+assert "$(num "$M" yield_closed_ms) == 0" "navi duck: path closed under the prompt"
+assert "$(num "$M" yield_audible_ms) > 3000" "navi duck: not audible under the prompt"
 
 echo "CORE TESTS PASSED"
 exit 0

@@ -12,6 +12,11 @@ package ves.core;
  *     source is one yield). After the last end, yielding() stays true and yieldGain() stays 0 for HOLDOFF_MS
  *     (500 ms), then yieldGain ramps back to 1 over RAMP_MS (200 ms). A yield without an end expires EXPIRY_MS
  *     (60 s) after its (last) start.</li>
+ * <li>Ducking (0.2.2): a yield started with duck=true (navigation prompts, alerts, TTS: see duckable()) lowers
+ *     yieldGain() to DUCK_GAIN within FADE_MS and keeps the path open; after it ends the gain ramps back over
+ *     RAMP_MS with no hold-off. Any non-duck source (call, ringing, voice recognition ...) turns the episode into
+ *     a full yield. Never an OPEN while any yield is active: a startAudio could cut the prompt.</li>
+ * <li>channelLost(): the channel was closed under us (MICOM preempted it): the next tick returns ACT_CLOSE.</li>
  * <li>ACT_CLOSE after SILENCE_CLOSE_MS (2000 ms) of continuous silence (wantSound false or gain ~0).</li>
  * </ul>
  * Own echo: the caller must not report the VES's own playback (its own audio-focus / stream-type / mixer
@@ -27,11 +32,17 @@ public final class AudioPolicy {
     public static final long FADE_MS = 120, HOLDOFF_MS = 500, RAMP_MS = 200, EXPIRY_MS = 60000,
             SILENCE_CLOSE_MS = 2000;
     static final double SILENT_GAIN = 1e-4;
+    /** the level under a prompt when ducking (about the music's level under a navigation prompt) */
+    public static final double DUCK_GAIN = 0.3;
     private static final int MAX_SOURCES = 16;
 
     private final String[] srcName = new String[MAX_SOURCES];
     private final long[] srcStart = new long[MAX_SOURCES];
     private final boolean[] srcActive = new boolean[MAX_SOURCES];
+    private final boolean[] srcDuck = new boolean[MAX_SOURCES];
+    private boolean lastEpisodeDuck, lostPending;
+    private long lostAt = Long.MIN_VALUE / 2;
+    private double endGain;
 
     private boolean firstDone, open;
     private boolean episode; // at least one yield is active
@@ -43,9 +54,15 @@ public final class AudioPolicy {
     private long opens, closes, yields;
 
     public synchronized void onYieldStart(String source, long nowMs) {
+        onYieldStart(source, nowMs, false);
+    }
+
+    /** duck: play on quietly under this source instead of stepping aside (only if every active source ducks) */
+    public synchronized void onYieldStart(String source, long nowMs, boolean duck) {
         String s = norm(source);
         expire(nowMs);
         double from = gainAt(nowMs);
+        boolean wasDuck = episode && allDuck();
         int i = find(s);
         if (i < 0) {
             i = freeSlot();
@@ -54,11 +71,48 @@ public final class AudioPolicy {
         srcStart[i] = nowMs;
         if (!srcActive[i]) yields++;
         srcActive[i] = true;
+        srcDuck[i] = duck;
         if (!episode) {
             episode = true;
             episodeStart = nowMs;
             episodeFrom = from;
+        } else if (wasDuck && !duck) {
+            // a call during a ducked prompt: from the ducked level down to silence
+            episodeStart = nowMs;
+            episodeFrom = from;
         }
+    }
+
+    /** the channel was closed under us (MICOM preempted it for a prompt): close now, open again when allowed */
+    public synchronized void channelLost(long nowMs) {
+        lostPending = true;
+        lostAt = nowMs; // the prompt's own start follows a few ms later: wait HOLDOFF_MS before reopening
+    }
+
+    /** sources that only speak (prompts, alerts, TTS) and can have the engine sound under them */
+    public static boolean duckable(String s) {
+        if (s == null) return false;
+        if (s.equals("navi") || s.equals("tts") || s.equals("shared") || s.equals("dipo_alt")) return true;
+        if (!s.startsWith("a")) return false;
+        try {
+            int t = Integer.parseInt(s.substring(1));
+            // NAVI, TTS, GUIDE, AANAVI, MIRRORLINK_NAVI, PREVIEWAUDIOTTS, CARLIFE_NAVI, TTS_EFFECT, NAVI_SOUNDEFFECT,
+            // SYSTEM_ALARM
+            return t == 0x3 || t == 0x7 || t == 0xa || t == 0x12 || t == 0x19 || t == 0x1d || t == 0x24 || t == 0x39
+                    || t == 0x45 || t == 0x46;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private boolean allDuck() {
+        boolean any = false;
+        for (int i = 0; i < MAX_SOURCES; i++) {
+            if (!srcActive[i]) continue;
+            any = true;
+            if (!srcDuck[i]) return false;
+        }
+        return any;
     }
 
     public synchronized void onYieldEnd(String source, long nowMs) {
@@ -66,8 +120,21 @@ public final class AudioPolicy {
         expire(nowMs);
         int i = find(s);
         if (i < 0 || !srcActive[i]) return;
+        boolean duck = allDuck();
+        double g = gainAt(nowMs);
         srcActive[i] = false;
-        if (!anyActive()) endEpisode(nowMs);
+        if (!anyActive()) endEpisode(nowMs, duck, g);
+        else if (!duck && allDuck()) {
+            // the call ended, the prompt goes on: back up to the ducked level
+            episodeStart = nowMs;
+            episodeFrom = g;
+        }
+    }
+
+    /** playing on quietly under a prompt (every active source ducks) */
+    public synchronized boolean ducking(long nowMs) {
+        expire(nowMs);
+        return episode && allDuck();
     }
 
     public synchronized boolean yielding(long nowMs) {
@@ -89,6 +156,10 @@ public final class AudioPolicy {
             return ACT_CLOSE;
         }
         expire(nowMs);
+        if (lostPending) {
+            lostPending = false;
+            if (open) return close();
+        }
         boolean silent = !wantSound || !(currentGain > SILENT_GAIN);
         if (!silent) silentSince = Long.MIN_VALUE;
         else if (silentSince == Long.MIN_VALUE) silentSince = nowMs;
@@ -100,6 +171,7 @@ public final class AudioPolicy {
             if (silentSince != Long.MIN_VALUE && nowMs - silentSince >= SILENCE_CLOSE_MS) return close();
             return ACT_NONE;
         }
+        if (nowMs - lostAt < HOLDOFF_MS) return ACT_NONE;
         if (wantSound) {
             open = true;
             opens++;
@@ -141,7 +213,7 @@ public final class AudioPolicy {
     }
 
     private boolean yieldingNow(long now) {
-        return episode || (hadEnd && now - lastEnd < HOLDOFF_MS);
+        return episode || (hadEnd && !lastEpisodeDuck && now - lastEnd < HOLDOFF_MS);
     }
 
     private int close() {
@@ -152,26 +224,42 @@ public final class AudioPolicy {
 
     private double gainAt(long now) {
         if (episode) {
-            double g = episodeFrom - (now - episodeStart) / (double) FADE_MS;
+            boolean duck = allDuck();
+            double floor = duck ? DUCK_GAIN : 0;
+            double g;
+            if (duck && episodeFrom < floor) { // back up from a call's silence to the ducked level
+                g = episodeFrom + (now - episodeStart) / (double) RAMP_MS * (floor - episodeFrom);
+                g = Math.min(floor, g);
+            } else {
+                g = Math.max(floor, episodeFrom - (now - episodeStart) / (double) FADE_MS);
+            }
             return g <= 0 ? 0 : g > 1 ? 1 : g;
         }
         if (!hadEnd) return 1;
+        if (lastEpisodeDuck) {
+            double f = (now - lastEnd) / (double) RAMP_MS;
+            return f >= 1 ? 1 : f <= 0 ? endGain : endGain + (1 - endGain) * f;
+        }
         long t = now - lastEnd - HOLDOFF_MS;
         if (t < 0) return 0;
         if (t >= RAMP_MS) return 1;
         return t / (double) RAMP_MS;
     }
 
-    private void endEpisode(long t) {
+    private void endEpisode(long t, boolean duck, double g) {
         episode = false;
         hadEnd = true;
         lastEnd = t;
+        lastEpisodeDuck = duck;
+        endGain = g;
     }
 
     private void expire(long now) {
         if (!episode) return;
         long latestExpiry = Long.MIN_VALUE;
         boolean any = false;
+        boolean duck = allDuck();
+        double g0 = gainAt(now);
         for (int i = 0; i < MAX_SOURCES; i++) {
             if (!srcActive[i]) continue;
             long exp = srcStart[i] + ("shared".equals(srcName[i]) ? SHARED_EXPIRY_MS : EXPIRY_MS);
@@ -182,7 +270,7 @@ public final class AudioPolicy {
                 any = true;
             }
         }
-        if (!any) endEpisode(latestExpiry == Long.MIN_VALUE ? now : latestExpiry);
+        if (!any) endEpisode(latestExpiry == Long.MIN_VALUE ? now : latestExpiry, duck, g0);
     }
 
     private boolean anyActive() {

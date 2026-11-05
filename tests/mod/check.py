@@ -52,14 +52,15 @@ check('no audio channel choice', 'audio_type' not in keys, 'settings.json still 
 
 lists = {'profile': 'PROFILES', 'mode': 'MODES', 'idle_level': 'IDLE', 'regen_level': 'REGEN',
          'response': 'RESPONSE', 'fade_above': 'FADE',
-         'behavior': 'BEHAVIORS', 'pops': 'POPS', 'sound': 'SOUNDS'}
+         'behavior': 'BEHAVIORS', 'pops': 'POPS', 'sound': 'SOUNDS',
+         'prompts': 'PROMPTS'}
 
 # every key ves.core.Settings reads is a setting the owner can change (0.2.0: behavior, pops, sound)
 core = read('core/src/ves/core/Settings.java')
 core_keys = set(re.findall(r'get\(m, "(\w+)"', core))
 core_keys = {k for k in core_keys if k == k.lower()}  # camelCase ones are aliases
 check('settings.json has every ves.core.Settings key', core_keys <= set(keys), 'missing %s' % sorted(core_keys - set(keys)))
-for key, arr in (('behavior', 'BEHAVIORS'), ('pops', 'POPS'), ('sound', 'SOUNDS')):
+for key, arr in (('behavior', 'BEHAVIORS'), ('pops', 'POPS'), ('sound', 'SOUNDS'), ('prompts', 'PROMPTS')):
     m = re.search(r'String\[\] %s = \{([^}]*)\}' % arr, core)
     want = re.findall(r'"([^"]*)"', m.group(1)) if m else None
     have = [o['value'] for s2 in st['settings'] if s2['key'] == key for o in s2['options']]
