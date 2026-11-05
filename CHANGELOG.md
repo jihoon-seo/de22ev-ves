@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3
+
+- Fix: from 0.2.0 the sound never started and the status stayed on "공회전" (drive 2026-11-05).
+  Android 4.4 starts a streaming AudioTrack only once its buffer is full, and 0.2.0's write pacer
+  kept only 80 ms of the 186 ms buffer queued, so playback never began and vesd waited for room
+  forever (no rendering, the model frozen at its first state). The pacer now fills the whole
+  buffer while the play position doesn't move (start, or after an underrun) and paces to about
+  80 ms once it plays. L4 models AudioFlinger's fill-to-start in the host tests.
+
 ## 0.2.2
 
 The owner's wishes after the first real drive (2026-11-05):
