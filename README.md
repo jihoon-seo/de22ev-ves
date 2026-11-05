@@ -6,7 +6,7 @@ An [HMG-API](https://github.com/VysseCodes/HMG-API) mod that adds a **virtual en
 the cabin** of a 1st-gen Kia Niro EV (Gen5W head unit): the sound is synthesized live from vehicle
 speed, accelerator pedal and motor power, with on/off and volume controls.
 
-> **Test version 0.2.1, for one car and firmware:** `DE22EV.KOR.0000.V039.001.260902` (onebin
+> **Test version 0.2.2, for one car and firmware:** `DE22EV.KOR.0000.V039.001.260902` (onebin
 > `de22ev_kr`). It ships with a guided car check whose results decide the audio route for 1.0.
 > Unofficial; see [Disclaimer](#disclaimer).
 
@@ -68,6 +68,7 @@ import stay on your car; only use recordings you may use.
 | `sound` | `synth` (default), `i4t`, `v6`, `v8`, `i6`, `user1`–`user3` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice` (default: sound whenever Ready) / `classic` (the `mode` below) |
+| `prompts` | under prompts and alerts: `duck` (default, 30 %) / `pause`; calls and voice recognition always pause |
 | `pops` | exhaust pops on lift-off: `off`, `soft` (default), `strong` |
 | `mode` | with `classic`: `idle_regen` (quiet idle at a stop + regen sound), `stop_silent_regen`, `accel_only`, `drive_all` |
 | `idle_level` | idle loudness, 10–60 % of the driving sound |

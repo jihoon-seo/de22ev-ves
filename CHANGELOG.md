@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+The owner's wishes after the first real drive (2026-11-05):
+
+- Under navigation prompts and alerts the engine sound plays on at 30 % instead of stopping (setting
+  `prompts` = duck, the default, or pause). Calls, ringing and voice recognition still stop it. The
+  stock navigation's voice still silences it: MICOM takes our channel for the prompt. It never
+  opens the channel while a prompt plays, and waits 0.5 s after the channel is taken (the prompt's
+  own start arrives a few ms later).
+- Back 0.5 s after a prompt instead of 1.5 s.
+
 ## 0.2.1
 
 From the first real drive with 0.1.2 (2026-11-05):

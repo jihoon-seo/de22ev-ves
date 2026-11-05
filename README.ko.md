@@ -6,7 +6,7 @@
 [HMG-API](https://github.com/VysseCodes/HMG-API) 모드입니다. 속도, 가속 페달, 모터 출력으로 소리를
 실시간으로 만들고, 켜기/끄기와 볼륨을 조절할 수 있습니다.
 
-> **시험판 0.2.1, 시험한 차량과 펌웨어 하나:** `DE22EV.KOR.0000.V039.001.260902` (onebin `de22ev_kr`).
+> **시험판 0.2.2, 시험한 차량과 펌웨어 하나:** `DE22EV.KOR.0000.V039.001.260902` (onebin `de22ev_kr`).
 > 안내형 차량 점검이 들어 있고, 그 결과로 1.0의 오디오 경로를 정합니다. 비공식 프로젝트입니다.
 > [면책](#면책)을 읽어 주세요.
 
@@ -62,6 +62,7 @@ loop r2000_off.wav rpm=2000 load=off
 | `sound` | `synth`(기본), `i4t`, `v6`, `v8`, `i6`, `user1`–`user3` |
 | `profile` | 회전수 움직임(합성음은 소리 종류도): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice`(기본: Ready면 항상 소리) / `classic`(아래 `mode`를 따름) |
+| `prompts` | 안내 음성·알림음 때: `duck`(기본, 30%로 계속) / `pause`(멈춤). 전화·음성인식 때는 항상 멈춤 |
 | `pops` | 페달을 뗄 때 배기 팝: `off`, `soft`(기본), `strong` |
 | `mode` | `classic`일 때: `idle_regen`(정차 시 작은 공회전 + 회생음), `stop_silent_regen`, `accel_only`, `drive_all` |
 | `idle_level` | 공회전 크기, 주행 소리의 10–60% |
