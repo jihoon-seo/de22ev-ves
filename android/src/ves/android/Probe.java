@@ -65,6 +65,7 @@ final class Probe {
             if (running.length() > 0 && !sub.equals("DRIVE")) return "error busy: " + running + "\n";
             if (sub.equals("INFO")) return info();
             if (sub.equals("TONE")) return tone(Integer.parseInt(a[2]), parseInt(a[3]), Integer.parseInt(a[4]), a.length > 5 ? a[5] : "");
+            if (sub.equals("PACKS")) return packDemo(a.length > 2 ? a[2] : "");
             if (sub.equals("HOLD")) return hold(parseInt(a[2]), Integer.parseInt(a[3]), a.length > 4 ? Integer.parseInt(a[4]) : 30);
             if (sub.equals("STUCK")) return stuck(parseInt(a[2]));
             if (sub.equals("CLEAN")) return clean(parseInt(a[2]));
@@ -269,6 +270,68 @@ final class Probe {
     }
 
     // ---- step c: engine sound held on while the owner triggers voices
+
+    /** a 6 s free rev (idle, ~3700 rpm, idle) with one sound (synth or a pack slot); parked only */
+    private String packDemo(final String slot) {
+        long now = SystemClock.uptimeMillis();
+        String no;
+        synchronized (d.core) {
+            SignalState g = d.core.signals();
+            no = ves.core.ProbeGuard.demoRefusal(g.get(Sig.SPEED_KPH, now), g.get(Sig.GEAR, now), g.get(Sig.READY, now));
+        }
+        if (no != null) return "error " + no + "\n";
+        final ves.core.Pack p;
+        if (slot.equals("synth")) p = null;
+        else {
+            try {
+                p = d.packs.load(slot);
+            } catch (ves.core.PackError e) {
+                return "error " + e.getMessage() + "\n";
+            }
+        }
+        running = "hold";
+        write("PACKS start " + slot + (p != null ? " (" + p.name + ")" : ""));
+        Vesd.thread("probe-packs", new Runnable() {
+            public void run() {
+                try {
+                    Settings s = copy(d.ownerSettings());
+                    s.enabled = true;
+                    s.volume = Math.max(50, s.volume);
+                    s.behavior = "ice";
+                    s.pops = "off";
+                    s.sound = slot.equals("synth") ? "synth" : slot;
+                    d.hscan.paused = true;
+                    d.core.setPack(p);
+                    d.setOverride(s);
+                    double[] ped = ves.core.ProbeGuard.demoPedal();
+                    for (int i = 0; i < ped.length; i++) {
+                        long t = SystemClock.uptimeMillis();
+                        synchronized (d.core) {
+                            SignalState g = d.core.signals();
+                            g.set(Sig.READY, 1, t);
+                            g.set(Sig.GEAR, Sig.GEAR_P, t);
+                            g.set(Sig.SPEED_KPH, 0, t);
+                            g.set(Sig.MOTOR_SPEED_KPH, 0, t);
+                            g.set(Sig.PEDAL_PCT, ped[i], t);
+                            g.set(Sig.MOTOR_KW, 0, t);
+                        }
+                        SystemClock.sleep(100);
+                    }
+                    SystemClock.sleep(1500); // back to idle
+                    write("PACKS end " + slot + " status " + d.core.status());
+                } catch (Throwable e) {
+                    write("PACKS fail " + e);
+                } finally {
+                    d.setOverride(null);
+                    d.hscan.paused = false;
+                    d.packSlot = ""; // load the owner's own pack again
+                    d.loadPack(d.ownerSettings().sound);
+                    running = "";
+                }
+            }
+        });
+        return "ok\npacks demo " + slot + "\n";
+    }
 
     private String hold(final int type, int sec, int volume) {
         final int vol = Math.max(0, Math.min(volume, 100));

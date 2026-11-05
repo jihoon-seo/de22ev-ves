@@ -118,7 +118,7 @@ public final class ProbeActivity extends Activity {
         result.setText("실행 중… (이어서 기다림)");
         new Thread(new Runnable() {
             public void run() {
-                final String r = waitIdle("ok", s.id.equals("hold") ? 70 : 40);
+                final String r = waitIdle("ok", s.id.equals("hold") ? 70 : s.id.equals("chime") ? 40 : 15);
                 saveResult(s.id, r);
                 h.post(new Runnable() {
                     public void run() {
@@ -154,12 +154,12 @@ public final class ProbeActivity extends Activity {
         add("start", "주차(P) 상태, Ready 켜짐, USB를 꽂은 상태에서 시작합니다. 결과는 USB 최상위의 VES 폴더에 저장됩니다(폴더가 미리 있어야 함).",
                 "점검 시작", "PROBE BEGIN");
         add("info", "헤드유닛의 오디오 서비스와 차량 신호를 확인합니다 (5초, 소리 없음).", "확인", "PROBE INFO");
-        String[][] sources = { { "fm", "라디오(FM)" }, { "bt", "블루투스 음악" }, { "aa", "Android Auto 음악" } };
+        // 0.1.x checks settled the channels; one tone over the radio stays as a sanity check
+        String[][] sources = { { "fm", "라디오(FM)" } };
         String[][] routes = {
                 // 0.1.1's check settled the rest: 0x39 took the music source over, 0x3 reported a
                 // navigation prompt, no channel / the music stream weren't heard
-                { "r1", "12 0x45", "1번 (내비 효과음 채널)" },
-                { "r2", "12 0x46", "2번 (시스템 알림 채널)" } };
+                { "r1", "12 0x45", "1번 (내비 효과음 채널)" } };
         for (String[] s : sources) {
             add("src_" + s[0], s[1] + "을(를) 보통 볼륨으로 재생하세요. 재생되면 다음으로.", "재생 중, 다음", null);
             for (String[] r : routes) {
@@ -188,6 +188,11 @@ public final class ProbeActivity extends Activity {
         add("ui_launcher", "홈 화면 전체 메뉴에 '엔진 사운드' 타일이 있나요?", null, null, "있음", "없음");
         add("ui_star", "설정 > 버튼 설정의 ★ 버튼 목록에 '엔진 사운드 켜기/끄기'가 있나요?", null, null, "있음", "없음");
         add("ui_panel", "분할 화면 설정에서 '엔진 사운드' 위젯을 고를 수 있나요?", null, null, "있음", "없음", "분할 화면 없음");
+        String[][] packs = { { "synth", "합성음" }, { "i4t", "4기통 터보" }, { "v6", "V6" }, { "v8", "V8" }, { "i6", "직렬 6기통" } };
+        for (String[] p : packs) {
+            add("pack_" + p[0], "소리 비교: " + p[1] + ". P에서 정차한 채로 버튼을 누르면 6초 동안 공회전 - 회전 올림 - 공회전 소리가 납니다.",
+                    p[1] + " 들어 보기 (6초)", "PROBE PACKS " + p[0], "좋음", "괜찮음", "별로", "안 들림");
+        }
         add("drive", "주행 기록: 버튼을 누르고 출발하세요 (최대 15분, 실제 설정으로 엔진 소리 남). 주행 중에는 화면을 만지지 마세요. 정차했을 때 드라이브 모드와 회생제동 단계를 한 번씩 바꿔 보세요. 주차 후 다음 화면에서 기록을 멈춥니다.",
                 "기록 시작", "PROBE DRIVE START 15");
         add("drive_stop", "주차했으면 기록을 멈추세요.", "기록 중지", "PROBE DRIVE STOP");
@@ -280,7 +285,8 @@ public final class ProbeActivity extends Activity {
                 String r;
                 try {
                     r = VesLink.send(s.command, 30000);
-                    if (s.id.equals("hold") || s.id.equals("chime")) r = waitIdle(r, s.id.equals("hold") ? 70 : 40);
+                    if (s.id.equals("hold") || s.id.equals("chime") || s.id.startsWith("pack_"))
+                        r = waitIdle(r, s.id.equals("hold") ? 70 : s.id.equals("chime") ? 40 : 15);
                     if (s.id.equals("stuck")) r = waitRestart(r);
                 } catch (IOException e) {
                     r = "error " + e.getMessage();

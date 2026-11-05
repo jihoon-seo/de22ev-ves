@@ -1626,6 +1626,7 @@ public final class TestMain {
                 eq(ProbeResume.decide("hold", "ok\nprobe open /x\n", "ok\n(끝)"), ProbeResume.ADVANCE, "PR2 finished while away");
                 eq(ProbeResume.decide("hold", "ok\nprobe open /x\n", null), ProbeResume.SHOW, "finished, no result: show the step");
                 eq(ProbeResume.decide("chime", "probe open /x running hold", null), ProbeResume.REATTACH, "chime is a hold too");
+                eq(ProbeResume.decide("pack_v8", "probe open /x running hold", null), ProbeResume.REATTACH, "a pack demo is a hold too");
                 eq(ProbeResume.decide("drive_stop", "probe open /x running drive", null), ProbeResume.SHOW, "drive keeps its own screen");
                 eq(ProbeResume.decide("tone_fm_r1", "probe open /x", "ok"), ProbeResume.SHOW, "PR3 short steps just show");
                 eq(ProbeResume.decide(null, null, null), ProbeResume.SHOW, "nothing saved");
@@ -2075,6 +2076,23 @@ public final class TestMain {
                 check(Math.abs(20 * Math.log10(low / high)) < 1.5, "G7 quiet loops brought up: " + low + " vs " + high);
                 near(low, 0.30, 0.06, "G7 about the synth's voice level (0.30 rms)");
                 check(offl > 0.2, "G7 off layer too: " + offl);
+            }
+        });
+
+        // ---------------- D1 the car check's pack demo revs the engine sound: only parked
+        l.add(new T("D1_pack_demo_only_parked") {
+            void run() {
+                check(ProbeGuard.demoRefusal(0, Sig.GEAR_P, 1) == null, "P, standing, Ready: allowed");
+                check(ProbeGuard.demoRefusal(3, Sig.GEAR_P, 1) != null, "rolling: refused");
+                check(ProbeGuard.demoRefusal(0, Sig.GEAR_D, 1) != null, "in D: refused");
+                check(ProbeGuard.demoRefusal(0, Sig.GEAR_N, 1) != null, "in N: refused");
+                check(ProbeGuard.demoRefusal(Double.NaN, Sig.GEAR_P, 1) != null, "unknown speed: refused");
+                check(ProbeGuard.demoRefusal(0, Double.NaN, 1) != null, "unknown gear: refused");
+                check(ProbeGuard.demoRefusal(0, Sig.GEAR_P, 0) != null, "not Ready: refused");
+                double[] ped = ProbeGuard.demoPedal();
+                double max = 0;
+                for (double p : ped) max = Math.max(max, p);
+                check(ped.length == 60 && ped[0] == 0 && ped[59] == 0 && max <= 80 && max >= 60, "6 s pedal ramp 0 -> " + max + " -> 0");
             }
         });
 

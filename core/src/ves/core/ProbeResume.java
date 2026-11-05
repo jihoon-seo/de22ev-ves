@@ -22,7 +22,7 @@ public final class ProbeResume {
      */
     public static int decide(String step, String status, String result) {
         if (step == null) return SHOW;
-        boolean hold = step.equals("hold") || step.equals("chime");
+        boolean hold = step.equals("hold") || step.equals("chime") || step.startsWith("pack_");
         if (!hold) return SHOW;
         if (status != null && status.contains("running hold")) return REATTACH;
         if (result != null && !result.startsWith("error")) return ADVANCE;
