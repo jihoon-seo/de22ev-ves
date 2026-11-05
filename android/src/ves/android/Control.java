@@ -67,10 +67,7 @@ final class Control implements Runnable {
             } catch (Throwable ignored) {
             }
         } finally {
-            try {
-                s.close();
-            } catch (IOException ignored) {
-            }
+            Sockets.closeAccepted(s);
         }
     }
 
