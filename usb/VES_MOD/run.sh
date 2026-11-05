@@ -19,7 +19,7 @@ done_status() { echo "$1"; echo "$1" > "$OUT/STATUS.txt"; }
 
 ID=de22ev-ves
 UUID=3c503596-94a4-8f10-901e-d6da35861d6a
-ZIP=de22ev-ves-0.1.2.zip
+ZIP=de22ev-ves-0.2.0.zip
 PRODUCT=DE22EV.KOR.0000.V039.001.260902
 H=/system/bin/hmgapid
 LOCAL=/data/nemesis/ves-mod

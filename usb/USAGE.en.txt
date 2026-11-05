@@ -1,4 +1,4 @@
-Virtual engine sound (HMG-API mod de22ev-ves 0.1.2) - for DE22EV.KOR V039 260902 only, test version
+Virtual engine sound (HMG-API mod de22ev-ves 0.2.0) - for DE22EV.KOR V039 260902 only, test version
 
 What it does
 - Makes an engine-like sound live from speed, accelerator pedal and motor power (read only) and plays
@@ -27,6 +27,10 @@ Steps
 4. Send the VES folder (probe-... folders) from the stick. If something is wrong, set MODE.txt to
    status, insert the stick, choose Yes and send the VES_MOD_* folder too.
 
+Sound: the synth, inline-4 turbo, V6, V8, inline-6, or user slots 1-3. Behaviour by default "like an
+ICE car" (idles in P/N/D when Ready, engine braking when coasting, optional exhaust pops).
+Own sound packs: put pack.txt and WAV loops (22050 Hz mono 16-bit) in VES/packs/<folder>/ on the
+stick and use "USB에서 소리 팩 가져오기" in the app (format: README on GitHub).
 Settings: the app, the split-screen widget, the star key action, or HMG-API's Mods tab (there,
 press "Save settings" at the bottom: leaving the screen without it drops the change; Apply
 changes isn't needed).

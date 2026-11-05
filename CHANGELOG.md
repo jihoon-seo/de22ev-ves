@@ -1,7 +1,29 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
+From the second car check (2026-11-05) and the owner's wishes after it:
+
+- Sound packs: four built-in engines (inline-4 turbo, V6, cross-plane V8, inline-6) rendered offline
+  by tools/render, a Java port of DasEtwas/enginesound (MIT) with a throttle input for the overrun
+  sound; the packs are CC0. PackVoice plays the two loops nearest the rpm per layer (on-load,
+  off-load), pitch-shifted, crank-phase aligned for rendered packs, level-matched to the synth. The
+  owner's packs can be imported from USB (VES/packs/<folder>) into three user slots. Setting
+  `sound`; the synth stays the default until the packs are checked in the car.
+- Like an ICE car (setting `behavior`, default `ice`): idle in P, N and D whenever Ready (free revs
+  in P/N), quiet in R, engine braking when coasting; exhaust pops on lift-off (setting `pops`). The
+  0.1 modes remain as `behavior=classic`.
+- Fix: the sound stayed off for up to 60 s after voice recognition. MICOM re-sends AudioStart(0x45)
+  when it restores our channel; that start is now recognised, and a lost navigation-chime yield
+  expires after 5 s.
+- Fix: the car check stalled at the 60 s hold when the voice-recognition screen covered it; it now
+  re-attaches to a hold still running or moves past one that finished.
+- Faster response: about 80 ms queued instead of the whole 186 ms AudioTrack buffer, and the normal
+  pedal response follows in 200 ms instead of 500 ms.
+- HMG-API's vehicle readings are used although hmgapid exits with code 1 after answering; the
+  fallback keeps them fresh between its 3 s polls; the car check's drive log no longer stalls on them.
+- Car check: one tone step instead of the channel matrix, and a 6 s free-rev demo per sound (parked
+  only) to compare the synth and the packs.
 - USB kit: an update is in use at once (it asks HMG-API to update the app and restart vesd; status
   UPDATED_IN_USE_NOW). Only a first install still needs the car restart, for the menu tile, star key
   action and split-screen widget.

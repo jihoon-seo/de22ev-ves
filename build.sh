@@ -84,8 +84,17 @@ fi
     --v1-signing-enabled true --v2-signing-enabled false --v3-signing-enabled false \
     --out "$(native build/mod/app/EngineSound.apk)" "$(native build/apk/aligned.apk)"
 
+# the built-in sound packs (packs/<slot>/: pack.txt + loops), rendered from tools/render/engines (CC0)
+mkdir -p build/render-classes
+mapfile -t R < <(srcs tools/render/src)
+"${JAVA_BIN}javac" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native build/render-classes)" "${R[@]}"
+for e in i4t v6 v8 i6; do
+    "${JAVA_BIN}java" -cp "$(native build/render-classes)" ves.render.Grid "$(native tools/render/engines/$e.txt)" \
+        "$(native build/mod/packs/$e)" > /dev/null
+done
+
 # the mod folder (its source and licence travel with it)
-cp mod/mod.json mod/settings.json mod/README.ko.txt LICENSE build/mod/
+cp mod/mod.json mod/settings.json mod/README.ko.txt LICENSE THIRD_PARTY.md build/mod/
 mkdir -p build/mod/src/core build/mod/src/android
 cp -r core/src build/mod/src/core/
 cp -r android/src android/stubs build/mod/src/android/

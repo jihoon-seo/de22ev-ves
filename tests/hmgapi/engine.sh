@@ -31,7 +31,7 @@ eng install "$(native "$ZIP")" --uuid "$UUID"
 [ $rc = 0 ] && pass "install accepted (signature, uuid)" || fail "install" "rc=$rc $out"
 echo "$out" | grep -qi "error" && fail "install output has errors" "$out" || pass "install: no errors"
 M="$T/root/data/hmgapi/mods/$ID"
-for f in mod.json settings.json vesd.jar app/EngineSound.apk tile.png; do
+for f in mod.json settings.json vesd.jar app/EngineSound.apk tile.png packs/i4t/pack.txt packs/v6/pack.txt packs/v8/pack.txt packs/i6/pack.txt THIRD_PARTY.md; do
     [ -f "$M/$f" ] && pass "installed $f" || fail "installed $f" "missing"
 done
 # what the install published for hmgapid (the engine writes these when the mod list changes)
