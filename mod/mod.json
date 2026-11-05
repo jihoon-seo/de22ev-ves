@@ -1,7 +1,7 @@
 {
   "id": "de22ev-ves",
   "name": "DE22EV KR virtual engine sound (cabin)",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "hmgapi": ">=1.0.0",
   "authors": [
     "local build"

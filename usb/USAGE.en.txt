@@ -1,4 +1,4 @@
-Virtual engine sound (HMG-API mod de22ev-ves 0.1.0) - for DE22EV.KOR V039 260902 only, test version
+Virtual engine sound (HMG-API mod de22ev-ves 0.1.2) - for DE22EV.KOR V039 260902 only, test version
 
 What it does
 - Makes an engine-like sound live from speed, accelerator pedal and motor power (read only) and plays
@@ -12,7 +12,8 @@ Requires: NEMESIS, HMG-API 1.0.0-beta.5 (hooks on). The mod is signed with its a
 install.txt carries a trusted-author warning; the install goes ahead.
 
 USB stick
-- Unzip and put NEMESIS.data, NEMESIS.sh and the VES_MOD folder at the top of the USB stick.
+- Unzip and put NEMESIS.data, NEMESIS.sh and the VES_MOD and VES folders at the top of the USB stick
+  (the car check finds the stick only when the VES folder exists; an empty one is fine).
 - The first line of VES_MOD/MODE.txt: install (default) / status / uninstall
 
 Steps
@@ -25,6 +26,12 @@ Steps
    Everything but the drive recording is done parked. Don't touch the screen while driving.
 4. Send the VES folder (probe-... folders) from the stick. If something is wrong, set MODE.txt to
    status, insert the stick, choose Yes and send the VES_MOD_* folder too.
+
+Settings: the app, the split-screen widget, the star key action, or HMG-API's Mods tab (there,
+press "Save settings" at the bottom: leaving the screen without it drops the change; Apply
+changes isn't needed).
+Update: install the new version the same way; settings are kept. STATUS.txt UPDATED_IN_USE_NOW means
+it is in use at once (app and service replaced on the spot), no car restart needed.
 
 Remove (MODE.txt = uninstall): turns the mod off and removes it and its app. Stock behaviour from the
 next boot.

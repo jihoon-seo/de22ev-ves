@@ -19,7 +19,7 @@ done_status() { echo "$1"; echo "$1" > "$OUT/STATUS.txt"; }
 
 ID=de22ev-ves
 UUID=3c503596-94a4-8f10-901e-d6da35861d6a
-ZIP=de22ev-ves-0.1.0.zip
+ZIP=de22ev-ves-0.1.2.zip
 PRODUCT=DE22EV.KOR.0000.V039.001.260902
 H=/system/bin/hmgapid
 LOCAL=/data/nemesis/ves-mod
@@ -73,8 +73,18 @@ fi
 mkdir -p "$LOCAL" || fail INTERNAL_DIRECTORY
 cp "$KIT/$ZIP" "$LOCAL/$ZIP" || fail COPY_PACKAGE
 dump_state before
+UPDATE=no
+grep -q "^$ID	" "$OUT/before-mods.txt" && UPDATE=yes
 "$H" engine install "$LOCAL/$ZIP" --uuid "$UUID" > "$OUT/install.txt" 2>&1 || fail "INSTALL_FAILED (see install.txt)"
 "$H" enable "$ID" > "$OUT/enable.txt" 2>&1 || fail "ENABLE_FAILED (see enable.txt)"
+if [ "$UPDATE" = yes ]; then
+    # hmgapid re-syncs mod apps only when the app list changes (an update keeps it), and enable
+    # doesn't restart a running service: ask for both, so the update is in use without a restart
+    "$H" engine apps > "$OUT/apps.txt" 2>&1
+    "$H" service-restart "$ID" vesd > "$OUT/service-restart.txt" 2>&1
+fi
 dump_state after
+if [ "$UPDATE" = yes ]; then done_status UPDATED_IN_USE_NOW; exit 0; fi
+# first install: the menu tile, star key action and split-screen widget attach at the next boot
 done_status INSTALLED_RESTART_THE_CAR
 exit 0

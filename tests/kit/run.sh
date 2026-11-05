@@ -24,7 +24,8 @@ echo "hmgapid $*" >> "$MOCK/calls"
 case "$1" in
     version) echo "hmgapid 1.0.0-beta.5" ;;
     log) echo "I/HMG-API: [de22ev-ves] [de22ev-ves] service vesd started" ;;
-    mods) echo "de22ev-ves	enabled" ;;
+    mods) echo "de22ev-wireless-aa	enabled"; [ -f "$MOCK/installed" ] && echo "de22ev-ves	enabled" ;;
+    engine) [ "$2" = install ] && touch "$MOCK/installed"; [ "$2" = remove ] && rm -f "$MOCK/installed" ;;
 esac
 exit 0
 EOF
@@ -51,10 +52,19 @@ order() {   # order PATTERN...: the calls appear in this order
 
 setup DE22EV.KOR.0000.V039.001.260902
 run_kit install
-if [ "$STATUS" = INSTALLED_RESTART_THE_CAR ] && grep -q "engine install .*de22ev-ves-0.1.0.zip --uuid 3c503596-94a4-8f10-901e-d6da35861d6a" "$M/calls" \
+if [ "$STATUS" = INSTALLED_RESTART_THE_CAR ] && grep -q "engine install .*de22ev-ves-0.1.2.zip --uuid 3c503596-94a4-8f10-901e-d6da35861d6a" "$M/calls" \
     && order "hmgapid engine install" "hmgapid enable de22ev-ves"; then
-    pass "install: signed package, then enable"
+    pass "first install: signed package, then enable; the car restart attaches the tile, star key and widget"
 else fail "install" "status=$STATUS calls=$(tr '\n' ';' < "$M/calls")"; fi
+
+# an update applies at once: hmgapid re-syncs mod apps only when the app list changes (an update
+# keeps it) and doesn't restart a running service on enable, so the kit asks for both
+: > "$M/calls"
+run_kit install
+if [ "$STATUS" = UPDATED_IN_USE_NOW ] \
+    && order "hmgapid engine install" "hmgapid enable de22ev-ves" "hmgapid engine apps" "hmgapid service-restart de22ev-ves vesd"; then
+    pass "update: install, enable, app update, service restart, no car restart"
+else fail "update" "status=$STATUS calls=$(tr '\n' ';' < "$M/calls")"; fi
 
 run_kit status
 if [ "$STATUS" = STATUS_WRITTEN ] && grep -q "service vesd started" "$OUTDIR/hmgapi-log.txt" \
