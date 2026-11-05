@@ -8,7 +8,7 @@ import java.util.Random;
 
 /**
  * Synthetic drive traces for Replay.
- * <pre>java ves.tools.Sweep &lt;out.csv&gt; [city|accel|cruise|navi|ready_off]   (default city)</pre>
+ * <pre>java ves.tools.Sweep &lt;out.csv&gt; [city|accel|cruise|navi|ready_off|showcase]   (default city)</pre>
  * Rows every 100 ms: speed, pedal, motor_kw, accel_g, brake on every row; gear and ready every 200 ms (empty cell
  * = no update, like the real CAN cadence). Events: "mark" (scenario phase markers used by tests),
  * "yield_start:navi" / "yield_end:navi". Simple longitudinal physics for a 1750 kg EV.
@@ -66,6 +66,16 @@ public final class Sweep {
             s.cruise(6000, 18, 1);
             s.decel(0.1, 30000);
             s.stop(1000, D, 1);
+        } else if (sc.equals("showcase")) {
+            // the 0.2.0 behaviour in 45 s: idle in P, pull away, a hard pull, lift-off (pops), engine
+            // braking down to a stop, idle in D
+            s.stop(3000, P, 1);
+            s.stop(2000, D, 1);
+            s.accel(35, 30, 6000);
+            s.accel(100, 90, 12000);
+            s.decel(0.05, 30000);
+            s.stop(3000, D, 1);
+            s.stop(1000, P, 1);
         } else if (sc.equals("ready_off")) {
             s.stop(10000, P, 0);
         } else { // city
@@ -85,7 +95,7 @@ public final class Sweep {
 
     public static void main(String[] args) throws IOException {
         if (args.length < 1) {
-            System.err.println("usage: java ves.tools.Sweep <out.csv> [city|accel|cruise|navi|ready_off]");
+            System.err.println("usage: java ves.tools.Sweep <out.csv> [city|accel|cruise|navi|ready_off|showcase]");
             System.exit(2);
         }
         String sc = args.length > 1 ? args[1] : "city";

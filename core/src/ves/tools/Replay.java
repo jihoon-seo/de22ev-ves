@@ -110,6 +110,7 @@ public final class Replay {
             this.sr = sr;
             core = new VesCore(sr);
             core.setSettings(s);
+            if (packForRun != null) core.setPack(packForRun);
             buf = new short[sr / 100 + 2];
             r.profile = s.profile.key();
             r.mode = s.mode;
@@ -282,9 +283,26 @@ public final class Replay {
         return rr.finish(wav);
     }
 
+    /** pack=<folder>: the sound pack the run plays (sound defaults to user1 then) */
+    static ves.core.Pack packForRun;
+
+    static ves.core.Pack loadPack(final File dir) throws IOException {
+        try {
+            return ves.core.PackLoader.load(new ves.core.PackLoader.Source() {
+                public byte[] read(String name, int maxBytes) throws IOException {
+                    File f = new File(dir, name);
+                    if (f.length() > maxBytes) throw new IOException(name + " too big");
+                    return readAll(f);
+                }
+            });
+        } catch (ves.core.PackError e) {
+            throw new IOException("pack " + dir + ": " + e.getMessage());
+        }
+    }
+
     public static void main(String[] args) throws IOException {
         if (args.length < 2) {
-            System.err.println("usage: java ves.tools.Replay <trace.csv|capture.hscan> <out.wav> [k=v ...]");
+            System.err.println("usage: java ves.tools.Replay <trace.csv|capture.hscan> <out.wav> [k=v ...] [pack=<folder>]");
             System.exit(2);
         }
         Map<String, String> m = new HashMap<String, String>();
@@ -300,10 +318,13 @@ public final class Replay {
                 } catch (RuntimeException e) {
                     sr = 22050;
                 }
+            } else if (k.equals("pack")) {
+                packForRun = loadPack(new File(v));
             } else {
                 m.put(k, v);
             }
         }
+        if (packForRun != null && !m.containsKey("sound")) m.put("sound", "user1");
         Settings s = Settings.fromMap(m);
         byte[] data = readAll(new File(args[0]));
         OutputStream wav = new FileOutputStream(args[1]);

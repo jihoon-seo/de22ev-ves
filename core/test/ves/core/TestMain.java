@@ -2049,6 +2049,35 @@ public final class TestMain {
             }
         });
 
+        // ---------------- G7 pack loops are level-matched to the synth: loudness comes from the model (idle
+        // level, load), the pack gives the timbre. The first rendered packs played 12-18 dB under the synth
+        // at idle (their idle loops are quiet): comparison WAVs, 2026-11-05.
+        l.add(new T("G7_pack_level_matched") {
+            void run() throws Exception {
+                MapSource src = sinePack(false, false);
+                int k = 0;
+                for (java.util.Map.Entry<String, byte[]> e : src.files.entrySet()) {
+                    if (!e.getKey().endsWith(".wav")) continue;
+                    double f = e.getKey().startsWith("s840") ? 0.08 : e.getKey().startsWith("s1500") ? 0.2 : 1.0; // -22 dB, -14 dB
+                    byte[] b = e.getValue();
+                    for (int i = 44; i + 1 < b.length; i += 2) {
+                        int v = (short) ((b[i] & 0xff) | b[i + 1] << 8);
+                        v = (int) (v * f);
+                        b[i] = (byte) v;
+                        b[i + 1] = (byte) (v >> 8);
+                    }
+                    k++;
+                }
+                PackVoice v = new PackVoice(SR);
+                v.setPack(PackLoader.load(src));
+                double low = rmsOf(v, 900, 1, 0), high = rmsOf(v, 5000, 1, 0), offl = rmsOf(v, 900, 0, 0);
+                System.out.println("    level-matched pack: 900 rpm " + low + ", 5000 rpm " + high + ", off " + offl);
+                check(Math.abs(20 * Math.log10(low / high)) < 1.5, "G7 quiet loops brought up: " + low + " vs " + high);
+                near(low, 0.30, 0.06, "G7 about the synth's voice level (0.30 rms)");
+                check(offl > 0.2, "G7 off layer too: " + offl);
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {

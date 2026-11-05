@@ -14,13 +14,17 @@ package ves.core;
 public final class PackVoice {
     static final double FS = 30000;
     static final int SEG = 16;
-    /** pack loops peak at -1 dBFS; this brings their mix to about the synth's level into the output stage */
-    static final double PACK_GAIN = 0.55;
+    /**
+     * every loop is brought to the synth's voice level (RMS 0.30, gain at most 16x = 24 dB): the model's gain shapes
+     * loudness (idle level, load) as for the synth, the pack gives the timbre. Rendered idle loops are much
+     * quieter than full-load ones (12-18 dB under the synth in the first comparison renders).
+     */
+    static final double LOOP_RMS = 0.30, MAX_LOOP_GAIN = 16;
 
     private final OutputStage stage;
     private Pops pops;
     private Pack pack;
-    private double[] phOn = new double[0], phOff = new double[0];
+    private double[] phOn = new double[0], phOff = new double[0], gOn = new double[0], gOff = new double[0];
     private final int sr;
     private double cyc; // engine cycles since start (aligned packs)
     private boolean havePrev;
@@ -35,6 +39,20 @@ public final class PackVoice {
         pack = p;
         phOn = new double[p == null ? 0 : p.on.length];
         phOff = new double[p == null ? 0 : p.off.length];
+        gOn = gains(p == null ? new Pack.Loop[0] : p.on);
+        gOff = gains(p == null ? new Pack.Loop[0] : p.off);
+    }
+
+    static double[] gains(Pack.Loop[] L) {
+        double[] g = new double[L.length];
+        for (int k = 0; k < L.length; k++) {
+            double ss = 0;
+            short[] s = L[k].pcm;
+            for (short v : s) ss += (double) v * v;
+            double rms = Math.sqrt(ss / Math.max(1, s.length)) / 32768.0;
+            g[k] = rms < 1e-6 ? 0 : Math.min(MAX_LOOP_GAIN, LOOP_RMS / rms);
+        }
+        return g;
     }
 
     public Pack pack() {
@@ -81,7 +99,7 @@ public final class PackVoice {
             double f = (pos + n * 0.5) / frames;
             mix(seg, 0, n, lerp(pRpm, rpmT, f), lerp(pLoad, loadT, f), lerp(pRegen, regenT, f));
             for (int i = 0; i < n; i++) {
-                double x = seg[i] * PACK_GAIN;
+                double x = seg[i];
                 if (pops != null) x += pops.next();
                 double s = stage.process(x);
                 double g = pGain + (gT - pGain) * ((pos + i + 1) / (double) frames);
@@ -106,13 +124,13 @@ public final class PackVoice {
         double aOn = al ? wOn : Math.sqrt(wOn), aOff = al ? 1 - wOn : Math.sqrt(1 - wOn);
         for (int i = 0; i < n; i++) out[at + i] = 0;
         double dc = rpm / 120.0 / sr; // engine cycles per sample (4-stroke)
-        if (aOn > 1e-3) layer(pack.on, phOn, rpm, aOn, out, at, n, al, cyc, dc, sr);
-        if (aOff > 1e-3) layer(pack.off, phOff, rpm, aOff, out, at, n, al, cyc, dc, sr);
+        if (aOn > 1e-3) layer(pack.on, phOn, gOn, rpm, aOn, out, at, n, al, cyc, dc, sr);
+        if (aOff > 1e-3) layer(pack.off, phOff, gOff, rpm, aOff, out, at, n, al, cyc, dc, sr);
         cyc += n * dc;
     }
 
     /** adds amp x (the two loops nearest rpm) into out[at .. at+n) */
-    private static void layer(Pack.Loop[] L, double[] ph, double rpm, double amp, float[] out, int at, int n,
+    private static void layer(Pack.Loop[] L, double[] ph, double[] g, double rpm, double amp, float[] out, int at, int n,
                               boolean aligned, double cyc, double dc, int sr) {
         int last = L.length - 1;
         int i = 0;
@@ -128,12 +146,12 @@ public final class PackVoice {
         w = clamp(w, 0, 1);
         double a = (aligned ? 1 - w : Math.cos(w * Math.PI / 2)) * amp, b = (aligned ? w : Math.sin(w * Math.PI / 2)) * amp;
         if (aligned) {
-            if (a > 1e-4) playAligned(L[i], a, out, at, n, cyc, dc, sr);
-            if (b > 1e-4 && j != i) playAligned(L[j], b, out, at, n, cyc, dc, sr);
+            if (a > 1e-4) playAligned(L[i], a * g[i], out, at, n, cyc, dc, sr);
+            if (b > 1e-4 && j != i) playAligned(L[j], b * g[j], out, at, n, cyc, dc, sr);
             return;
         }
-        if (a > 1e-4) play(L[i], ph, i, rpm, a, out, at, n);
-        if (b > 1e-4 && j != i) play(L[j], ph, j, rpm, b, out, at, n);
+        if (a > 1e-4) play(L[i], ph, i, rpm, a * g[i], out, at, n);
+        if (b > 1e-4 && j != i) play(L[j], ph, j, rpm, b * g[j], out, at, n);
     }
 
     /** position = the shared crank phase within the loop's whole cycles */
