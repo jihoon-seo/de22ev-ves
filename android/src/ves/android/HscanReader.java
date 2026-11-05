@@ -26,6 +26,7 @@ final class HscanReader implements Runnable {
     volatile boolean paused;
     volatile boolean connected;
     volatile long bytes, lastDataMs, connects;
+    private int quietDrops; // reconnects without data since the last data (log the first few only)
     volatile String lastError = "";
     private volatile boolean stop;
 
@@ -49,20 +50,24 @@ final class HscanReader implements Runnable {
                 connected = true;
                 connects++;
                 backoff = 500;
-                Out.log("hscan: connected");
+                long since = SystemClock.uptimeMillis();
+                if (connects <= 3 || quietDrops == 0) Out.log("hscan: connected");
                 InputStream in = s.getInputStream();
                 while (!stop) {
                     int n;
                     try {
                         n = in.read(buf);
                     } catch (IOException timeout) {
-                        if (SystemClock.uptimeMillis() - lastDataMs > 10000) throw timeout;
+                        // hscand sends nothing for a while after boot: wait 10 s from the connect, not
+                        // from the last data (0.1.1 reconnected every 3 s and logged each one)
+                        if (SystemClock.uptimeMillis() - Math.max(lastDataMs, since) > 10000) throw timeout;
                         continue;
                     }
                     if (n < 0) throw new IOException("closed by hscand");
                     long t = SystemClock.uptimeMillis();
                     bytes += n;
                     lastDataMs = t;
+                    quietDrops = 0;
                     Tap tp = tap;
                     if (tp != null) tp.onChunk(buf, 0, n, t);
                     if (!paused) {
@@ -73,7 +78,7 @@ final class HscanReader implements Runnable {
                 }
             } catch (Throwable e) {
                 lastError = String.valueOf(e.getMessage());
-                if (connected) Out.log("hscan: lost (" + lastError + ")");
+                if (connected && quietDrops++ < 3) Out.log("hscan: lost (" + lastError + ")" + (quietDrops == 3 ? ", not logging more until data" : ""));
             } finally {
                 connected = false;
                 try {

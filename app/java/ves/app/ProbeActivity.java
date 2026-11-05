@@ -1,6 +1,7 @@
 package ves.app;
 
 import android.app.Activity;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -21,7 +22,8 @@ import ves.hmg.VesLink;
  * The guided car check: each step says what to do, may run a vesd probe command
  * (a short tone, the engine sound held on, the drive recording ...), and records
  * the owner's answer. Results land on the USB stick (VES/probe-<time>/).
- * Every step except the drive recording is done parked.
+ * Every step except the drive recording is done parked. The current step is kept, so leaving the
+ * screen (to start the radio, Bluetooth music ...) and coming back continues where it was.
  */
 public final class ProbeActivity extends Activity {
     static final class Step {
@@ -64,21 +66,40 @@ public final class ProbeActivity extends Activity {
         buttons.setOrientation(LinearLayout.VERTICAL);
         root.addView(buttons);
         setContentView(sv);
+        at = savedStep();
         show();
     }
 
+    private SharedPreferences prefs() {
+        return getSharedPreferences("probe", MODE_PRIVATE);
+    }
+
+    /** the step to continue from: the saved one, or the first */
+    private int savedStep() {
+        String id = prefs().getString("step", null);
+        if (id == null) return 0;
+        for (int i = 0; i < steps.size(); i++) if (steps.get(i).id.equals(id)) return i;
+        return 0;
+    }
+
+    private void saveStep() {
+        String id = steps.get(at).id;
+        SharedPreferences.Editor e = prefs().edit();
+        if (id.equals("start") || id.equals("done")) e.remove("step");
+        else e.putString("step", id);
+        e.commit();
+    }
+
     private void build() {
-        add("start", "주차(P) 상태, Ready 켜짐, USB를 꽂은 상태에서 시작합니다. 결과는 USB의 VES 폴더에 저장됩니다.",
+        add("start", "주차(P) 상태, Ready 켜짐, USB를 꽂은 상태에서 시작합니다. 결과는 USB 최상위의 VES 폴더에 저장됩니다(폴더가 미리 있어야 함).",
                 "점검 시작", "PROBE BEGIN");
         add("info", "헤드유닛의 오디오 서비스와 차량 신호를 확인합니다 (5초, 소리 없음).", "확인", "PROBE INFO");
         String[][] sources = { { "fm", "라디오(FM)" }, { "bt", "블루투스 음악" }, { "aa", "Android Auto 음악" } };
         String[][] routes = {
+                // 0.1.1's check settled the rest: 0x39 took the music source over, 0x3 reported a
+                // navigation prompt, no channel / the music stream weren't heard
                 { "r1", "12 0x45", "1번 (내비 효과음 채널)" },
-                { "r2", "12 0x46", "2번 (시스템 알림 채널)" },
-                { "r3", "12 0x39", "3번 (TTS 효과음 채널)" },
-                { "r4", "12 0x3", "4번 (내비 음성 채널)" },
-                { "r5", "12 -1", "5번 (채널 열지 않음)" },
-                { "r6", "3 -1", "6번 (음악 스트림, 비교용)" } };
+                { "r2", "12 0x46", "2번 (시스템 알림 채널)" } };
         for (String[] s : sources) {
             add("src_" + s[0], s[1] + "을(를) 보통 볼륨으로 재생하세요. 재생되면 다음으로.", "재생 중, 다음", null);
             for (String[] r : routes) {
@@ -153,6 +174,19 @@ public final class ProbeActivity extends Activity {
             });
         }
         if (s.command != null && s.answers.length > 0) setAnswersEnabled(false);
+        if (at > 1) {
+            Button again = MainActivity.big(buttons, "처음부터 다시", 0);
+            again.setTextSize(16);
+            again.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    if (busy) return;
+                    at = 0;
+                    saveStep();
+                    result.setText("");
+                    show();
+                }
+            });
+        }
         if (at < steps.size() - 1 && !s.id.equals("start")) {
             Button skip = MainActivity.big(buttons, "건너뛰기", 0);
             skip.setTextSize(16);
@@ -247,6 +281,7 @@ public final class ProbeActivity extends Activity {
 
     private void next() {
         if (at < steps.size() - 1) at++;
+        saveStep();
         result.setText("");
         show();
     }

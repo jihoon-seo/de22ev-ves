@@ -30,8 +30,10 @@ final class Actions {
     static final String[] RESPONSE = { "soft", "normal", "sport" };
     static final String[] RESPONSE_NAMES = { "부드럽게", "보통", "스포티" };
     static final String[] FADE = { "0", "60", "80", "100", "120" };
-    static final String[] TYPES = { "0x45", "0x46", "0x39", "0x3" };
-    static final String[] TYPE_NAMES = { "내비 효과음 채널 (기본)", "시스템 알림 채널", "TTS 효과음 채널", "내비 음성 채널" };
+    // car check 2026-11-05: 0x39 (TTS effect) takes the music source over (Bluetooth didn't come back);
+    // 0x3 (navigation voice) makes the head unit report a navigation prompt. Neither is offered.
+    static final String[] TYPES = { "0x45", "0x46" };
+    static final String[] TYPE_NAMES = { "내비 효과음 채널 (기본)", "시스템 알림 채널 (음악이 작아짐)" };
 
     private static final HmgClient HMG = new HmgClient(5000);
 

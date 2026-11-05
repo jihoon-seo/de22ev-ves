@@ -36,6 +36,9 @@ public final class MicomAudio {
         void onYield(String source, boolean start, String raw);
 
         void onOther(String raw);
+
+        /** AudioStart/AudioEnd of our own stream type: ours or another user's of it (SharedChannel decides) */
+        void onOwnType(boolean start, String raw);
     }
 
     private IBinder svc;
@@ -174,7 +177,7 @@ public final class MicomAudio {
                         int t = data.readInt();
                         boolean start = code == 0x21;
                         String what = (start ? "AudioStart " : "AudioEnd ") + t;
-                        if (t == ownType) ev.onOther(what + " (ours)");
+                        if (t == ownType) ev.onOwnType(start, what);
                         else if (yieldsFor(t)) ev.onYield("a" + t, start, what);
                         else ev.onOther(what);
                         break;

@@ -49,7 +49,12 @@ final class Probe {
         String sub = a.length > 1 ? a[1].toUpperCase() : "";
         try {
             if (sub.equals("BEGIN")) return begin();
-            if (dir == null) return "error no probe session (BEGIN first)\n";
+            if (dir == null) {
+                // the app continues a check after the car (or vesd) restarted: open a new session folder
+                String b = begin();
+                if (b.startsWith("error")) return b;
+                write("CONTINUED at " + line);
+            }
             if (sub.equals("NOTE")) {
                 int i = line.toUpperCase().indexOf("NOTE");
                 write("NOTE " + line.substring(i + 4).trim());
@@ -80,7 +85,8 @@ final class Probe {
     private synchronized String begin() throws IOException {
         if (dir != null) return "ok\n" + dir + "\n";
         List<String> usb = d.hmg.usbFolders();
-        if (usb.isEmpty()) return "error no USB stick (insert one and try again)\n";
+        // hmgapid lists a stick only when the mod's folder (VES) already exists on it
+        if (usb.isEmpty()) return "error USB에 VES 폴더가 없음: USB 최상위에 VES 폴더를 만들고 다시 시도\n";
         File f = new File(usb.get(0), "probe-" + Out.stamp());
         if (!f.mkdirs()) return "error cannot create " + f + "\n";
         dir = f;
@@ -160,7 +166,8 @@ final class Probe {
         b.append("records ").append(fns).append('\n');
         try {
             Map<String, String> v = d.hmg.vehicle("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure", "moving");
-            b.append("hmgapi_vehicle ").append(v).append('\n');
+            b.append("hmgapi_vehicle ").append(v)
+                    .append(d.hmg.lastVehicleError.length() > 0 ? " refused " + d.hmg.lastVehicleError : "").append('\n');
         } catch (Throwable e) {
             b.append("hmgapi_vehicle err ").append(e).append('\n');
         }

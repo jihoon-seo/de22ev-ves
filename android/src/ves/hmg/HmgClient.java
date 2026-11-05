@@ -54,6 +54,9 @@ public final class HmgClient {
         return out;
     }
 
+    /** hmgapid's answer when the last vehicle() call was refused ("" when it wasn't) */
+    public volatile String lastVehicleError = "";
+
     /** name -> value text ("42.5", "0"/"1", "-" when the car doesn't answer) */
     public Map<String, String> vehicle(String... names) throws IOException {
         String[] args = new String[names.length + 1];
@@ -61,7 +64,11 @@ public final class HmgClient {
         System.arraycopy(names, 0, args, 1, names.length);
         Map<String, String> out = new LinkedHashMap<String, String>();
         Answer a = call(args);
-        if (!a.ok()) return out;
+        if (!a.ok()) {
+            lastVehicleError = "code " + a.code + ": " + a.text.trim();
+            return out;
+        }
+        lastVehicleError = "";
         for (String l : a.text.split("\n")) {
             int sp = l.indexOf(' ');
             if (sp > 0) out.put(l.substring(0, sp), l.substring(sp + 1).trim());

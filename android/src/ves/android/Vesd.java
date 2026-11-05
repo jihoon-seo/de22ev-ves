@@ -10,6 +10,7 @@ import java.util.Map;
 
 import ves.core.AudioPolicy;
 import ves.core.Settings;
+import ves.core.SharedChannel;
 import ves.core.Sig;
 import ves.core.SignalState;
 import ves.core.VesCore;
@@ -32,6 +33,7 @@ public final class Vesd implements MicomAudio.Events {
     final HmgClient hmg = new HmgClient(5000);
     final HscanReader hscan = new HscanReader(core.framer(), core);
     final Probe probe = new Probe(this);
+    final SharedChannel channel = new SharedChannel(); // guarded by itself
 
     volatile int ownType = MicomAudio.NAVI_SOUNDEFFECT;
     volatile boolean pathOpen;
@@ -131,10 +133,10 @@ public final class Vesd implements MicomAudio.Events {
             v = v.trim();
             int t = v.startsWith("0x") ? Integer.parseInt(v.substring(2), 16) : Integer.parseInt(v);
             switch (t) {
+                // 0x39 (TTS effect) takes the music source over and 0x3 (navigation voice) reports a
+                // navigation prompt (car check 2026-11-05): not used, an old setting falls back to 0x45
                 case MicomAudio.NAVI_SOUNDEFFECT:
                 case MicomAudio.SYSTEM_ALARM:
-                case MicomAudio.TTS_EFFECT_SOUND:
-                case MicomAudio.NAVI:
                     return t;
                 default:
                     return def;
@@ -183,10 +185,39 @@ public final class Vesd implements MicomAudio.Events {
         probe.event(raw);
     }
 
+    /**
+     * The navigation plays its effect sounds on our type (0x45) too. Its start: step aside and leave the
+     * channel to it (no endAudio, which would cut its chime); its end, or the channel closed under our open
+     * path: step back in after the usual pause, with a fresh startAudio.
+     */
+    public void onOwnType(boolean start, String raw) {
+        long now = SystemClock.uptimeMillis();
+        int who;
+        synchronized (channel) {
+            who = start ? channel.onStart(now) : channel.onEnd(now, pathOpen);
+        }
+        if (who == SharedChannel.OURS) {
+            probe.event(raw + " (ours)");
+            return;
+        }
+        synchronized (core) {
+            if (start) core.onYieldStart("shared", now);
+            else {
+                core.onYieldStart("shared", now); // no-op when its start was seen; closes our path when it wasn't
+                core.onYieldEnd("shared", now);
+            }
+        }
+        Out.log("micom: " + raw + " by another user -> " + (start ? "yield" : "resume") + " shared");
+        probe.event(raw + (start ? " foreign yield shared" : " foreign end shared"));
+    }
+
     // ---- the path
 
     void openPath(String why) {
         try {
+            synchronized (channel) {
+                channel.ownStartCalled(SystemClock.uptimeMillis()); // before the call: the event may beat its return
+            }
             boolean ok = micom.startAudio(ownType);
             pathOpen = true;
             opens++;
@@ -200,9 +231,20 @@ public final class Vesd implements MicomAudio.Events {
 
     void cleanupPath(String why) {
         try {
-            boolean ok = micom.endAudio(ownType);
-            if (pathOpen || !"startup".equals(why)) Out.log("path: endAudio(0x" + Integer.toHexString(ownType) + ")=" + ok + " (" + why + ")");
-            probe.event("endAudio 0x" + Integer.toHexString(ownType) + " " + ok + " " + why);
+            boolean skip;
+            synchronized (channel) {
+                skip = channel.skipEnd(SystemClock.uptimeMillis()) && !"startup".equals(why);
+                if (!skip) channel.ownEndCalled(SystemClock.uptimeMillis());
+            }
+            if (skip) {
+                // another user holds the channel (or already closed it): endAudio would cut its sound
+                if (pathOpen) Out.log("path: closed without endAudio (" + why + "; the channel is another user's)");
+                probe.event("endAudio skipped " + why);
+            } else {
+                boolean ok = micom.endAudio(ownType);
+                if (pathOpen || !"startup".equals(why)) Out.log("path: endAudio(0x" + Integer.toHexString(ownType) + ")=" + ok + " (" + why + ")");
+                probe.event("endAudio 0x" + Integer.toHexString(ownType) + " " + ok + " " + why);
+            }
         } catch (Throwable e) {
             lastError = "endAudio: " + e;
         }
