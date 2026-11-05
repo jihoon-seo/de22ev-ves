@@ -14,6 +14,7 @@ import ves.core.SharedChannel;
 import ves.core.Sig;
 import ves.core.SignalState;
 import ves.core.VehicleText;
+import ves.core.WritePacer;
 import ves.core.VesCore;
 import ves.hmg.HmgClient;
 import ves.hmg.Prefs;
@@ -42,6 +43,7 @@ public final class Vesd implements MicomAudio.Events {
     volatile boolean fallbackActive;
     volatile long fallbackPolls;
     volatile long underruns, opens, closes, blocks;
+    volatile WritePacer pacer;
     volatile boolean exclusive; // a probe owns the audio path
     volatile Settings override; // a probe's settings (null: the owner's)
     volatile boolean skipStartupClose; // probe stuck test: leave a crashed holder's channel as it is, once
@@ -303,7 +305,20 @@ public final class Vesd implements MicomAudio.Events {
         short[] buf = new short[BLOCK];
         boolean playing = false;
         long written = 0;
+        // keep ~80 ms queued, not the whole 186 ms minimum buffer (car check 2: response "a little late")
+        pacer = new WritePacer(RATE * 80 / 1000, BLOCK, bytes / 2);
         while (true) {
+            if (playing && track != null && !exclusive) {
+                long head = track.getPlaybackHeadPosition() & 0xffffffffL;
+                if (pacer.framesToWrite(written, head) == 0) {
+                    SystemClock.sleep(4);
+                    continue;
+                }
+                if (written > BLOCK * 4 && written - head <= 0) {
+                    underruns++;
+                    pacer.underrun();
+                }
+            }
             long now = SystemClock.uptimeMillis();
             int act;
             synchronized (core) {
@@ -350,8 +365,6 @@ public final class Vesd implements MicomAudio.Events {
                 cleanupPath(pathOpen ? "silence or voice" : "startup");
             }
             if (playing && track != null) {
-                int head = track.getPlaybackHeadPosition();
-                if (written > BLOCK * 4 && written - (head & 0xffffffffL) <= 0) underruns++;
                 int n = track.write(buf, 0, BLOCK);
                 if (n > 0) written += n;
                 else SystemClock.sleep(10);
@@ -373,7 +386,8 @@ public final class Vesd implements MicomAudio.Events {
             b.append("settings ").append(core.settings()).append(override != null ? " (probe)" : "").append('\n');
         }
         b.append("path open=").append(pathOpen ? 1 : 0).append(" type=0x").append(Integer.toHexString(ownType))
-                .append(" opens=").append(opens).append(" closes=").append(closes).append(" underruns=").append(underruns).append('\n');
+                .append(" opens=").append(opens).append(" closes=").append(closes).append(" underruns=").append(underruns)
+                .append(" queue_target_ms=").append(pacer == null ? -1 : pacer.target() * 1000 / RATE).append('\n');
         b.append("hscan connected=").append(hscan.connected ? 1 : 0).append(" bytes=").append(hscan.bytes)
                 .append(" age_ms=").append(hscan.lastDataMs == 0 ? -1 : SystemClock.uptimeMillis() - hscan.lastDataMs)
                 .append(" fallback=").append(fallbackActive ? 1 : 0).append(" polls=").append(fallbackPolls).append('\n');

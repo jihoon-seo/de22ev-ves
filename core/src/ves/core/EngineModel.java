@@ -108,19 +108,26 @@ public final class EngineModel {
         }
 
         // ---- response
-        double expo, tauPed, gainUp;
+        // car check 2 found normal "a little late": normal and sport follow the pedal faster since 0.2.0
+        double expo, tauPed, gainUp, tauRpmUp, tauLoad;
         if ("soft".equals(st.response)) {
             expo = 1.5;
             tauPed = 0.32;
             gainUp = 1.2;
+            tauRpmUp = 0.25;
+            tauLoad = 0.05;
         } else if ("sport".equals(st.response)) {
             expo = 0.85;
-            tauPed = 0.08;
+            tauPed = 0.05;
             gainUp = 3.0;
+            tauRpmUp = 0.06;
+            tauLoad = 0.02;
         } else {
             expo = 1.15;
-            tauPed = 0.18;
+            tauPed = 0.08;
             gainUp = 2.0;
+            tauRpmUp = 0.09;
+            tauLoad = 0.03;
         }
 
         // ---- smoothed inputs
@@ -145,7 +152,7 @@ public final class EngineModel {
         if (Double.isNaN(kw)) lt = pc;
         else if (Double.isNaN(pedal)) lt = kwn;
         else lt = Math.max(pc, 0.6 * pc + 0.4 * kwn);
-        load += (lt - load) * alpha(dt, 0.05);
+        load += (lt - load) * alpha(dt, tauLoad);
         double L = clamp(load, 0, 1);
 
         if (stopped && sp > MOVE_KPH) stopped = false;
@@ -225,7 +232,7 @@ public final class EngineModel {
         } else {
             double target = IDLE_RPM + 2600 * L + sp * (14 + 16 * L);
             target = clamp(target, IDLE_RPM, MAX_RPM);
-            rpm += (target - rpm) * alpha(dt, target > rpm ? 0.25 : 0.45);
+            rpm += (target - rpm) * alpha(dt, target > rpm ? tauRpmUp : 0.45);
         }
         if (profile != Profile.ICE_SHIFT) {
             // keep the gearbox consistent for a later switch to ICE_SHIFT

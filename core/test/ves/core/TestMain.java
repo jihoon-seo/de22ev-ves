@@ -136,7 +136,8 @@ public final class TestMain {
     // ------------------------------------------------------------------ VesCore rig
 
     static final int SR = 22050;
-    static final String O1_WANT = "ICE_SMOOTH=4bdf3f9889a03759 ICE_SHIFT=71d45634fd6d8230 EV_FUTURE=ee9a9545bf225a56"; // 0.1.2 output
+    // 0.1.2 output was ICE_SMOOTH=4bdf3f9889a03759 ...; 0.2.0 faster normal response (L1) changes it on purpose
+    static final String O1_WANT = "ICE_SMOOTH=4afaa3acacd639b1 ICE_SHIFT=b73cf032a167a19f EV_FUTURE=54180ef1274a9222";
     static final int BLOCK = 220; // 10 ms
 
     static Settings settings(Profile p, int volume, String mode) {
@@ -233,6 +234,32 @@ public final class TestMain {
         double rms() {
             return n == 0 ? 0 : Math.sqrt(sumSq / n);
         }
+    }
+
+    /** ms from a 0 -> 60% pedal step (30 km/h, ICE_SMOOTH) until rpm covers 63% of its rise */
+    static long rpmRise(String response) {
+        Settings st = settings(Profile.ICE_SMOOTH, 60, "drive_all");
+        st.response = response;
+        Rig r = new Rig(st);
+        r.speed = 30;
+        r.pedal = 0;
+        r.run(4000);
+        double rpm0 = r.c.lastParams().rpm;
+        Rig q = new Rig(st);
+        q.speed = 30;
+        q.pedal = 0;
+        q.run(4000);
+        q.pedal = 60;
+        q.run(4000);
+        double rpm1 = q.c.lastParams().rpm;
+        r.pedal = 60;
+        long t0 = r.t;
+        double goal = rpm0 + 0.63 * (rpm1 - rpm0);
+        while (r.t - t0 < 4000) {
+            r.step();
+            if (r.c.lastParams().rpm >= goal) return r.t - t0;
+        }
+        return 4000;
     }
 
     // ------------------------------------------------------------------ pack fixtures
@@ -1640,6 +1667,46 @@ public final class TestMain {
                     }
                 }
                 System.out.println("    fuzz: " + ok + " of 3000 mutated packs still valid");
+            }
+        });
+
+        // ---------------- L1-L3 response (car check 2: pedal response "조금 늦음"; AudioTrack's minimum buffer on
+        // the car is 8192 bytes = 186 ms, all of it queued by a blocking write)
+        l.add(new T("L1_pedal_response_normal") {
+            void run() {
+                long ms = rpmRise("normal");
+                System.out.println("    rpm 63% rise after a 0->60% pedal step: normal " + ms + " ms, soft " + rpmRise("soft") + " ms, sport " + rpmRise("sport") + " ms");
+                check(ms <= 220, "normal response " + ms + " ms > 220");
+            }
+        });
+        l.add(new T("L2_pedal_response_soft_unchanged") {
+            void run() {
+                long ms = rpmRise("soft");
+                check(ms >= 600 && ms <= 720, "soft unchanged (0.1.2: 660 ms): " + ms + " ms");
+            }
+        });
+        l.add(new T("L3_write_pacer") {
+            void run() {
+                WritePacer w = new WritePacer(1764, 220, 4096);
+                long written = 0, head = 0;
+                int minFill = Integer.MAX_VALUE, maxFill = 0;
+                java.util.Random rnd = new java.util.Random(3);
+                for (int i = 0; i < 20000; i++) {
+                    int n = w.framesToWrite(written, head);
+                    written += n;
+                    head += rnd.nextInt(3) == 0 ? 0 : 110; // playback runs ~10 ms per 2 polls, unevenly
+                    if (head > written) head = written;
+                    int fill = (int) (written - head);
+                    if (i > 100) {
+                        minFill = Math.min(minFill, fill);
+                        maxFill = Math.max(maxFill, fill);
+                    }
+                }
+                check(maxFill <= 1764 + 220, "never more than target + a block queued: " + maxFill);
+                check(minFill > 0, "never runs dry: " + minFill);
+                eq(w.framesToWrite(5000, 0), 0, "buffer ahead: write nothing");
+                for (int k = 0; k < 4; k++) w.underrun();
+                check(w.target() > 1764 && w.target() <= 4096, "underruns raise the target: " + w.target());
             }
         });
 
