@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import ves.core.ProbeResume;
 import ves.hmg.VesLink;
 
 /**
@@ -68,6 +69,65 @@ public final class ProbeActivity extends Activity {
         setContentView(sv);
         at = savedStep();
         show();
+    }
+
+    private boolean resumed;
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        resumed = true;
+        if (busy) return;
+        at = savedStep();
+        result.setText("");
+        show();
+        // back from another screen (voice recognition, the radio ...): a hold may still be running in vesd,
+        // or may have finished while this screen was away (car check 2)
+        final String id = steps.get(at).id;
+        final String saved = prefs().getString("result_" + id, null);
+        new Thread(new Runnable() {
+            public void run() {
+                String st;
+                try {
+                    st = VesLink.send("STATUS", 3000);
+                } catch (IOException e) {
+                    st = null;
+                }
+                final int what = ProbeResume.decide(id, st, saved);
+                h.post(new Runnable() {
+                    public void run() {
+                        if (!resumed || busy || !steps.get(at).id.equals(id)) return;
+                        if (what == ProbeResume.REATTACH) reattach();
+                        else if (what == ProbeResume.ADVANCE) finishStep(steps.get(at), saved);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    @Override
+    protected void onPause() {
+        resumed = false;
+        super.onPause();
+    }
+
+    /** wait for a hold that vesd is still running (started before the screen was covered) */
+    private void reattach() {
+        busy = true;
+        final Step s = steps.get(at);
+        result.setText("실행 중… (이어서 기다림)");
+        new Thread(new Runnable() {
+            public void run() {
+                final String r = waitIdle("ok", s.id.equals("hold") ? 70 : 40);
+                saveResult(s.id, r);
+                h.post(new Runnable() {
+                    public void run() {
+                        busy = false;
+                        if (resumed) finishStep(s, r);
+                    }
+                });
+            }
+        }).start();
     }
 
     private SharedPreferences prefs() {
@@ -226,17 +286,29 @@ public final class ProbeActivity extends Activity {
                     r = "error " + e.getMessage();
                 }
                 final String res = r;
+                saveResult(s.id, res); // for the screen that is in front when this ends (may be a new one)
                 h.post(new Runnable() {
                     public void run() {
                         busy = false;
-                        result.setText(res.length() > 1500 ? res.substring(0, 1500) + "…" : res);
-                        if (res.startsWith("error")) return;
-                        if (s.answers.length > 0) setAnswersEnabled(true);
-                        else next();
+                        if (resumed) finishStep(s, res);
                     }
                 });
             }
         }).start();
+    }
+
+    private void saveResult(String id, String r) {
+        prefs().edit().putString("result_" + id, r).commit();
+    }
+
+    /** a step's command finished: show its result, then its answers or the next step */
+    private void finishStep(Step s, String res) {
+        prefs().edit().remove("result_" + s.id).commit();
+        if (steps.get(at) != s) return;
+        result.setText(res.length() > 1500 ? res.substring(0, 1500) + "…" : res);
+        if (res.startsWith("error")) return;
+        if (s.answers.length > 0) setAnswersEnabled(true);
+        else next();
     }
 
     /** a hold runs in vesd: wait until it says it's idle again */

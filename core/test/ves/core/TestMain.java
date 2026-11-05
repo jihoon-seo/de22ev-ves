@@ -1463,6 +1463,22 @@ public final class TestMain {
             }
         });
 
+        // ---------------- PR1-3 car check resume (car check 2: the VUI screen covered the app during the
+        // 60 s hold; the result went to the old screen and the step never advanced)
+        l.add(new T("PR_probe_resume") {
+            void run() {
+                eq(ProbeResume.decide("hold", "ok\nprobe open /x running hold\n", null), ProbeResume.REATTACH, "PR1 hold still running");
+                eq(ProbeResume.decide("hold", "ok\nprobe open /x\n", "ok\n(끝)"), ProbeResume.ADVANCE, "PR2 finished while away");
+                eq(ProbeResume.decide("hold", "ok\nprobe open /x\n", null), ProbeResume.SHOW, "finished, no result: show the step");
+                eq(ProbeResume.decide("chime", "probe open /x running hold", null), ProbeResume.REATTACH, "chime is a hold too");
+                eq(ProbeResume.decide("drive_stop", "probe open /x running drive", null), ProbeResume.SHOW, "drive keeps its own screen");
+                eq(ProbeResume.decide("tone_fm_r1", "probe open /x", "ok"), ProbeResume.SHOW, "PR3 short steps just show");
+                eq(ProbeResume.decide(null, null, null), ProbeResume.SHOW, "nothing saved");
+                eq(ProbeResume.decide("hold", "error vesd not reachable", null), ProbeResume.SHOW, "no status");
+                eq(ProbeResume.decide("hold", "probe open /x", "error busy"), ProbeResume.SHOW, "a failed run is shown, not skipped");
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {
