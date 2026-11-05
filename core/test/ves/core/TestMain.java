@@ -136,6 +136,7 @@ public final class TestMain {
     // ------------------------------------------------------------------ VesCore rig
 
     static final int SR = 22050;
+    static final String O1_WANT = "ICE_SMOOTH=4bdf3f9889a03759 ICE_SHIFT=71d45634fd6d8230 EV_FUTURE=ee9a9545bf225a56"; // 0.1.2 output
     static final int BLOCK = 220; // 10 ms
 
     static Settings settings(Profile p, int volume, String mode) {
@@ -1476,6 +1477,34 @@ public final class TestMain {
                 eq(ProbeResume.decide(null, null, null), ProbeResume.SHOW, "nothing saved");
                 eq(ProbeResume.decide("hold", "error vesd not reachable", null), ProbeResume.SHOW, "no status");
                 eq(ProbeResume.decide("hold", "probe open /x", "error busy"), ProbeResume.SHOW, "a failed run is shown, not skipped");
+            }
+        });
+
+        // ---------------- O1 characterization: the output of a fixed drive, before and after moving the
+        // speaker stage (high-pass, presence band, soft clip) out of Synth into OutputStage
+        l.add(new T("O1_output_unchanged") {
+            void run() throws Exception {
+                Profile[] profs = {Profile.ICE_SMOOTH, Profile.ICE_SHIFT, Profile.EV_FUTURE};
+                StringBuilder got = new StringBuilder();
+                for (Profile p : profs) {
+                    Rig r = new Rig(settings(p, 70, "idle_regen"));
+                    java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+                    for (int i = 0; i < 1000; i++) {
+                        long t = r.t;
+                        r.speed = Math.max(0, 60 * Math.sin(t / 4000.0));
+                        r.pedal = 50 + 50 * Math.sin(t / 900.0);
+                        r.kw = 40 * Math.sin(t / 1300.0);
+                        r.step();
+                        for (short v : r.buf) { md.update((byte) v); md.update((byte) (v >> 8)); }
+                    }
+                    byte[] d = md.digest();
+                    StringBuilder hx = new StringBuilder();
+                    for (int i = 0; i < 8; i++) hx.append(String.format("%02x", d[i] & 0xff));
+                    got.append(p).append('=').append(hx).append(' ');
+                }
+                String want = O1_WANT;
+                System.out.println("    O1 " + got);
+                check(got.toString().trim().equals(want), "output changed: " + got + " vs " + want);
             }
         });
 

@@ -19,18 +19,14 @@ package ves.core;
  * quiet sine whine at 5 f (faded out near Nyquist).
  *
  * <h3>Output</h3>
- * 120 Hz 2nd-order high-pass (saves headroom for what the speakers cannot play), +11 dB on 400-2500 Hz (the navigation channel's speaker barely plays the 30-130 Hz firing frequency: the car check
- * heard nothing of it at low rpm, but heard 660/880 Hz test tones clearly), 1.6x drive into a soft clip
- * x(27+x^2)/(27+9x^2) on [-3,3] (|y| &lt;= 1), times gain*30000, truncated toward zero: |sample| never exceeds
+ * The voice mix goes through {@link OutputStage} (speaker high-pass, presence band, soft clip, |y| &lt;= 1),
+ * times gain*30000, truncated toward zero: |sample| never exceeds
  * gain*30000 (gain interpolated within the block). A profile switch between ICE and EV cross-fades the voices
  * over 80 ms.
  */
 public final class Synth {
     static final int TBL = 2048, MASK = TBL - 1, NT = 6, CH = 512;
     static final double FS = 30000;
-    /** into the soft clip: +6 dB of level, the peaks rounded off rather than cut */
-    static final double DRIVE = 1.6;
-    static final double HP_HZ = 120, PRES_LO_HZ = 400, PRES_HI_HZ = 2500, PRES_K = 2.5; // band 400-2500 Hz +11 dB
 
     static final float[] SINE = new float[TBL];
     static final float[] SAW = new float[TBL];
@@ -92,11 +88,7 @@ public final class Synth {
     private final double iceLpC;
     // EV state
     private double evPh, padA, padB, whPh, lfoPh, lp1, lp2;
-    // output high-pass
-    private final double hb0, hb1, hb2, ha1, ha2;
-    private double hx1, hx2, hy1, hy2;
-    private final double presLoC, presHiC;
-    private double presLo, presHi;
+    private final OutputStage stage;
 
     private final float[] bufA = new float[CH], bufB = new float[CH];
 
@@ -107,17 +99,8 @@ public final class Synth {
         fromProfile = profile;
         rng = (int) (seed ^ (seed >>> 32)) ^ 0x5DEECE6;
         if (rng == 0) rng = 1;
-        // RBJ biquad high-pass, Q = 0.7071
-        double w0 = 2 * Math.PI * HP_HZ / sr, cs = Math.cos(w0), al = Math.sin(w0) / (2 * 0.70710678);
-        double a0 = 1 + al;
-        hb0 = (1 + cs) / 2 / a0;
-        hb1 = -(1 + cs) / a0;
-        hb2 = (1 + cs) / 2 / a0;
-        ha1 = -2 * cs / a0;
-        ha2 = (1 - al) / a0;
+        stage = new OutputStage(sr);
         xStep = 1.0 / (0.08 * sr);
-        presLoC = 1 - Math.exp(-2 * Math.PI * PRES_LO_HZ / sr);
-        presHiC = 1 - Math.exp(-2 * Math.PI * Math.min(PRES_HI_HZ, 0.4 * sr) / sr);
         iceLpC = 1 - Math.exp(-2 * Math.PI * Math.min(4500.0, 0.3 * sr) / sr);
     }
 
@@ -183,28 +166,14 @@ public final class Synth {
                         fading = false;
                     }
                 }
-                double y = hb0 * x + hb1 * hx1 + hb2 * hx2 - ha1 * hy1 - ha2 * hy2;
-                hx2 = hx1;
-                hx1 = x;
-                hy2 = hy1;
-                hy1 = y;
-                presLo += (y - presLo) * presLoC;
-                presHi += (y - presHi) * presHiC;
-                y = (y + PRES_K * (presHi - presLo)) * DRIVE;
-                if (y > 3) y = 3;
-                else if (y < -3) y = -3;
-                double y2 = y * y;
-                double s = y * (27 + y2) / (27 + 9 * y2);
+                double s = stage.process(x);
                 double g = a0 + (a1 - a0) * ((i + 1) * invN);
                 out[off + pos + i] = (short) (int) (s * g * FS);
             }
             pos += n;
         }
         // flush denormals / tiny states
-        if (Math.abs(hy1) < 1e-20) hy1 = 0;
-        if (Math.abs(hy2) < 1e-20) hy2 = 0;
-        if (Math.abs(presLo) < 1e-20) presLo = 0;
-        if (Math.abs(presHi) < 1e-20) presHi = 0;
+        stage.flush();
         pRpm = rpmT;
         pLoad = loadT;
         pRegen = regenT;
