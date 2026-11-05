@@ -16,6 +16,7 @@ import java.util.List;
  * cylinders 8
  * idle   800
  * redline 6500
+ * aligned yes          (optional: loops start at the same crank angle, whole cycles; see Pack.aligned)
  * loop v8_0800_on.wav rpm=800 load=on [start=0] [end=17640]
  * loop v8_0800_off.wav rpm=800 load=off
  * </pre>
@@ -53,6 +54,7 @@ public final class PackLoader {
         String text = new String(src.read("pack.txt", MAX_TXT_BYTES), "UTF-8");
         String name = null;
         int cyl = 4, idle = 800, redline = 6500;
+        boolean aligned = false;
         List<Pack.Loop> on = new ArrayList<Pack.Loop>(), off = new ArrayList<Pack.Loop>();
         int lineNo = 0, total = 0;
         for (String raw : text.split("\n")) {
@@ -65,6 +67,7 @@ public final class PackLoader {
             else if (k.equals("cylinders")) cyl = num(f, 1, 1, 16, lineNo);
             else if (k.equals("idle")) idle = num(f, 1, 300, 2000, lineNo);
             else if (k.equals("redline")) redline = num(f, 1, 2000, 12000, lineNo);
+            else if (k.equals("aligned")) aligned = f.length > 1 && f[1].equals("yes");
             else if (k.equals("loop")) {
                 if (on.size() + off.size() >= MAX_LOOPS) throw new PackError("more than " + MAX_LOOPS + " loops");
                 if (f.length < 2 || !f[1].matches("[a-z0-9_-]{1,60}\\.wav")) throw new PackError("line " + lineNo + ": bad file name");
@@ -97,7 +100,7 @@ public final class PackLoader {
         if (a.length < 3) throw new PackError("needs at least 3 on-load loops");
         if (a[0].rpm > 1200 || a[a.length - 1].rpm < 4000) throw new PackError("on-load loops must reach from <=1200 to >=4000 rpm");
         if (b.length == 1) throw new PackError("needs 0 or at least 2 off-load loops");
-        return new Pack(name, cyl, idle, redline, a, b.length == 0 ? a : b);
+        return new Pack(name, cyl, idle, redline, aligned, a, b.length == 0 ? a : b);
     }
 
     private static Pack.Loop[] sorted(List<Pack.Loop> l) {

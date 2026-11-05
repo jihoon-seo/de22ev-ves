@@ -18,12 +18,19 @@ public final class Pack {
 
     public final String name;
     public final int cylinders, idleRpm, redlineRpm;
+    /**
+     * every loop starts at the same crank angle and holds whole engine cycles (rendered packs): PackVoice keeps
+     * all loops on one engine-cycle phase and crossfades linearly. false (recordings): free-running loops,
+     * constant-power crossfade.
+     */
+    public final boolean aligned;
     /** on-load loops by rising rpm */
     public final Loop[] on;
     /** off-load (overrun) loops by rising rpm; the same array as on when the pack has none */
     public final Loop[] off;
 
-    Pack(String name, int cylinders, int idleRpm, int redlineRpm, Loop[] on, Loop[] off) {
+    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, Loop[] on, Loop[] off) {
+        this.aligned = aligned;
         this.name = name;
         this.cylinders = cylinders;
         this.idleRpm = idleRpm;

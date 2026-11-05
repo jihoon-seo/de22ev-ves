@@ -351,6 +351,34 @@ public final class TestMain {
         return new MapSource(m);
     }
 
+    /** sine loops at rpm / 10 Hz (whole cycles in 0.5 s), on and off layers; either layer can be silent */
+    static MapSource sinePack(boolean onSilent, boolean offSilent) {
+        java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+        StringBuilder t = new StringBuilder("name sine\ncylinders 4\nidle 800\nredline 6500\naligned yes\n");
+        int[] rpms = {840, 1500, 2520, 3960, 6480};
+        for (int r : rpms) {
+            for (String load : new String[] {"on", "off"}) {
+                boolean silent = load.equals("on") ? onSilent : offSilent;
+                String f = "s" + r + "_" + load + ".wav";
+                byte[] w = wav(22050, 1, 16, 11025, r / 10.0);
+                if (silent) java.util.Arrays.fill(w, 44, w.length, (byte) 0);
+                m.put(f, w);
+                t.append("loop ").append(f).append(" rpm=").append(r).append(" load=").append(load).append('\n');
+            }
+        }
+        m.put("pack.txt", t.toString().getBytes());
+        return new MapSource(m);
+    }
+
+    static double rmsOf(PackVoice v, double rpm, double load, double regen) {
+        float[] x = new float[SR / 2];
+        v.renderRaw(x, x.length, rpm, load, regen);
+        v.renderRaw(x, x.length, rpm, load, regen);
+        double ss = 0;
+        for (float f : x) ss += f * f;
+        return Math.sqrt(ss / x.length);
+    }
+
     // ------------------------------------------------------------------ spectral helpers
 
     /** 2nd-order Butterworth high-pass (RBJ), for measuring what a small speaker can play. */
@@ -1878,6 +1906,94 @@ public final class TestMain {
                 }
                 check(r.capViolations == 0 && r.peak <= 30000, "P5 bounds: violations " + r.capViolations + " peak " + r.peak);
                 check(r.c.pops().episodes() >= 2, "P5 pops happened in the chain: " + r.c.pops().episodes());
+            }
+        });
+
+        // ---------------- G1-G6 PackVoice: the rpm x load grid player (two nearest loops per layer,
+        // constant-power crossfade on log rpm, pitch-shifted by rpm / loop rpm; on/off layers by load)
+        l.add(new T("G_pack_voice") {
+            void run() throws Exception {
+                Pack pk = PackLoader.load(sinePack(false, false));
+                PackVoice v = new PackVoice(SR);
+                v.setPack(pk);
+                // G1 pitch follows rpm between and beyond the loops
+                for (double rpm : new double[] {1000, 2000, 3000, 5000, 6200}) {
+                    float[] x = new float[SR];
+                    v.renderRaw(x, x.length, rpm, 1, 0); // settle
+                    v.renderRaw(x, x.length, rpm, 1, 0);
+                    double f = pitch(x, 0, x.length, rpm / 10 * 0.8, rpm / 10 * 1.25, 1, SR);
+                    near(f, rpm / 10, rpm / 10 * 0.02, "G1 pitch at " + rpm);
+                }
+                // G2 + G3: a 10 s sweep 1000 -> 6000 rpm keeps its level and has no clicks
+                float[] sweep = new float[SR * 10];
+                PackVoice w = new PackVoice(SR);
+                w.setPack(pk);
+                for (int b = 0; b < sweep.length / 220; b++) {
+                    double rpm = 1000 + 5000.0 * b / (sweep.length / 220);
+                    float[] blk = new float[220];
+                    w.renderRaw(blk, 220, rpm, 1, 0);
+                    System.arraycopy(blk, 0, sweep, b * 220, 220);
+                }
+                double lo = 1e9, hi = 0, maxD = 0;
+                for (int k = 1; k < 100; k++) {
+                    double ss = 0;
+                    for (int i = k * 2205; i < (k + 1) * 2205; i++) ss += sweep[i] * sweep[i];
+                    double rms = Math.sqrt(ss / 2205);
+                    lo = Math.min(lo, rms);
+                    hi = Math.max(hi, rms);
+                }
+                for (int i = 1; i < sweep.length; i++) maxD = Math.max(maxD, Math.abs(sweep[i] - sweep[i - 1]));
+                double db = 20 * Math.log10(hi / lo);
+                System.out.println("    pack sweep: level spread " + Math.round(db * 100) / 100.0 + " dB, max step " + maxD);
+                check(db < 1.0, "G2 level spread " + db + " dB");
+                double slope = 2 * Math.PI * 650 / SR * (12000 / 32768.0); // steepest loop (650 Hz) at its amplitude
+                check(maxD <= slope * 1.3, "G3 no clicks: max step " + maxD + " vs " + slope);
+                // G4 load picks the layer
+                PackVoice on = new PackVoice(SR), off = new PackVoice(SR);
+                on.setPack(PackLoader.load(sinePack(false, true)));   // off layer silent
+                off.setPack(PackLoader.load(sinePack(true, false)));  // on layer silent
+                check(rmsOf(on, 3000, 1, 0) > 0.05 && rmsOf(on, 3000, 0, 0) < 1e-4, "G4 load 1 = on layer only, load 0 = off layer only");
+                check(rmsOf(off, 3000, 0, 0) > 0.05 && rmsOf(off, 3000, 1, 0) < 1e-4, "G4 mirror");
+                check(rmsOf(off, 3000, 1, 1) > 0.05, "G4 overrun uses the off layer");
+                // G5 cost: no more than 1.5x the procedural synth
+                PackVoice pv = new PackVoice(SR);
+                pv.setPack(pk);
+                Synth sy = new Synth(SR, Profile.ICE_SMOOTH, 1);
+                EngineParams ep = new EngineParams();
+                ep.rpm = 3000;
+                ep.load = 0.5;
+                short[] out = new short[220];
+                for (int i = 0; i < 3000; i++) { // warm both up (JIT) before timing
+                    ep.rpm = 1000 + 4000 * Math.abs(Math.sin(i / 500.0));
+                    pv.render(out, 0, 220, ep, 0.5);
+                    sy.render(out, 0, 220, ep, 0.5);
+                }
+                long t0 = System.nanoTime();
+                for (int i = 0; i < 6000; i++) {
+                    ep.rpm = 1000 + 4000 * Math.abs(Math.sin(i / 500.0));
+                    pv.render(out, 0, 220, ep, 0.5);
+                }
+                long tp = System.nanoTime() - t0;
+                t0 = System.nanoTime();
+                for (int i = 0; i < 6000; i++) {
+                    ep.rpm = 1000 + 4000 * Math.abs(Math.sin(i / 500.0));
+                    sy.render(out, 0, 220, ep, 0.5);
+                }
+                long ts = System.nanoTime() - t0;
+                System.out.println("    60 s render: pack " + tp / 1000000 + " ms, synth " + ts / 1000000 + " ms");
+                check(tp <= ts * 1.5 + 20000000L, "G5 pack " + tp / 1000000 + " ms vs synth " + ts / 1000000 + " ms");
+                // G6 bounds of the short output
+                PackVoice bv = new PackVoice(SR);
+                bv.setPack(pk);
+                int peak = 0;
+                for (int i = 0; i < 2000; i++) {
+                    ep.rpm = 900 + 5800 * Math.abs(Math.sin(i / 97.0));
+                    ep.load = Math.abs(Math.cos(i / 31.0));
+                    double g = 0.7;
+                    bv.render(out, 0, 220, ep, g);
+                    for (short s : out) peak = Math.max(peak, Math.abs(s));
+                }
+                check(peak <= 0.7 * 30000 + 1, "G6 |sample| <= gain x 30000: " + peak);
             }
         });
 
