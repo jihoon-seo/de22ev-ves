@@ -1,0 +1,58 @@
+# i4t: inline-4 turbo hot hatch, raspy (Hyundai N-like character, not a recording of any car).
+#
+# Based on upstream example4.esc (DasEtwas/enginesound e5fcca5, MIT; 4 cylinders, near-even
+# offsets, exhaust-heavy mix). Changes vs example4:
+#  - exact even firing 1-3-4-2 (180 deg) instead of the slider offsets 0/0.249/0.500/0.749
+#  - 4-2-1 style extractors: pairs 1+4 and 2+3 share a length (example4: 0.9/2.0/3.1/4.5 ms,
+#    which made odd cycle orders dominate at high rpm)
+#  - shorter ignition (0.11 vs 0.159 of a cycle) and more crankshaft fluctuation: rasp
+#  - more intake and a brighter intake noise (turbo whoosh / induction hiss)
+#  - exhaust_valve_shift 0 and extractor beta -0.4 (see the lines below)
+#  - throttle section (ves.render extension) for the overrun sound
+
+[engine]
+rpm = 900
+intake_volume = 0.27
+exhaust_volume = 0.68
+engine_vibrations_volume = 0.05
+intake_noise_factor = 0.30
+intake_noise_lp.delay = 0.00009142839      # 10.9 kHz (example4)
+engine_vibration_filter.delay = 0.010829452
+intake_valve_shift = -0.021462113
+exhaust_valve_shift = 0                    # example4: 0.332 (valve window moved into the power stroke; level fell 5 dB over rpm)
+crankshaft_fluctuation = 0.26
+crankshaft_fluctuation_lp.delay = 0.017540352
+
+[cylinders]
+count = 4
+firing_order = 1, 3, 4, 2
+exhaust_waveguide.delay = 0.00014583333, 0.00016666666, 0.00016666666, 0.0001875
+exhaust_waveguide.beta = 0.06
+intake_waveguide.delay = 0.00014583333, 0.000125, 0.00022916666, 0.00008333333
+intake_waveguide.beta = 0.023874283
+extractor_waveguide.delay = 0.0012, 0.0016, 0.0016, 0.0012
+extractor_waveguide.alpha = 0
+extractor_waveguide.beta = -0.4          # example4: 0.0055; a damped collector end keeps the level flat across rpm
+intake_open_refl = 0.010026574
+intake_closed_refl = 0.75288486
+exhaust_open_refl = -0.00070154667
+exhaust_closed_refl = 0.73577714
+piston_motion_factor = 1.3847874
+ignition_factor = 5
+ignition_time = 0.11
+
+[muffler]
+straight_pipe.delay = 0.000625
+straight_pipe.alpha = 0.057702303
+straight_pipe.beta = -0.017663896
+elements = 4
+element.delay = 0.00035416667, 0.00041666668, 0.00045833332, 0.0005
+element.alpha = 0
+element.beta = -0.03992963
+
+[throttle]
+off_ignition = 0.4
+off_piston = 0.85
+off_intake = 0.3
+off_intake_noise = 0.3
+off_lowpass_hz = 2000

@@ -1,0 +1,60 @@
+# i6: inline-6, smooth rising wail.
+#
+# Based on upstream example2.esc (DasEtwas/enginesound e5fcca5, MIT; 10 cylinders, low exhaust
+# reflection, strong ignition, short pipes) with the straight pipe and muffler of example5.esc
+# (same repo, MIT). Changes:
+#  - 6 cylinders, firing order 1-5-3-6-2-4 at even 120 deg
+#  - equal-length 6-into-1 extractors (example2: ten different lengths): almost only firing
+#    harmonics, so the note stays smooth and its harmonics sweep up through the pipe
+#    resonances as the rpm rises (the wail)
+#  - primaries/intakes: example2's first six cylinders
+#  - less intake (0.12) and engine vibration (0.02) in the mix
+#  - less crankshaft fluctuation (example2: 0.216) for a turbine-smooth idle
+#  - throttle section (ves.render extension) for the overrun sound
+
+[engine]
+rpm = 800
+intake_volume = 0.12                         # example2: 0.319 (intake and exhaust cancelled each other at some rpm)
+exhaust_volume = 0.58862835
+engine_vibrations_volume = 0.02               # example2: 0.093 (its 4.4 kHz filter passes the raw cylinder sum)
+intake_noise_factor = 0.25407657
+intake_noise_lp.delay = 0.0013163297       # 760 Hz
+engine_vibration_filter.delay = 0.00022675669
+intake_valve_shift = -0.06556061
+exhaust_valve_shift = 0.03525734
+crankshaft_fluctuation = 0.08
+crankshaft_fluctuation_lp.delay = 0.09494948
+
+[cylinders]
+count = 6
+firing_order = 1, 5, 3, 6, 2, 4
+exhaust_waveguide.delay = 0.00025, 0.00041666668, 0.00045833332, 0.00035416667, 0.00025, 0.00035416667
+exhaust_waveguide.beta = 0.06
+intake_waveguide.delay = 0.0021666666, 0.00039583334, 0.0003125, 0.00020833334, 0.0003125, 0.0003125
+intake_waveguide.beta = -0.30482465
+extractor_waveguide.delay = 0.0012
+extractor_waveguide.alpha = 0
+extractor_waveguide.beta = 0.24415588
+intake_open_refl = -0.11428571
+intake_closed_refl = 0.851948
+exhaust_open_refl = 0.054545403
+exhaust_closed_refl = 0.21818185
+piston_motion_factor = 2.8181818
+ignition_factor = 4.3506494
+ignition_time = 0.14499131
+
+[muffler]
+straight_pipe.delay = 0.0065833335
+straight_pipe.alpha = 0.06032157
+straight_pipe.beta = 0.22695708
+elements = 4
+element.delay = 0.00022916666, 0.00025, 0.00029166666, 0.00033333333
+element.alpha = 0
+element.beta = -0.12861288
+
+[throttle]
+off_ignition = 0.4
+off_piston = 0.85
+off_intake = 0.3
+off_intake_noise = 0.3
+off_lowpass_hz = 2000

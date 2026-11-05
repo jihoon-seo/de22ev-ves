@@ -1,0 +1,60 @@
+# v6: 60 degree V6, even fire, smooth growl.
+#
+# Based on upstream example5.esc (DasEtwas/enginesound e5fcca5, MIT; 5 cylinders, long straight
+# pipe, fully reflective closed valves). Changes vs example5:
+#  - 6 cylinders, firing order 1-2-3-4-5-6 at even 120 deg (60 degree V6; odd cylinders on the
+#    left bank, even on the right) instead of five slider offsets 0/0.193/0.387/0.580/0.774
+#  - per-bank extractors: left bank shorter than the right; each bank fires every 240 deg, so
+#    the bank difference adds a 3rd-order (half firing) growl under the 6th-order note
+#  - primaries per cylinder from example5's set (cylinder 6 repeats cylinder 2)
+#  - damped resonances (exhaust closed refl, extractor and straight pipe ends), ignition-led
+#    cylinder pressure (piston 2, ignition 5), less intake and vibration in the mix
+#  - throttle section (ves.render extension) for the overrun sound
+
+[engine]
+rpm = 800
+intake_volume = 0.06                         # example5: 0.235 (intake and exhaust cancelled each other at some rpm)
+exhaust_volume = 0.646102
+engine_vibrations_volume = 0.02               # example5: 0.118
+intake_noise_factor = 0.20455378
+intake_noise_lp.delay = 0.00018448394      # 5.4 kHz
+engine_vibration_filter.delay = 0.016941
+intake_valve_shift = -0.06066501
+exhaust_valve_shift = 0.06231129
+crankshaft_fluctuation = 0.14261295
+crankshaft_fluctuation_lp.delay = 0.07652828
+
+[cylinders]
+count = 6
+firing_order = 1, 2, 3, 4, 5, 6
+exhaust_waveguide.delay = 0.000125, 0.00029166666, 0.00035416667, 0.00027083332, 0.00039583334, 0.00029166666
+exhaust_waveguide.beta = 0.06
+intake_waveguide.delay = 0.00022916666, 0.0003125, 0.00047916666, 0.0005, 0.00052083336, 0.0003125
+intake_waveguide.beta = -0.27649915
+#                          1 (L)  2 (R)   3 (L)  4 (R)   5 (L)  6 (R)
+extractor_waveguide.delay = 0.0010, 0.0016, 0.0011, 0.0017, 0.0010, 0.0016
+extractor_waveguide.alpha = 0
+extractor_waveguide.beta = -0.3             # example5: -0.090
+intake_open_refl = 0
+intake_closed_refl = 1
+exhaust_open_refl = 0.010940313
+exhaust_closed_refl = 0.85                 # example5: 1 (very resonant: +-5 dB over rpm)
+piston_motion_factor = 2                    # example5: 4.659
+ignition_factor = 5                         # example5: 4.311
+ignition_time = 0.104832046
+
+[muffler]
+straight_pipe.delay = 0.0065833335
+straight_pipe.alpha = 0.06032157
+straight_pipe.beta = 0.05                   # example5: 0.227
+elements = 4
+element.delay = 0.00022916666, 0.00025, 0.00029166666, 0.00033333333
+element.alpha = 0
+element.beta = -0.12861288
+
+[throttle]
+off_ignition = 0.3
+off_piston = 0.55
+off_intake = 0.3
+off_intake_noise = 0.3
+off_lowpass_hz = 3500
