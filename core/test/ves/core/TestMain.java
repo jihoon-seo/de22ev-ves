@@ -1997,6 +1997,58 @@ public final class TestMain {
             }
         });
 
+        // ---------------- I1-I2 the sound setting: the synth or a pack (falls back to the synth)
+        l.add(new T("I1_pack_or_synth") {
+            void run() throws Exception {
+                Settings st = iceSettings(Profile.ICE_SMOOTH, 60);
+                st.sound = "v8";
+                Rig r = new Rig(st);
+                r.speed = 30;
+                r.pedal = 30;
+                r.run(2000);
+                check(r.c.status().contains("voice=synth"), "no pack loaded: synth " + r.c.status());
+                check(r.rms() > 100, "and it plays");
+                r.c.setPack(PackLoader.load(sinePack(false, false)));
+                r.resetStats();
+                r.run(1000);
+                check(r.c.status().contains("voice=pack:sine"), "pack plays " + r.c.status());
+                check(r.rms() > 100, "pack audible " + Math.round(r.rms()));
+                st.sound = "synth";
+                r.c.setSettings(st);
+                r.run(200);
+                check(r.c.status().contains("voice=synth"), "sound=synth ignores a loaded pack");
+                st.sound = "v8";
+                r.c.setSettings(st);
+                r.c.setPack(null);
+                r.run(200);
+                check(r.c.status().contains("voice=synth"), "pack dropped: synth again");
+                java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+                m.put("sound", "user2");
+                check("user2".equals(Settings.fromMap(m).sound), "user slots parse");
+                m.put("sound", "../x");
+                check("synth".equals(Settings.fromMap(m).sound), "garbage -> synth");
+            }
+        });
+        l.add(new T("I2_voice_switch_smooth") {
+            void run() throws Exception {
+                Settings st = iceSettings(Profile.ICE_SMOOTH, 100);
+                st.sound = "v8";
+                st.pops = "off";
+                Rig r = new Rig(st);
+                r.speed = 50;
+                r.pedal = 60;
+                r.kw = 40;
+                r.run(2000);
+                Pack pk = PackLoader.load(sinePack(false, false));
+                for (int k = 0; k < 6; k++) {
+                    r.c.setPack(k % 2 == 0 ? pk : null);
+                    r.run(700);
+                }
+                check(r.capViolations == 0, "inside the gain cap while switching: " + r.capViolations);
+                check(r.maxDelta < 46300, "no click on a switch: " + r.maxDelta);
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {

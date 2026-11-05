@@ -24,6 +24,12 @@ public final class VesCore {
     private final EngineModel model;
     private final EngineParams params = new EngineParams();
     private final Pops pops;
+    private final PackVoice packVoice;
+    private volatile Pack pack; // set by the service after loading the slot that sound names (null: none)
+    private boolean usingPack; // the voice of the last block
+    private int xfadeLeft; // frames of the voice switch still to cross-fade
+    private final short[] xbuf = new short[4096];
+    static final int XFADE_MS = 80;
     private volatile Settings settings = new Settings();
     private Profile current;
     private double lastGain;
@@ -38,6 +44,7 @@ public final class VesCore {
         synth = new Synth(this.sampleRate, current, 0x5EED);
         pops = new Pops(this.sampleRate, 0x9095);
         synth.setPops(pops);
+        packVoice = new PackVoice(this.sampleRate);
     }
 
     public int sampleRate() {
@@ -150,7 +157,33 @@ public final class VesCore {
         } else {
             g = env.next(target, frames) * policy.yieldGain(nowMs);
         }
-        synth.render(out, 0, frames, params, g);
+        boolean usePack = pack != null && !"synth".equals(s.sound);
+        if (usePack && packVoice.pack() != pack) packVoice.setPack(pack);
+        if (usePack != usingPack) {
+            usingPack = usePack;
+            xfadeLeft = XFADE_MS * sampleRate / 1000;
+        }
+        Synth sy = synth;
+        if (usePack) {
+            synth.setPops(null);
+            packVoice.setPops(pops);
+            packVoice.render(out, 0, frames, params, g);
+        } else {
+            packVoice.setPops(null);
+            synth.setPops(pops);
+            synth.render(out, 0, frames, params, g);
+        }
+        if (xfadeLeft > 0 && frames <= xbuf.length) {
+            // the other voice fades out under the new one (a convex mix: still inside the gain cap)
+            if (usePack) sy.render(xbuf, 0, frames, params, g);
+            else packVoice.render(xbuf, 0, frames, params, g);
+            int total = XFADE_MS * sampleRate / 1000;
+            for (int i = 0; i < frames; i++) {
+                double wOld = Math.max(0, xfadeLeft - i) / (double) total;
+                out[i] = (short) (int) (out[i] * (1 - wOld) + xbuf[i] * wOld);
+            }
+            xfadeLeft = Math.max(0, xfadeLeft - frames);
+        }
         lastGain = g;
         return action;
     }
@@ -161,6 +194,16 @@ public final class VesCore {
         EngineParams p = new EngineParams();
         p.copyFrom(params);
         return p;
+    }
+
+    /** the pack for the sound setting's slot, loaded by the service (null: none, the synth plays) */
+    public void setPack(Pack p) {
+        pack = p;
+    }
+
+    public String voice() {
+        Pack p = pack;
+        return usingPack && p != null ? "pack:" + p.name.replace(' ', '_') : "synth";
     }
 
     public Pops pops() {
@@ -191,6 +234,7 @@ public final class VesCore {
         b.append(" yield=").append(policy.yielding(lastNow) ? 1 : 0);
         String src = policy.activeSources(lastNow);
         if (src.length() > 0) b.append('(').append(src).append(')');
+        b.append(" voice=").append(voice());
         b.append(" gear=").append(p.virtualGear);
         if (p.shifting) b.append('*');
         b.append(" kph=").append(EngineParams.r2(p.speedKph));
