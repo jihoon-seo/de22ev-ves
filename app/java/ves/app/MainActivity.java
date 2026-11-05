@@ -1,6 +1,8 @@
 package ves.app;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -14,7 +16,14 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 import ves.hmg.Prefs;
+import ves.hmg.VesLink;
 
 /**
  * One screen, big buttons: on/off, volume -/+, sound, behaviour, and the finer
@@ -24,7 +33,8 @@ import ves.hmg.Prefs;
 public final class MainActivity extends Activity {
     private final Handler h = new Handler();
     private TextView status, volume;
-    private Button power, profile, mode, idle, regen, response, fade, type;
+    private Button power, sound, profile, behavior, pops, mode, idle, regen, response, fade, type;
+    private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
 
     @Override
@@ -60,7 +70,18 @@ public final class MainActivity extends Activity {
         minus.setOnClickListener(volumeBy(-5));
         plus.setOnClickListener(volumeBy(5));
 
+        sound = setting(root, Prefs.SOUND, Actions.SOUNDS);
+        Button imp = big(root, "USB에서 소리 팩 가져오기 (VES/packs)", 0);
+        imp.setTextSize(18);
+        imp.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                importPack();
+            }
+        });
         profile = setting(root, Prefs.PROFILE, Actions.PROFILES);
+        LinearLayout r1 = row(root);
+        behavior = setting(r1, Prefs.BEHAVIOR, Actions.BEHAVIORS);
+        pops = setting(r1, Prefs.POPS, Actions.POPS);
         mode = setting(root, Prefs.MODE, Actions.MODES);
         LinearLayout r2 = row(root);
         idle = setting(r2, Prefs.IDLE_LEVEL, Actions.IDLE);
@@ -155,8 +176,13 @@ public final class MainActivity extends Activity {
                 }
                 final JSONObject s = o;
                 final String st = Actions.shortStatus(Actions.status());
+                final Map<String, String> names = packList();
                 h.post(new Runnable() {
                     public void run() {
+                        if (names != null) {
+                            packNames.clear();
+                            packNames.putAll(names);
+                        }
                         show(s, st);
                     }
                 });
@@ -172,6 +198,87 @@ public final class MainActivity extends Activity {
         }
     };
 
+    /** slot -> pack name ("-": empty) from vesd, null when vesd doesn't answer */
+    static Map<String, String> packList() {
+        try {
+            String r = VesLink.send("PACK LIST", 3000);
+            if (!r.startsWith("ok")) return null;
+            Map<String, String> m = new HashMap<String, String>();
+            String[] ls = r.split("\n");
+            for (int i = 1; i < ls.length; i++) {
+                int sp = ls[i].indexOf(' ');
+                if (sp > 0) m.put(ls[i].substring(0, sp), ls[i].substring(sp + 1));
+            }
+            return m;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** pick a pack folder on the stick, then a user slot; vesd validates and copies it */
+    private void importPack() {
+        status.setText("USB의 소리 팩 찾는 중…");
+        new Thread(new Runnable() {
+            public void run() {
+                final List<String> found = new ArrayList<String>();
+                String err = null;
+                try {
+                    String r = VesLink.send("PACK USB", 8000);
+                    if (r.startsWith("ok")) {
+                        String[] ls = r.split("\n");
+                        for (int i = 1; i < ls.length; i++) if (ls[i].trim().length() > 0) found.add(ls[i].trim());
+                    } else err = r;
+                } catch (IOException e) {
+                    err = "서비스 연결 안 됨";
+                }
+                final String e2 = err;
+                h.post(new Runnable() {
+                    public void run() {
+                        if (e2 != null) status.setText("가져오기 실패: " + e2);
+                        else if (found.isEmpty()) status.setText("USB의 VES/packs 안에 소리 팩 폴더(pack.txt 포함)가 없음");
+                        else chooseSlot(found.toArray(new String[0]));
+                    }
+                });
+            }
+        }).start();
+    }
+
+    private void chooseSlot(final String[] folders) {
+        new AlertDialog.Builder(this).setTitle("가져올 소리 팩").setItems(folders, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface d, final int which) {
+                final String[] slots = { "user1", "user2", "user3" };
+                String[] labels = new String[3];
+                for (int i = 0; i < 3; i++) {
+                    String n = packNames.get(slots[i]);
+                    labels[i] = "사용자 " + (i + 1) + (n == null || n.equals("-") ? " (비어 있음)" : " (" + n + " 덮어씀)");
+                }
+                new AlertDialog.Builder(MainActivity.this).setTitle("넣을 칸").setItems(labels, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface d2, final int slot) {
+                        status.setText("가져오는 중…");
+                        new Thread(new Runnable() {
+                            public void run() {
+                                String r;
+                                try {
+                                    r = VesLink.send("PACK IMPORT " + slots[slot] + " " + folders[which], 30000);
+                                } catch (IOException e) {
+                                    r = "error 서비스 연결 안 됨";
+                                }
+                                final String res = r;
+                                h.post(new Runnable() {
+                                    public void run() {
+                                        status.setText(res.startsWith("ok") ? "가져옴: " + res.substring(3).trim()
+                                                : "가져오기 실패: " + res.substring(Math.min(6, res.length())).trim());
+                                        refresh();
+                                    }
+                                });
+                            }
+                        }).start();
+                    }
+                }).show();
+            }
+        }).show();
+    }
+
     private void show(JSONObject o, String st) {
         status.setText(st);
         if (o == null) {
@@ -182,8 +289,15 @@ public final class MainActivity extends Activity {
         power.setText(on ? "켜짐 (누르면 끄기)" : "꺼짐 (누르면 켜기)");
         power.setBackgroundColor(on ? Color.rgb(30, 110, 60) : Color.rgb(70, 70, 76));
         volume.setText(String.valueOf(Actions.volume(o)));
-        profile.setText("소리: " + Actions.name(o.optString(Prefs.PROFILE), Actions.PROFILES, Actions.PROFILE_NAMES));
-        mode.setText("동작: " + Actions.name(o.optString(Prefs.MODE), Actions.MODES, Actions.MODE_NAMES));
+        String snd = o.optString(Prefs.SOUND);
+        String pn = packNames.get(snd);
+        sound.setText("엔진 소리: " + Actions.name(snd, Actions.SOUNDS, Actions.SOUND_NAMES)
+                + ("synth".equals(snd) ? "" : pn == null || pn.equals("-") ? " (비어 있음: 합성음이 나옴)" : " (" + pn + ")"));
+        profile.setText("회전수: " + Actions.name(o.optString(Prefs.PROFILE), Actions.PROFILES, Actions.PROFILE_NAMES));
+        behavior.setText("동작: " + Actions.name(o.optString(Prefs.BEHAVIOR), Actions.BEHAVIORS, Actions.BEHAVIOR_NAMES));
+        pops.setText("배기 팝: " + Actions.name(o.optString(Prefs.POPS), Actions.POPS, Actions.POPS_NAMES));
+        mode.setText("예전 방식 동작: " + Actions.name(o.optString(Prefs.MODE), Actions.MODES, Actions.MODE_NAMES));
+        mode.setEnabled("classic".equals(o.optString(Prefs.BEHAVIOR)));
         idle.setText("공회전 크기 " + o.optString(Prefs.IDLE_LEVEL) + "%");
         regen.setText("회생음 크기 " + o.optString(Prefs.REGEN_LEVEL) + "%");
         response.setText("반응: " + Actions.name(o.optString(Prefs.RESPONSE), Actions.RESPONSE, Actions.RESPONSE_NAMES));

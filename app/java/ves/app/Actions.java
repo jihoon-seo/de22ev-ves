@@ -25,6 +25,12 @@ final class Actions {
     static final String[] PROFILE_NAMES = { "내연기관 (부드럽게)", "내연기관 (가상 변속)", "EV 미래형" };
     static final String[] MODES = { "idle_regen", "stop_silent_regen", "accel_only", "drive_all" };
     static final String[] MODE_NAMES = { "정차 공회전 + 회생음", "정차 무음 + 회생음", "가속할 때만", "주행 중 항상 (회생음 없음)" };
+    static final String[] SOUNDS = { "synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3" };
+    static final String[] SOUND_NAMES = { "합성음", "4기통 터보", "V6", "V8", "직렬 6기통", "사용자 1", "사용자 2", "사용자 3" };
+    static final String[] BEHAVIORS = { "ice", "classic" };
+    static final String[] BEHAVIOR_NAMES = { "내연기관처럼", "예전 방식" };
+    static final String[] POPS = { "off", "soft", "strong" };
+    static final String[] POPS_NAMES = { "끔", "약하게", "강하게" };
     static final String[] IDLE = { "10", "20", "30", "40", "50", "60" };
     static final String[] REGEN = { "0", "25", "50", "75", "100" };
     static final String[] RESPONSE = { "soft", "normal", "sport" };
@@ -52,6 +58,9 @@ final class Actions {
             if (!o.has(Prefs.RESPONSE)) o.put(Prefs.RESPONSE, "normal");
             if (!o.has(Prefs.FADE_ABOVE)) o.put(Prefs.FADE_ABOVE, "0");
             if (!o.has(Prefs.AUDIO_TYPE)) o.put(Prefs.AUDIO_TYPE, "0x45");
+            if (!o.has(Prefs.BEHAVIOR)) o.put(Prefs.BEHAVIOR, "ice");
+            if (!o.has(Prefs.POPS)) o.put(Prefs.POPS, "soft");
+            if (!o.has(Prefs.SOUND)) o.put(Prefs.SOUND, "synth");
         } catch (org.json.JSONException e) {
             throw new IOException(e.getMessage());
         }

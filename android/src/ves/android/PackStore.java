@@ -66,16 +66,26 @@ final class PackStore {
         slots.add("user1");
         slots.add("user2");
         slots.add("user3");
-        for (String s : slots) {
-            String name;
-            try {
-                name = load(s).name;
-            } catch (PackError e) {
-                name = "-";
-            }
-            b.append(s).append(' ').append(name.replace('\n', ' ')).append('\n');
-        }
+        for (String s : slots) b.append(s).append(' ').append(nameOf(s)).append('\n');
         return b.toString();
+    }
+
+    /** the name line of a slot's pack.txt, or "-" (cheap: the app asks every second; load() validates) */
+    String nameOf(String slot) {
+        File d = dir(slot);
+        if (d == null) return "-";
+        try {
+            String t = new String(new DirSource(d).read("pack.txt", 16 * 1024), "UTF-8");
+            for (String l : t.split("\n")) {
+                l = l.trim();
+                if (l.startsWith("name ")) {
+                    String n = l.substring(5).trim().replaceAll("[^\\p{L}\\p{N} ._-]", "");
+                    return n.length() == 0 ? "-" : n.length() > 40 ? n.substring(0, 40) : n;
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        return "-";
     }
 
     /** pack folder names under the stick's VES/packs/ */

@@ -15,7 +15,7 @@ import java.util.Map;
 public final class Prefs {
     public static final String ENABLED = "enabled", VOLUME = "volume", PROFILE = "profile", MODE = "mode",
             IDLE_LEVEL = "idle_level", REGEN_LEVEL = "regen_level", RESPONSE = "response", FADE_ABOVE = "fade_above",
-            AUDIO_TYPE = "audio_type";
+            AUDIO_TYPE = "audio_type", BEHAVIOR = "behavior", POPS = "pops", SOUND = "sound";
 
     private Prefs() {}
 

@@ -16,10 +16,27 @@
       "description": "엔진 사운드 자체의 크기입니다. 차 볼륨과 따로 움직이고, 100에서도 상한이 있습니다."
     },
     {
+      "key": "sound",
+      "type": "choice",
+      "default": "synth",
+      "title": "엔진 소리",
+      "description": "합성음 또는 소리 팩. 사용자 칸은 앱에서 USB의 VES/packs/<폴더>를 가져와 채웁니다. 비어 있으면 합성음이 나옵니다.",
+      "options": [
+        { "value": "synth", "title": "합성음 (기본)" },
+        { "value": "i4t", "title": "4기통 터보 (핫해치)" },
+        { "value": "v6", "title": "V6" },
+        { "value": "v8", "title": "V8" },
+        { "value": "i6", "title": "직렬 6기통" },
+        { "value": "user1", "title": "사용자 소리 팩 1" },
+        { "value": "user2", "title": "사용자 소리 팩 2" },
+        { "value": "user3", "title": "사용자 소리 팩 3" }
+      ]
+    },
+    {
       "key": "profile",
       "type": "choice",
       "default": "ice_smooth",
-      "title": "소리 종류",
+      "title": "회전수 움직임 (합성음은 소리 종류도)",
       "options": [
         { "value": "ice_smooth", "title": "내연기관 (부드럽게, 변속 없음)" },
         { "value": "ice_shift", "title": "내연기관 (가상 변속)" },
@@ -27,11 +44,33 @@
       ]
     },
     {
+      "key": "behavior",
+      "type": "choice",
+      "default": "ice",
+      "title": "동작 방식",
+      "description": "내연기관처럼: Ready면 P/N/D에서 공회전, R에서 작게, 발을 떼면 엔진 브레이크 소리. Ready가 아니면 무음.",
+      "options": [
+        { "value": "ice", "title": "내연기관처럼 (기본)" },
+        { "value": "classic", "title": "예전 방식 (아래 '정차·회생 동작'을 따름)" }
+      ]
+    },
+    {
+      "key": "pops",
+      "type": "choice",
+      "default": "soft",
+      "title": "배기 팝 (가속 페달을 뗄 때)",
+      "options": [
+        { "value": "off", "title": "끔" },
+        { "value": "soft", "title": "약하게 (기본)" },
+        { "value": "strong", "title": "강하게" }
+      ]
+    },
+    {
       "key": "mode",
       "type": "choice",
       "default": "idle_regen",
-      "title": "정차·회생 동작",
-      "description": "P/N/R이거나 Ready가 아니면 항상 무음입니다.",
+      "title": "정차·회생 동작 (예전 방식일 때)",
+      "description": "동작 방식이 '예전 방식'일 때만 씁니다. P/N/R이거나 Ready가 아니면 무음.",
       "options": [
         { "value": "idle_regen", "title": "정차 시 작은 공회전 + 회생제동 소리" },
         { "value": "stop_silent_regen", "title": "정차 시 무음 + 회생제동 소리" },
