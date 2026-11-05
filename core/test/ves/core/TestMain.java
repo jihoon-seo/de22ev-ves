@@ -235,6 +235,72 @@ public final class TestMain {
         }
     }
 
+    // ------------------------------------------------------------------ pack fixtures
+
+    static final class MapSource implements PackLoader.Source {
+        final java.util.Map<String, byte[]> files;
+
+        MapSource(java.util.Map<String, byte[]> f) {
+            files = f;
+        }
+
+        public byte[] read(String name, int maxBytes) throws java.io.IOException {
+            byte[] b = files.get(name);
+            if (b == null) throw new java.io.FileNotFoundException(name);
+            if (b.length > maxBytes) throw new java.io.IOException(name + " too big");
+            return b;
+        }
+    }
+
+    static byte[] wav(int rate, int ch, int bits, int samples, double hz) {
+        int bps = bits / 8, data = samples * ch * bps;
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate(44 + data).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        b.put("RIFF".getBytes()).putInt(36 + data).put("WAVE".getBytes());
+        b.put("fmt ".getBytes()).putInt(16).putShort((short) 1).putShort((short) ch).putInt(rate)
+                .putInt(rate * ch * bps).putShort((short) (ch * bps)).putShort((short) bits);
+        b.put("data".getBytes()).putInt(data);
+        for (int i = 0; i < samples; i++) {
+            double v = Math.sin(2 * Math.PI * hz * i / rate) * 12000;
+            for (int c = 0; c < ch; c++) {
+                if (bits == 16) b.putShort((short) v);
+                else b.put((byte) (128 + v / 256));
+            }
+        }
+        return b.array();
+    }
+
+    /** a valid 5 x 2 sine pack, or one broken in the named way */
+    static MapSource testPack(String broken) {
+        java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+        StringBuilder t = new StringBuilder("# test pack\nname test\ncylinders 4\nidle 800\nredline 6500\n");
+        int[] rpms = {"narrow".equals(broken) ? 2000 : 800, 1500, 2500, 4000, "narrow".equals(broken) ? 3000 : 6500};
+        int n = "fewloops".equals(broken) ? 2 : rpms.length;
+        for (int i = 0; i < n; i++) {
+            for (String load : new String[] {"on", "off"}) {
+                if (load.equals("off") && "noff".equals(broken)) continue;
+                String f = "l" + rpms[i] + "_" + load + ".wav";
+                int rate = "rate44100".equals(broken) && i == 1 ? 44100 : 22050;
+                int ch = "stereo".equals(broken) && i == 2 ? 2 : 1;
+                int bits = "bits8".equals(broken) && i == 3 ? 8 : 16;
+                int samples = "toolong".equals(broken) && i == 0 ? 22050 * 3 : "tooshort".equals(broken) && i == 0 ? 1000 : 11025;
+                double hz = rpms[i] / 30.0;
+                m.put(f, wav(rate, ch, bits, samples, hz));
+                String name = "traversal".equals(broken) && i == 0 ? "../" + f : "missing".equals(broken) && i == 0 ? "nope.wav" : f;
+                t.append("loop ").append(name).append(" rpm=").append(rpms[i]).append(" load=").append(load);
+                if ("endpast".equals(broken) && i == 0) t.append(" start=0 end=999999");
+                t.append('\n');
+            }
+        }
+        if ("badline".equals(broken)) t.append("loop x.wav rpm=abc load=on\n");
+        if ("oversize".equals(broken)) for (int i = 0; i < 60; i++) {
+            String f = "big" + i + ".wav";
+            m.put(f, wav(22050, 1, 16, 44100, 100));
+            t.append("loop ").append(f).append(" rpm=").append(900 + i * 10).append(" load=on\n");
+        }
+        m.put("pack.txt", t.toString().getBytes());
+        return new MapSource(m);
+    }
+
     // ------------------------------------------------------------------ spectral helpers
 
     /** 2nd-order Butterworth high-pass (RBJ), for measuring what a small speaker can play. */
@@ -1505,6 +1571,75 @@ public final class TestMain {
                 String want = O1_WANT;
                 System.out.println("    O1 " + got);
                 check(got.toString().trim().equals(want), "output changed: " + got + " vs " + want);
+            }
+        });
+
+        // ---------------- K1-K4 sound packs: pack.txt + PCM16 mono 22050 Hz WAV loops (built-in packs and
+        // the owner's packs from USB, so every input is untrusted)
+        l.add(new T("K1_pack_parses") {
+            void run() throws Exception {
+                Pack p = PackLoader.load(testPack(null));
+                check("test".equals(p.name) && p.cylinders == 4 && p.idleRpm == 800 && p.redlineRpm == 6500, "header " + p.name);
+                eq(p.on.length, 5, "on loops");
+                eq(p.off.length, 5, "off loops");
+                check(p.on[0].rpm < p.on[1].rpm && p.on[4].rpm == 6500, "sorted by rpm");
+                eq(p.on[0].pcm.length, 11025, "loop samples");
+                Pack q = PackLoader.load(testPack("noff"));
+                check(q.off == q.on, "no off-load loops: the on-load ones stand in");
+            }
+        });
+        l.add(new T("K2_pack_rejects_bad_files") {
+            void run() throws Exception {
+                String[] bad = {"rate44100", "stereo", "bits8", "traversal", "missing", "toolong", "tooshort", "oversize", "badline", "endpast"};
+                for (String b : bad) {
+                    try {
+                        PackLoader.load(testPack(b));
+                        check(false, b + " accepted");
+                    } catch (PackError e) {
+                        check(e.getMessage() != null && e.getMessage().length() > 0, b + " has a reason");
+                    }
+                }
+            }
+        });
+        l.add(new T("K3_pack_rpm_coverage") {
+            void run() throws Exception {
+                for (String b : new String[] {"narrow", "fewloops"}) {
+                    try {
+                        PackLoader.load(testPack(b));
+                        check(false, b + " accepted");
+                    } catch (PackError expected) {
+                    }
+                }
+            }
+        });
+        l.add(new T("K4_pack_fuzz") {
+            void run() throws Exception {
+                java.util.Random rnd = new java.util.Random(7);
+                final java.util.Map<String, byte[]> good = testPack(null).files;
+                int ok = 0;
+                for (int i = 0; i < 3000; i++) {
+                    final java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+                    String victim = new java.util.ArrayList<String>(new java.util.TreeSet<String>(good.keySet())).get(rnd.nextInt(good.size()));
+                    for (java.util.Map.Entry<String, byte[]> e : good.entrySet()) {
+                        byte[] b = e.getValue().clone();
+                        if (!e.getKey().equals(victim)) {
+                            m.put(e.getKey(), b);
+                            continue;
+                        }
+                        int flips = rnd.nextInt(6);
+                        for (int k = 0; k < flips && b.length > 0; k++) b[rnd.nextInt(Math.min(b.length, 80))] = (byte) rnd.nextInt(256);
+                        if (rnd.nextInt(10) == 0) b = java.util.Arrays.copyOf(b, rnd.nextInt(b.length + 1));
+                        m.put(e.getKey(), b);
+                    }
+                    try {
+                        PackLoader.load(new MapSource(m));
+                        ok++;
+                    } catch (PackError expected) {
+                    } catch (RuntimeException e) {
+                        check(false, "fuzz " + i + " threw " + e);
+                    }
+                }
+                System.out.println("    fuzz: " + ok + " of 3000 mutated packs still valid");
             }
         });
 
