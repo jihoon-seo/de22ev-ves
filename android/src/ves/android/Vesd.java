@@ -35,6 +35,9 @@ public final class Vesd implements MicomAudio.Events {
     final HmgClient hmg = new HmgClient(5000);
     final HscanReader hscan = new HscanReader(core.framer(), core);
     final Probe probe = new Probe(this);
+    final PackStore packs = PackStore.fromEnv();
+    volatile String packSlot = ""; // the slot whose pack is loaded (or was tried)
+    volatile String packNote = "";
 
     volatile int ownType = MicomAudio.NAVI_SOUNDEFFECT;
     volatile boolean pathOpen;
@@ -117,6 +120,7 @@ public final class Vesd implements MicomAudio.Events {
                 ownerSettings = s;
                 if (override == null) core.setSettings(s);
             }
+            if (!s.sound.equals(packSlot)) loadPack(s.sound);
             if (type != ownType) {
                 cleanupPath("audio type change");
                 ownType = type;
@@ -127,6 +131,32 @@ public final class Vesd implements MicomAudio.Events {
             lastError = "settings: " + e;
             if (first) Out.log(lastError);
         }
+    }
+
+    /** loads the pack of a slot off the audio thread; the synth plays until (or unless) it is ready */
+    void loadPack(final String slot) {
+        packSlot = slot;
+        if ("synth".equals(slot)) {
+            core.setPack(null);
+            packNote = "";
+            return;
+        }
+        thread("pack", new Runnable() {
+            public void run() {
+                try {
+                    ves.core.Pack p = packs.load(slot);
+                    if (!slot.equals(packSlot)) return; // changed meanwhile
+                    core.setPack(p);
+                    packNote = slot + ": " + p.name;
+                    Out.log("pack: " + packNote);
+                } catch (Throwable e) {
+                    if (!slot.equals(packSlot)) return;
+                    core.setPack(null);
+                    packNote = slot + ": " + e.getMessage() + " (synth plays)";
+                    Out.log("pack: " + packNote);
+                }
+            }
+        });
     }
 
     static int parseType(String v, int def) {
@@ -391,6 +421,7 @@ public final class Vesd implements MicomAudio.Events {
         b.append("hscan connected=").append(hscan.connected ? 1 : 0).append(" bytes=").append(hscan.bytes)
                 .append(" age_ms=").append(hscan.lastDataMs == 0 ? -1 : SystemClock.uptimeMillis() - hscan.lastDataMs)
                 .append(" fallback=").append(fallbackActive ? 1 : 0).append(" polls=").append(fallbackPolls).append('\n');
+        if (packNote.length() > 0) b.append("pack ").append(packNote).append('\n');
         b.append("micom alive=").append(micom.alive() ? 1 : 0).append('\n');
         b.append("probe ").append(probe.state()).append('\n');
         if (lastError.length() > 0) b.append("last_error ").append(lastError).append('\n');

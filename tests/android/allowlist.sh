@@ -30,6 +30,11 @@ grep -qE "\.getOutputStream\(" "$ROOT/android/src/ves/android/HscanReader.java" 
 hits=$(grep -rnE "vehicle-do|\.command\(\"|setVolume|setASD|SetVESS|sendEcoVehicle|sendPacket" "${SRC[@]}" || true)
 [ -z "$hits" ] && pass "no vehicle commands, volume or ASD/VESS calls" || fail "forbidden calls" "$hits"
 
+# AL1: files are written only by the car check (USB logs) and the pack store (imports into the mod's data)
+w=$(grep -rln "new FileOutputStream\|new RandomAccessFile\|\.renameTo(" "$ROOT/android/src" | grep -vE "/(Probe|PackStore)\.java$" || true)
+[ -z "$w" ] && pass "files written only by Probe and PackStore" || fail "file writes" "$w"
+grep -q "PackLoader.load" "$ROOT/android/src/ves/android/PackStore.java" 2>/dev/null     && pass "PackStore validates packs with PackLoader" || fail "PackStore" "missing or doesn't validate"
+
 python -I -c "
 import json,sys
 m=json.load(open(sys.argv[1],encoding='utf-8'))

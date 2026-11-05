@@ -7,6 +7,7 @@ RC=0
 echo "== core"; bash "$HERE/core/run.sh" || RC=1
 echo "== allowlist"; bash "$HERE/android/allowlist.sh" || RC=1
 echo "== sockets"; bash "$HERE/android/sockets.sh" || RC=1
+echo "== packstore"; bash "$HERE/android/packstore.sh" || RC=1
 echo "== mod"; python -I "$HERE/mod/check.py" "$HERE/.." || RC=1
 echo "== kit"; bash "$HERE/kit/run.sh" || RC=1
 echo "== hmgapi engine (needs HMGAPI_SRC and dist/)"; bash "$HERE/hmgapi/engine.sh" || RC=1

@@ -80,7 +80,30 @@ final class Control implements Runnable {
             return "ok\n" + d.status();
         }
         if (cmd.equals("PROBE")) return d.probe.command(a, line);
+        if (cmd.equals("PACK")) return pack(a);
         return "error unknown command\n";
+    }
+
+    /** PACK LIST | PACK USB | PACK IMPORT <user1..3> <folder> */
+    String pack(String[] a) {
+        String sub = a.length > 1 ? a[1].toUpperCase() : "";
+        try {
+            if (sub.equals("LIST")) return "ok\n" + d.packs.list();
+            if (sub.equals("USB")) {
+                StringBuilder b = new StringBuilder("ok\n");
+                for (String n : PackStore.usbPacks(d.hmg.usbFolders())) b.append(n).append('\n');
+                return b.toString();
+            }
+            if (sub.equals("IMPORT") && a.length == 4) {
+                String name = d.packs.importPack(d.hmg.usbFolders(), a[3], a[2]);
+                Out.log("pack: imported " + a[3] + " into " + a[2] + " (" + name + ")");
+                if (a[2].equals(d.packSlot)) d.loadPack(a[2]);
+                return "ok\n" + a[2] + " " + name + "\n";
+            }
+            return "error usage: PACK LIST | PACK USB | PACK IMPORT <user1..3> <folder>\n";
+        } catch (Throwable e) {
+            return "error " + e.getMessage() + "\n";
+        }
     }
 
     private static int cachedUid = -2;
