@@ -54,26 +54,15 @@ public final class HmgClient {
         return out;
     }
 
-    /** hmgapid's answer when the last vehicle() call was refused ("" when it wasn't) */
-    public volatile String lastVehicleError = "";
-
-    /** name -> value text ("42.5", "0"/"1", "-" when the car doesn't answer) */
-    public Map<String, String> vehicle(String... names) throws IOException {
+    /**
+     * hmgapid's raw answer to "vehicle a b c". On the car it answers the values and exits with code 1 (its
+     * read times out after 3 s): vesd parses the text whatever the code (ves.core.VehicleText).
+     */
+    public Answer vehicleAnswer(String... names) throws IOException {
         String[] args = new String[names.length + 1];
         args[0] = "vehicle";
         System.arraycopy(names, 0, args, 1, names.length);
-        Map<String, String> out = new LinkedHashMap<String, String>();
-        Answer a = call(args);
-        if (!a.ok()) {
-            lastVehicleError = "code " + a.code + ": " + a.text.trim();
-            return out;
-        }
-        lastVehicleError = "";
-        for (String l : a.text.split("\n")) {
-            int sp = l.indexOf(' ');
-            if (sp > 0) out.put(l.substring(0, sp), l.substring(sp + 1).trim());
-        }
-        return out;
+        return call(args);
     }
 
     public Answer call(String... args) throws IOException {
@@ -96,7 +85,14 @@ public final class HmgClient {
             Answer r = new Answer();
             ByteArrayOutputStream text = new ByteArrayOutputStream();
             while (true) {
-                int type = in.read();
+                int type;
+                try {
+                    type = in.read();
+                } catch (IOException timeout) {
+                    if (text.size() == 0) throw timeout;
+                    r.code = -2; // timed out after an answer: keep what was said
+                    break;
+                }
                 if (type < 0) break;
                 byte[] n = new byte[4];
                 in.readFully(n);

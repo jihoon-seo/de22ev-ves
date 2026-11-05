@@ -1433,6 +1433,36 @@ public final class TestMain {
             }
         });
 
+        // ---------------- V1-V3 HMG-API vehicle readings (car check 2: hmgapid answered the values with exit
+        // code 1, its read timing out after 3 s because the vehicle service keeps the socket open)
+        l.add(new T("V1_vehicle_text_any_code") {
+            void run() {
+                java.util.Map<String, String> m = VehicleText.parse(1, "speed 42.5\npedal.accel 7\nhv.ready 1\ngear.park -\n");
+                check("42.5".equals(m.get("speed")), "speed " + m);
+                check("7".equals(m.get("pedal.accel")) && "1".equals(m.get("hv.ready")) && "-".equals(m.get("gear.park")), "all " + m);
+                check(VehicleText.parse(-2, "speed 3\n").containsKey("speed"), "text read before a timeout counts");
+            }
+        });
+        l.add(new T("V2_vehicle_text_refused") {
+            void run() {
+                check(VehicleText.parse(13, "").isEmpty(), "empty");
+                check(VehicleText.parse(13, "not declared in mod.json (vehicle read): speed\n").isEmpty(), "a refusal is no reading");
+                check(VehicleText.parse(0, null).isEmpty(), "null");
+            }
+        });
+        l.add(new T("V3_fallback_stale_window") {
+            void run() {
+                SignalState st = new SignalState();
+                VehicleText.setFallbackStale(st, true, 3200);
+                st.set(Sig.SPEED_KPH, 30, 1000);
+                st.set(Sig.PEDAL_PCT, 10, 1000);
+                check(!Double.isNaN(st.get(Sig.SPEED_KPH, 1000 + 3200)), "a 3.2 s poll keeps speed fresh");
+                check(!Double.isNaN(st.get(Sig.PEDAL_PCT, 1000 + 6000)), "within 2 x call time");
+                VehicleText.setFallbackStale(st, false, 0);
+                check(Double.isNaN(st.get(Sig.SPEED_KPH, 1000 + 600)), "back to 500 ms when the stream returns");
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {

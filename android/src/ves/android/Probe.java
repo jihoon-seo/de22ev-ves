@@ -21,6 +21,8 @@ import ves.core.Profile;
 import ves.core.Settings;
 import ves.core.Sig;
 import ves.core.SignalState;
+import ves.core.VehicleText;
+import ves.hmg.HmgClient;
 
 /**
  * The car check ("점검") that the app walks the owner through. Everything goes to
@@ -165,9 +167,11 @@ final class Probe {
         }
         b.append("records ").append(fns).append('\n');
         try {
-            Map<String, String> v = d.hmg.vehicle("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure", "moving");
-            b.append("hmgapi_vehicle ").append(v)
-                    .append(d.hmg.lastVehicleError.length() > 0 ? " refused " + d.hmg.lastVehicleError : "").append('\n');
+            long t0 = SystemClock.uptimeMillis();
+            HmgClient.Answer a = d.hmg.vehicleAnswer("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure", "moving");
+            Map<String, String> v = VehicleText.parse(a.code, a.text);
+            b.append("hmgapi_vehicle ").append(v).append(" code=").append(a.code).append(" ms=")
+                    .append(SystemClock.uptimeMillis() - t0).append(v.isEmpty() ? " text=" + a.text.trim() : "").append('\n');
         } catch (Throwable e) {
             b.append("hmgapi_vehicle err ").append(e).append('\n');
         }
@@ -427,7 +431,28 @@ final class Probe {
             sig.write(h.toString().getBytes("UTF-8"));
             veh.write("t_ms,speed,pedal.accel,hv.ready,gear.park,brake.pressure\n".getBytes("UTF-8"));
             cpu.write("t_ms,proc_jiffies,total_jiffies,idle_jiffies\n".getBytes("UTF-8"));
-            long t0 = SystemClock.uptimeMillis(), lastCpu = 0, lastVeh = 0;
+            long t0 = SystemClock.uptimeMillis(), lastCpu = 0;
+            // HMG-API's readings on their own thread: one call takes ~3.2 s on the car, which held the
+            // 100 ms signal rows back to one per 3 s in car check 2
+            final OutputStream vehOut = veh;
+            Vesd.thread("probe-vehicle", new Runnable() {
+                public void run() {
+                    while (!driveStop && running.equals("drive")) {
+                        try {
+                            long t1 = SystemClock.uptimeMillis();
+                            HmgClient.Answer a = d.hmg.vehicleAnswer("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure");
+                            Map<String, String> v = VehicleText.parse(a.code, a.text);
+                            synchronized (vehOut) {
+                                vehOut.write((t1 + "," + v.get("speed") + "," + v.get("pedal.accel") + "," + v.get("hv.ready") + ","
+                                        + v.get("gear.park") + "," + v.get("brake.pressure") + "\n").getBytes("UTF-8"));
+                            }
+                        } catch (Throwable ignored) {
+                            SystemClock.sleep(1000);
+                        }
+                        SystemClock.sleep(200);
+                    }
+                }
+            });
             while (!driveStop && SystemClock.uptimeMillis() - t0 < mins * 60000L) {
                 long t = SystemClock.uptimeMillis();
                 StringBuilder b = new StringBuilder().append(t);
@@ -441,15 +466,6 @@ final class Probe {
                             .append(',').append(p.reason);
                 }
                 sig.write(b.append('\n').toString().getBytes("UTF-8"));
-                if (t - lastVeh >= 200) {
-                    lastVeh = t;
-                    try {
-                        Map<String, String> v = d.hmg.vehicle("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure");
-                        veh.write((t + "," + v.get("speed") + "," + v.get("pedal.accel") + "," + v.get("hv.ready") + ","
-                                + v.get("gear.park") + "," + v.get("brake.pressure") + "\n").getBytes("UTF-8"));
-                    } catch (Throwable ignored) {
-                    }
-                }
                 if (t - lastCpu >= 1000) {
                     lastCpu = t;
                     cpu.write((t + "," + procJiffies() + "," + totalJiffies() + "\n").getBytes("UTF-8"));

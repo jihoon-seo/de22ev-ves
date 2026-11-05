@@ -13,6 +13,7 @@ import ves.core.Settings;
 import ves.core.SharedChannel;
 import ves.core.Sig;
 import ves.core.SignalState;
+import ves.core.VehicleText;
 import ves.core.VesCore;
 import ves.hmg.HmgClient;
 import ves.hmg.Prefs;
@@ -248,7 +249,10 @@ public final class Vesd implements MicomAudio.Events {
             long now = SystemClock.uptimeMillis();
             boolean stale = !hscan.connected || now - hscan.lastDataMs > 1000;
             if (!stale || hscan.paused) {
-                if (fallbackActive) Out.log("fallback: off (stream is back)");
+                if (fallbackActive) {
+                    Out.log("fallback: off (stream is back)");
+                    VehicleText.setFallbackStale(core.signals(), false, 0);
+                }
                 fallbackActive = false;
                 SystemClock.sleep(500);
                 continue;
@@ -256,9 +260,14 @@ public final class Vesd implements MicomAudio.Events {
             if (!fallbackActive) Out.log("fallback: on (no hscan data)");
             fallbackActive = true;
             try {
-                Map<String, String> v = hmg.vehicle("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure");
+                long t0 = SystemClock.uptimeMillis();
+                HmgClient.Answer a = hmg.vehicleAnswer("speed", "pedal.accel", "hv.ready", "gear.park", "brake.pressure");
+                Map<String, String> v = VehicleText.parse(a.code, a.text);
                 long t = SystemClock.uptimeMillis();
                 fallbackPolls++;
+                if (v.isEmpty()) lastError = "fallback: hmgapid code " + a.code + ": " + a.text.trim();
+                // one poll takes ~3.2 s on the car: keep the readings fresh until the next one
+                VehicleText.setFallbackStale(core.signals(), true, t - t0);
                 synchronized (core) {
                     SignalState s = core.signals();
                     put(s, Sig.SPEED_KPH, v.get("speed"), t);
@@ -273,7 +282,7 @@ public final class Vesd implements MicomAudio.Events {
             } catch (Throwable e) {
                 lastError = "fallback: " + e;
             }
-            SystemClock.sleep(200);
+            SystemClock.sleep(200); // a poll already takes seconds on the car
         }
     }
 
