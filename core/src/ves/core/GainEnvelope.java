@@ -5,7 +5,7 @@ package ves.core;
  * in 150 ms. next() returns the gain for the end of the block; Synth interpolates from the previous value.
  */
 public final class GainEnvelope {
-    public static final double CAP = 0.5;
+    public static final double CAP = 1.0;
     public static final double ATTACK_S = 0.25, RELEASE_S = 0.15;
 
     private final double sampleRate;
@@ -15,11 +15,14 @@ public final class GainEnvelope {
         this.sampleRate = sampleRate > 0 ? sampleRate : 22050;
     }
 
-    /** cap * (v/100)^2 with cap 0.5: 100 is 0.5 FS, 0 is 0. */
+    /**
+     * cap * (v/100)^1.5 with cap 1: 100 is full scale, 0 is 0. (0.1.1 had 0.5 * (v/100)^2, which the car
+     * check found almost inaudible: the navigation channel plays it at the navigation volume, under road noise.)
+     */
     public static double volumeToLinear(int volume0to100) {
         int v = volume0to100 < 0 ? 0 : volume0to100 > 100 ? 100 : volume0to100;
         double x = v / 100.0;
-        return CAP * x * x;
+        return CAP * x * Math.sqrt(x);
     }
 
     public double next(double target, int frames) {

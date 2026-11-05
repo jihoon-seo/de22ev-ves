@@ -59,8 +59,9 @@ for scen in city accel cruise navi ready_off; do
         rms=$(num "$M" rms); nan=$(num "$M" nan_blocks)
         [ -n "$peak" ] && [ -n "$cap" ] && [ -n "$silent" ] || fail "metrics missing for $scen $prof"
         assert "$peak <= $cap + 1" "$scen/$prof peak above gain cap"
-        assert "$peak <= 15001" "$scen/$prof peak above 0.5 FS cap"
-        assert "$delta < 6000" "$scen/$prof sample-to-sample jump"
+        assert "$peak <= 30000" "$scen/$prof peak above full scale"
+        # steady full-pedal sound steps up to ~40500 per sample at volume 100 (S1d, presence band + soft clip): more is a click
+        assert "$delta < 45000" "$scen/$prof sample-to-sample jump"
         assert "$nan == 0" "$scen/$prof NaN gain"
         [ -s "$WORK/$scen-$prof.wav" ] || fail "no wav for $scen $prof"
         case $scen in

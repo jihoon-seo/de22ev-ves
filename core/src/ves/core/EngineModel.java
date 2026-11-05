@@ -92,6 +92,7 @@ public final class EngineModel {
         double pedal = s.get(Sig.PEDAL_PCT, nowMs);
         double kw = s.get(Sig.MOTOR_KW, nowMs);
         double acc = s.get(Sig.ACCEL_G, nowMs);
+        if (Math.abs(acc) > 1.5) acc = Double.NaN; // implausible (the car check read a constant -4.18 g: no YRS12 data)
 
         String gate = null;
         if (Double.isNaN(ready)) gate = "stale";

@@ -233,6 +233,31 @@ public final class TestMain {
 
     // ------------------------------------------------------------------ spectral helpers
 
+    /** 2nd-order Butterworth high-pass (RBJ), for measuring what a small speaker can play. */
+    static final class HighPass {
+        final double b0, b1, b2, a1, a2;
+        double x1, x2, y1, y2;
+
+        HighPass(double fc, int sr) {
+            double w = 2 * Math.PI * fc / sr, cs = Math.cos(w), al = Math.sin(w) / (2 * Math.sqrt(0.5));
+            double a0 = 1 + al;
+            b0 = (1 + cs) / 2 / a0;
+            b1 = -(1 + cs) / a0;
+            b2 = (1 + cs) / 2 / a0;
+            a1 = -2 * cs / a0;
+            a2 = (1 - al) / a0;
+        }
+
+        double next(double x) {
+            double y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1;
+            x1 = x;
+            y2 = y1;
+            y1 = y;
+            return y;
+        }
+    }
+
     /** Magnitude of the (Hann-windowed) DTFT of x[off..off+len) at frequency f (Goertzel). */
     static double mag(float[] x, int off, int len, double f, int sr) {
         double w = 2 * Math.PI * f / sr;
@@ -790,6 +815,67 @@ public final class TestMain {
             }
         });
 
+        // ---------------- S1g loud enough in the car: the car check (2026-11-05) heard a 9000-peak sine
+        // (rms 6364) clearly over music, but 0.1.1's engine sound at volume 100 cruising (35 km/h,
+        // pedal 5%, rms ~2000) was "almost inaudible". Volume 100 must come near the test tone.
+        l.add(new T("S1g_loud_enough") {
+            void run() {
+                Profile[] profs = {Profile.ICE_SMOOTH, Profile.ICE_SHIFT, Profile.EV_FUTURE};
+                StringBuilder sb = new StringBuilder("    loudness rms (vol/pedal):");
+                for (Profile p : profs) {
+                    double[][] cases = {{100, 5, 3500}, {100, 30, 4500}, {45, 30, 1800}};
+                    for (double[] cs : cases) {
+                        Rig r = new Rig(settings(p, (int) cs[0], "drive_all"));
+                        r.speed = 35;
+                        r.pedal = cs[1];
+                        r.run(4000);
+                        r.resetStats();
+                        r.run(2000);
+                        double rms = r.rms();
+                        sb.append(' ').append(p).append(' ').append((int) cs[0]).append('/').append((int) cs[1]).append('=').append(Math.round(rms));
+                        check(rms >= cs[2], p + " vol " + (int) cs[0] + " pedal " + (int) cs[1] + " rms " + Math.round(rms) + " < " + (int) cs[2]);
+                        check(r.peak <= 30000, p + " peak " + r.peak);
+                    }
+                }
+                System.out.println(sb);
+            }
+        });
+
+        // ---------------- S1f audible on the navigation speaker: in the car check's slow drive (15-20 km/h,
+        // 800-2000 rpm) the sound was not heard at all; most of it was the 30-70 Hz firing frequency, which
+        // the speaker playing the navigation channel hardly reproduces. The test tone it did hear was
+        // 660/880 Hz. Measure what is left above 300 Hz.
+        l.add(new T("S1f_presence_above_300hz") {
+            void run() {
+                Profile[] profs = {Profile.ICE_SMOOTH, Profile.ICE_SHIFT, Profile.EV_FUTURE};
+                StringBuilder sb = new StringBuilder("    rms above 300 Hz (vol 100):");
+                for (Profile p : profs) {
+                    double[][] cases = {{15, 10, 2500}, {35, 5, 2500}, {0, 0, 0}};
+                    for (double[] cs : cases) {
+                        Settings st = settings(p, 100, "idle_regen");
+                        Rig r = new Rig(st);
+                        r.speed = cs[0];
+                        r.pedal = cs[1];
+                        r.run(4000);
+                        double sum = 0;
+                        int n = 0;
+                        HighPass hp = new HighPass(300, SR);
+                        for (int b = 0; b < 200; b++) {
+                            r.step();
+                            for (int i = 0; i < BLOCK; i++) {
+                                double y = hp.next(r.buf[i]);
+                                if (b >= 20) { sum += y * y; n++; }
+                            }
+                        }
+                        double rms = Math.sqrt(sum / n);
+                        sb.append(' ').append(p).append(' ').append((int) cs[0]).append("kph/").append((int) cs[1]).append("%=").append(Math.round(rms));
+                        if (cs[2] > 0) check(rms >= cs[2], p + " " + (int) cs[0] + " km/h pedal " + (int) cs[1] + ": rms above 300 Hz " + Math.round(rms) + " < " + (int) cs[2]);
+                    }
+                }
+                System.out.println(sb);
+            }
+        });
+
         // ---------------- S1c loudness
         l.add(new T("S1c_loudness_vs_pedal") {
             void run() {
@@ -852,9 +938,23 @@ public final class TestMain {
                     r.pedal = Double.NaN;
                     r.run(500);
                     check(r.capViolations == 0, start[pi] + " peak exceeded gain*30000 in " + r.capViolations + " blocks");
-                    check(r.peak <= 15001, start[pi] + " peak " + r.peak);
-                    check(r.maxDelta < 6000, start[pi] + " max sample delta " + r.maxDelta);
-                    System.out.println("    start=" + start[pi] + " peak=" + r.peak + " maxDelta=" + r.maxDelta);
+                    check(r.peak <= 30000, start[pi] + " peak " + r.peak); // full scale at volume 100 (0.1.2)
+                    // a click is a step bigger than the loudest steady sound's own steepest step
+                    int steady = 0;
+                    for (Profile sp : Profile.values()) {
+                        for (double kph : new double[] {30, 80}) {
+                            Rig q = new Rig(settings(sp, 100, "idle_regen"));
+                            q.speed = kph;
+                            q.pedal = 100;
+                            q.run(3000);
+                            q.resetStats();
+                            q.havePrev = false;
+                            q.run(2000);
+                            steady = Math.max(steady, q.maxDelta);
+                        }
+                    }
+                    check(r.maxDelta <= steady * 1.1 + 300, start[pi] + " max sample delta " + r.maxDelta + " > steady " + steady);
+                    System.out.println("    start=" + start[pi] + " peak=" + r.peak + " maxDelta=" + r.maxDelta + " steadyMaxDelta=" + steady);
                 }
                 // Synth fed NaN/garbage params directly never emits NaN-derived garbage
                 Synth s = new Synth(SR, Profile.ICE_SHIFT, 1);
@@ -899,6 +999,11 @@ public final class TestMain {
                 SignalState sa = new SignalState();
                 steadyModel(ma, sa, st, o, 0, 2000, 50, 0, Double.NaN, -0.15, Sig.GEAR_B, 1);
                 check("regen".equals(o.reason), "regen from accel " + o.reason);
+                // the car check read a constant -4.18 g (YRS12 bytes 0: not sent on this car): ignored
+                EngineModel mb = new EngineModel(Profile.ICE_SMOOTH);
+                SignalState sb2 = new SignalState();
+                steadyModel(mb, sb2, st, o, 0, 2000, 50, 0, Double.NaN, -4.18, Sig.GEAR_D, 1);
+                check(!"regen".equals(o.reason), "implausible accel is no regen: " + o.reason);
 
                 // stop_silent_regen: silent at stop, regen while moving
                 st = settings(Profile.ICE_SMOOTH, 50, "stop_silent_regen");
@@ -1220,19 +1325,61 @@ public final class TestMain {
             }
         });
 
+        // ---------------- S8 sharing the MICOM channel with the navigation (car check 2026-11-05: the
+        // navigation's own effect sounds use type 0x45 too; MICOM reports AudioStart/AudioEnd(0x45) for
+        // our calls and for the navigation's, and endAudio(0x45) cuts whichever sound holds the channel)
+        l.add(new T("S8_shared_channel") {
+            void run() {
+                SharedChannel c = new SharedChannel();
+                // our own start and end are recognised by timing
+                c.ownStartCalled(1000);
+                eq(c.onStart(1010), SharedChannel.OURS, "our start");
+                check(!c.skipEnd(1010), "we may end our own sound");
+                c.ownEndCalled(5000);
+                eq(c.onEnd(5005, true), SharedChannel.OURS, "our end");
+                // the navigation starts a chime while we are closed: foreign, and we must not end it
+                eq(c.onStart(8000), SharedChannel.FOREIGN_START, "navi start");
+                check(c.skipEnd(8000), "endAudio would cut the navigation's chime");
+                eq(c.onEnd(9000, false), SharedChannel.FOREIGN_END, "navi end");
+                check(!c.skipEnd(9000), "channel free again");
+                // the navigation ends the channel under our open path: lost, endAudio is pointless
+                c.ownStartCalled(12000);
+                eq(c.onStart(12003), SharedChannel.OURS, "our start 2");
+                eq(c.onEnd(20000, true), SharedChannel.FOREIGN_END, "closed under us");
+                check(c.skipEnd(20000), "already closed by someone else");
+                c.ownStartCalled(22000); // reopening clears it
+                check(!c.skipEnd(22000), "reopened");
+                eq(c.onStart(22004), SharedChannel.OURS, "our start 3");
+                // a start long after our call is not ours
+                c.ownStartCalled(30000);
+                eq(c.onStart(30000 + SharedChannel.ACK_MS + 1), SharedChannel.FOREIGN_START, "late start is foreign");
+                // each call acknowledges one event only
+                c = new SharedChannel();
+                c.ownStartCalled(1000);
+                eq(c.onStart(1001), SharedChannel.OURS, "first");
+                eq(c.onStart(1002), SharedChannel.FOREIGN_START, "second start in the window is someone else's");
+                eq(c.onEnd(1500, true), SharedChannel.FOREIGN_END, "their end");
+                // a foreign start whose end never arrives doesn't hold the channel forever
+                c = new SharedChannel();
+                eq(c.onStart(1000), SharedChannel.FOREIGN_START, "navi start, end lost");
+                check(c.skipEnd(1000 + SharedChannel.FOREIGN_MAX_MS - 1), "still theirs");
+                check(!c.skipEnd(1000 + SharedChannel.FOREIGN_MAX_MS), "given up on its end");
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {
-                near(GainEnvelope.volumeToLinear(100), 0.5, 0, "100 => 0.5");
+                near(GainEnvelope.volumeToLinear(100), 1.0, 0, "100 => full scale");
                 near(GainEnvelope.volumeToLinear(0), 0, 0, "0 => 0");
-                near(GainEnvelope.volumeToLinear(50), 0.125, 1e-12, "square law");
+                near(GainEnvelope.volumeToLinear(50), Math.pow(0.5, 1.5), 1e-12, "1.5 power law");
                 double prev = -1;
                 for (int v = 0; v <= 100; v++) {
                     double g = GainEnvelope.volumeToLinear(v);
                     check(g > prev, "monotonic at " + v);
                     prev = g;
                 }
-                near(GainEnvelope.volumeToLinear(150), 0.5, 0, "clamp high");
+                near(GainEnvelope.volumeToLinear(150), 1.0, 0, "clamp high");
                 near(GainEnvelope.volumeToLinear(-3), 0, 0, "clamp low");
                 GainEnvelope e = new GainEnvelope(SR);
                 int blocks = 0;
