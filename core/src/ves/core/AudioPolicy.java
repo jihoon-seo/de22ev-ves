@@ -21,6 +21,8 @@ package ves.core;
  */
 public final class AudioPolicy {
     public static final int ACT_NONE = 0, ACT_OPEN = 1, ACT_CLOSE = 2;
+    /** the navigation's chimes on our shared channel are short: a "shared" yield whose end is lost expires sooner */
+    public static final long SHARED_EXPIRY_MS = 5000;
     public static final long FADE_MS = 120, HOLDOFF_MS = 1500, RAMP_MS = 200, EXPIRY_MS = 60000,
             SILENCE_CLOSE_MS = 2000;
     static final double SILENT_GAIN = 1e-4;
@@ -171,7 +173,7 @@ public final class AudioPolicy {
         boolean any = false;
         for (int i = 0; i < MAX_SOURCES; i++) {
             if (!srcActive[i]) continue;
-            long exp = srcStart[i] + EXPIRY_MS;
+            long exp = srcStart[i] + ("shared".equals(srcName[i]) ? SHARED_EXPIRY_MS : EXPIRY_MS);
             if (now >= exp) {
                 srcActive[i] = false;
                 if (exp > latestExpiry) latestExpiry = exp;

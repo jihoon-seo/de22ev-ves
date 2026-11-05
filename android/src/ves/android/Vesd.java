@@ -33,7 +33,6 @@ public final class Vesd implements MicomAudio.Events {
     final HmgClient hmg = new HmgClient(5000);
     final HscanReader hscan = new HscanReader(core.framer(), core);
     final Probe probe = new Probe(this);
-    final SharedChannel channel = new SharedChannel(); // guarded by itself
 
     volatile int ownType = MicomAudio.NAVI_SOUNDEFFECT;
     volatile boolean pathOpen;
@@ -192,20 +191,15 @@ public final class Vesd implements MicomAudio.Events {
      */
     public void onOwnType(boolean start, String raw) {
         long now = SystemClock.uptimeMillis();
-        int who;
-        synchronized (channel) {
-            who = start ? channel.onStart(now) : channel.onEnd(now, pathOpen);
-        }
+        int who = core.ownTypeEvent(start, now);
         if (who == SharedChannel.OURS) {
             probe.event(raw + " (ours)");
             return;
         }
-        synchronized (core) {
-            if (start) core.onYieldStart("shared", now);
-            else {
-                core.onYieldStart("shared", now); // no-op when its start was seen; closes our path when it wasn't
-                core.onYieldEnd("shared", now);
-            }
+        if (who == SharedChannel.RESTORE) {
+            Out.log("micom: " + raw + " -> channel restored (ours)");
+            probe.event(raw + " restore");
+            return;
         }
         Out.log("micom: " + raw + " by another user -> " + (start ? "yield" : "resume") + " shared");
         probe.event(raw + (start ? " foreign yield shared" : " foreign end shared"));
@@ -215,9 +209,7 @@ public final class Vesd implements MicomAudio.Events {
 
     void openPath(String why) {
         try {
-            synchronized (channel) {
-                channel.ownStartCalled(SystemClock.uptimeMillis()); // before the call: the event may beat its return
-            }
+            core.ownStartCalled(SystemClock.uptimeMillis()); // before the call: the event may beat its return
             boolean ok = micom.startAudio(ownType);
             pathOpen = true;
             opens++;
@@ -231,11 +223,8 @@ public final class Vesd implements MicomAudio.Events {
 
     void cleanupPath(String why) {
         try {
-            boolean skip;
-            synchronized (channel) {
-                skip = channel.skipEnd(SystemClock.uptimeMillis()) && !"startup".equals(why);
-                if (!skip) channel.ownEndCalled(SystemClock.uptimeMillis());
-            }
+            boolean skip = core.skipEnd(SystemClock.uptimeMillis()) && !"startup".equals(why);
+            if (!skip) core.ownEndCalled(SystemClock.uptimeMillis());
             if (skip) {
                 // another user holds the channel (or already closed it): endAudio would cut its sound
                 if (pathOpen) Out.log("path: closed without endAudio (" + why + "; the channel is another user's)");

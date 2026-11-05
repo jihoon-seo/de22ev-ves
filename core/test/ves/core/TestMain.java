@@ -183,6 +183,9 @@ public final class TestMain {
         void step() {
             if (t % 100 == 0) push();
             lastAction = c.renderBlock(buf, BLOCK, t);
+            // what vesd does with the action: tell the shared-channel tracker about its own calls
+            if (lastAction == AudioPolicy.ACT_OPEN) c.ownStartCalled(t);
+            if (lastAction == AudioPolicy.ACT_CLOSE && !c.skipEnd(t)) c.ownEndCalled(t);
             if (lastAction == AudioPolicy.ACT_OPEN) opens++;
             if (lastAction == AudioPolicy.ACT_CLOSE) {
                 closes++;
@@ -1364,6 +1367,69 @@ public final class TestMain {
                 eq(c.onStart(1000), SharedChannel.FOREIGN_START, "navi start, end lost");
                 check(c.skipEnd(1000 + SharedChannel.FOREIGN_MAX_MS - 1), "still theirs");
                 check(!c.skipEnd(1000 + SharedChannel.FOREIGN_MAX_MS), "given up on its end");
+            }
+        });
+
+        // ---------------- S8b-d car check 2 (2026-11-05): after a voice-recognition session MICOM re-sent
+        // AudioStart(0x45) 14 ms after VuiEnd (it restores our channel); 0.1.2 took it for a navigation
+        // chime and stayed silent until the 60 s expiry
+        l.add(new T("S8b_restore_after_yield") {
+            void run() {
+                SharedChannel c = new SharedChannel();
+                c.ownStartCalled(1000);
+                eq(c.onStart(1003), SharedChannel.OURS, "ours");
+                eq(c.onEnd(5000, true), SharedChannel.FOREIGN_END, "preempted by the VUI");
+                c.yieldEnded(10000); // VuiEnd
+                eq(c.onStart(10014), SharedChannel.RESTORE, "MICOM restores our channel");
+                check(!c.skipEnd(10014), "ours again: endAudio allowed");
+                // long after any yield end it is a navigation chime again
+                eq(c.onStart(20000), SharedChannel.FOREIGN_START, "a lone start is someone else's");
+            }
+        });
+        l.add(new T("S8c_restore_after_foreign_end") {
+            void run() {
+                SharedChannel c = new SharedChannel();
+                c.ownStartCalled(1000);
+                eq(c.onStart(1001), SharedChannel.OURS, "ours");
+                eq(c.onEnd(3000, true), SharedChannel.FOREIGN_END, "closed under us");
+                eq(c.onStart(3000 + SharedChannel.RESTORE_MS), SharedChannel.RESTORE, "restored within the window");
+                check(!c.skipEnd(3000 + SharedChannel.RESTORE_MS), "not lost any more");
+            }
+        });
+        l.add(new T("S8d_shared_yield_is_short") {
+            void run() {
+                AudioPolicy p = new AudioPolicy();
+                p.onYieldStart("shared", 1000);
+                check(p.yielding(1000 + 4999), "still yielding at 4.999 s");
+                check(!p.yielding(1000 + AudioPolicy.SHARED_EXPIRY_MS + AudioPolicy.HOLDOFF_MS + 1), "a lost end expires in 5 s (+ the usual pause)");
+                AudioPolicy q = new AudioPolicy();
+                q.onYieldStart("vui", 1000);
+                check(q.yielding(1000 + 59000), "vui still yields at 59 s");
+                check(!q.yielding(1000 + AudioPolicy.EXPIRY_MS + 1 + AudioPolicy.HOLDOFF_MS), "vui expires at 60 s");
+            }
+        });
+        l.add(new T("S9_vui_restore_end_to_end") {
+            void run() {
+                Rig r = new Rig(settings(Profile.ICE_SMOOTH, 50, "drive_all"));
+                r.speed = 30;
+                r.pedal = 30;
+                r.run(3000);
+                check(r.c.isOpen(), "playing before the VUI");
+                long t = r.t;
+                r.c.onYieldStart("vui", t);
+                eq(r.c.ownTypeEvent(false, t + 2), SharedChannel.FOREIGN_END, "VUI preempts our channel");
+                r.run(4000);
+                r.resetStats();
+                long end = r.t;
+                r.c.onYieldEnd("vui", end);
+                eq(r.c.ownTypeEvent(true, end + 14), SharedChannel.RESTORE, "MICOM restore");
+                r.run(2000);
+                r.resetStats();
+                r.run(500);
+                check(r.rms() > 200, "sound back within 2.5 s of the VUI end, rms " + Math.round(r.rms()));
+                r.resetStats();
+                r.run(5000);
+                check(r.zeros < r.n / 10, "and it stays on");
             }
         });
 

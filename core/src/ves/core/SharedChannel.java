@@ -9,14 +9,17 @@ package ves.core;
  * <ul>
  * <li>foreign start: the navigation holds the channel: step aside, and don't call endAudio (it would
  * cut its chime) until its end arrives;</li>
- * <li>foreign end while our path is open: the channel was closed under us: reopen it.</li>
+ * <li>foreign end while our path is open: the channel was closed under us: reopen it;</li>
+ * <li>a start within RESTORE_MS after another source's yield ended (VuiEnd ...) or after our channel was
+ * closed under us: MICOM restoring our channel to its audio stack (car check 2, 14 ms after VuiEnd),
+ * not a navigation chime.</li>
  * </ul>
  * Call ownStartCalled/ownEndCalled before the binder call (the event may arrive before it returns).
  * Not thread-safe: callers synchronize.
  */
 public final class SharedChannel {
-    public static final int OURS = 0, FOREIGN_START = 1, FOREIGN_END = 2;
-    public static final long ACK_MS = 1000;
+    public static final int OURS = 0, FOREIGN_START = 1, FOREIGN_END = 2, RESTORE = 3;
+    public static final long ACK_MS = 1000, RESTORE_MS = 1000;
     /** a foreign start whose end never arrives stops holding the channel after this */
     public static final long FOREIGN_MAX_MS = 30000;
 
@@ -25,6 +28,12 @@ public final class SharedChannel {
     private boolean foreignHeld; // another user holds the channel now
     private long foreignSince;
     private boolean lost; // the channel was closed by someone else while our path was open
+    private long lastYieldEnd = Long.MIN_VALUE / 2, lostAt = Long.MIN_VALUE / 2;
+
+    /** another source (navigation prompt, VUI, call ...) stopped speaking */
+    public void yieldEnded(long nowMs) {
+        lastYieldEnd = nowMs;
+    }
 
     public void ownStartCalled(long nowMs) {
         startCallAt = nowMs;
@@ -43,6 +52,11 @@ public final class SharedChannel {
             return OURS;
         }
         startPending = false;
+        if (nowMs - lastYieldEnd <= RESTORE_MS && nowMs >= lastYieldEnd || nowMs - lostAt <= RESTORE_MS && nowMs >= lostAt) {
+            lost = false;
+            foreignHeld = false;
+            return RESTORE;
+        }
         foreignHeld = true;
         foreignSince = nowMs;
         return FOREIGN_START;
@@ -56,7 +70,10 @@ public final class SharedChannel {
         }
         endPending = false;
         foreignHeld = false;
-        if (pathOpen) lost = true;
+        if (pathOpen) {
+            lost = true;
+            lostAt = nowMs;
+        }
         return FOREIGN_END;
     }
 

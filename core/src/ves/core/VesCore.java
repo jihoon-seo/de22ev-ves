@@ -18,6 +18,7 @@ public final class VesCore {
     private final EvDecoder decoder = new EvDecoder(signals);
     private final HscanFramer framer = new HscanFramer(decoder);
     private final AudioPolicy policy = new AudioPolicy();
+    private final SharedChannel channel = new SharedChannel(); // guarded by itself
     private final GainEnvelope env;
     private final Synth synth;
     private final EngineModel model;
@@ -72,6 +73,52 @@ public final class VesCore {
 
     public void onYieldEnd(String src, long now) {
         policy.onYieldEnd(src, now);
+        if (!"shared".equals(src)) {
+            synchronized (channel) {
+                channel.yieldEnded(now);
+            }
+        }
+    }
+
+    /**
+     * A MICOM AudioStart/AudioEnd of our own stream type. Returns SharedChannel.OURS, FOREIGN_START,
+     * FOREIGN_END or RESTORE. Someone else's start makes us step aside ("shared" yield, no endAudio);
+     * someone else's end (or our channel closed under us) brings us back after the usual pause with a
+     * fresh startAudio; a restore (MICOM putting our channel back after a VUI/prompt) is ours.
+     */
+    public int ownTypeEvent(boolean start, long now) {
+        int who;
+        synchronized (channel) {
+            who = start ? channel.onStart(now) : channel.onEnd(now, policy.isOpen());
+        }
+        if (who == SharedChannel.FOREIGN_START) {
+            policy.onYieldStart("shared", now);
+        } else if (who == SharedChannel.FOREIGN_END) {
+            policy.onYieldStart("shared", now); // no-op when its start was seen; closes our path when it wasn't
+            policy.onYieldEnd("shared", now);
+        }
+        return who;
+    }
+
+    /** call before startAudio (its AudioStart may arrive before the call returns) */
+    public void ownStartCalled(long now) {
+        synchronized (channel) {
+            channel.ownStartCalled(now);
+        }
+    }
+
+    /** call before endAudio */
+    public void ownEndCalled(long now) {
+        synchronized (channel) {
+            channel.ownEndCalled(now);
+        }
+    }
+
+    /** true: endAudio now would cut another user's sound (or the channel is already closed) */
+    public boolean skipEnd(long now) {
+        synchronized (channel) {
+            return channel.skipEnd(now);
+        }
     }
 
     public int renderBlock(short[] out, int frames, long nowMs) {
