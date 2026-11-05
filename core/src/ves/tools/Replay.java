@@ -200,7 +200,7 @@ public final class Replay {
                     if (Boolean.TRUE.equals(active.get(src))) {
                         active.put(src, Boolean.FALSE);
                         yieldsActive--;
-                        if (yieldsActive == 0) quietUntil = time + 1500;
+                        if (yieldsActive == 0) quietUntil = time + AudioPolicy.HOLDOFF_MS;
                     }
                 }
             }

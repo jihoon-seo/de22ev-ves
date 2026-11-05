@@ -10,7 +10,7 @@ package ves.core;
  *     yieldGain() fades linearly to 0 within FADE_MS (120 ms) of the start; once it is 0 the next tick returns
  *     ACT_CLOSE. Sources are tracked separately (the end of one does not end another; a repeated start of the same
  *     source is one yield). After the last end, yielding() stays true and yieldGain() stays 0 for HOLDOFF_MS
- *     (1500 ms), then yieldGain ramps back to 1 over RAMP_MS (200 ms). A yield without an end expires EXPIRY_MS
+ *     (500 ms), then yieldGain ramps back to 1 over RAMP_MS (200 ms). A yield without an end expires EXPIRY_MS
  *     (60 s) after its (last) start.</li>
  * <li>ACT_CLOSE after SILENCE_CLOSE_MS (2000 ms) of continuous silence (wantSound false or gain ~0).</li>
  * </ul>
@@ -23,7 +23,8 @@ public final class AudioPolicy {
     public static final int ACT_NONE = 0, ACT_OPEN = 1, ACT_CLOSE = 2;
     /** the navigation's chimes on our shared channel are short: a "shared" yield whose end is lost expires sooner */
     public static final long SHARED_EXPIRY_MS = 5000;
-    public static final long FADE_MS = 120, HOLDOFF_MS = 1500, RAMP_MS = 200, EXPIRY_MS = 60000,
+    // HOLDOFF 0.5 s since 0.2.2 (owner after the first drive: back sooner after a prompt; was 1.5 s)
+    public static final long FADE_MS = 120, HOLDOFF_MS = 500, RAMP_MS = 200, EXPIRY_MS = 60000,
             SILENCE_CLOSE_MS = 2000;
     static final double SILENT_GAIN = 1e-4;
     private static final int MAX_SOURCES = 16;

@@ -1332,14 +1332,14 @@ public final class TestMain {
                     p.onYieldEnd(sources[si], ye);
                     long openAt = -1;
                     for (; t < ye + 4000; t += 10) {
-                        if (t < ye + 1500) {
-                            check(p.yieldGain(t) == 0, "yield gain held 0 until 1500 ms after end");
+                        if (t < ye + 500) { // 0.2.2: back 0.5 s after a prompt (owner's choice; was 1.5 s)
+                            check(p.yieldGain(t) == 0, "yield gain held 0 until 500 ms after end");
                             check(p.yielding(t), "still yielding during hold-off");
                         }
                         int a = p.tick(t, true, 0);
                         if (a == AudioPolicy.ACT_OPEN && openAt < 0) openAt = t;
                     }
-                    check(openAt >= ye + 1500 && openAt <= ye + 1600, "resume >= 1500 ms after end: " + (openAt - ye));
+                    check(openAt >= ye + 500 && openAt <= ye + 600, "resume 500-600 ms after end: " + (openAt - ye));
                     near(p.yieldGain(ye + 3000), 1, 0, "yield gain back to 1");
                 }
             }
@@ -1361,7 +1361,7 @@ public final class TestMain {
                     int a = p.tick(t, true, 0);
                     if (a == AudioPolicy.ACT_OPEN && openAt < 0) openAt = t;
                 }
-                check(openAt >= 7500 && openAt <= 7600, "open only after last end + 1500: " + openAt);
+                check(openAt >= 6500 && openAt <= 6600, "open only after last end + 500: " + openAt);
                 // same source started twice is one yield; unknown end ignored
                 AudioPolicy q = new AudioPolicy();
                 q.onYieldStart("tts", 0);
@@ -1369,7 +1369,7 @@ public final class TestMain {
                 q.onYieldEnd("navi", 200);
                 check(q.yielding(300), "unrelated end ignored");
                 q.onYieldEnd("tts", 400);
-                check(q.yielding(1800) && !q.yielding(1901), "single end clears duplicate start");
+                check(q.yielding(800) && !q.yielding(901), "single end clears duplicate start");
                 q.onYieldStart(null, 5000);
                 check(q.yielding(5001), "null source tracked as foreign");
             }
@@ -1387,7 +1387,7 @@ public final class TestMain {
                     if (t < 60000) check(p.yielding(t), "yielding before expiry at " + t);
                     if (a == AudioPolicy.ACT_OPEN && openAt < 0) openAt = t;
                 }
-                check(openAt >= 100 + 60000 + 1500 && openAt <= 100 + 60000 + 1600, "auto-expired, reopened at " + openAt);
+                check(openAt >= 100 + 60000 + 500 && openAt <= 100 + 60000 + 600, "auto-expired, reopened at " + openAt);
                 p.onYieldEnd("navi", 70000); // late end after expiry: harmless
                 check(!p.yielding(70010) || p.yielding(70010), "no throw");
             }
@@ -1444,8 +1444,8 @@ public final class TestMain {
                 long ye = r.t;
                 r.c.onYieldEnd("navi", ye);
                 r.resetStats();
-                r.run(1490);
-                eq(r.opens, 0, "no open before 1500 ms");
+                r.run(490);
+                eq(r.opens, 0, "no open before 500 ms");
                 eq(r.zeros, r.n, "silent until reopen");
                 r.run(1500);
                 eq(r.opens, 1, "reopened");
