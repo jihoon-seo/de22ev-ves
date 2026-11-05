@@ -52,7 +52,7 @@ for scen in city accel cruise navi ready_off; do
     "$JAVA" -cp "$CLS" ves.tools.Sweep "$WORK/$scen.csv" "$scen" > /dev/null || fail "sweep $scen"
     for prof in ice_smooth ice_shift ev_future; do
         M=$("$JAVA" -cp "$CLS" ves.tools.Replay "$WORK/$scen.csv" "$WORK/$scen-$prof.wav" \
-            profile=$prof volume=100 mode=idle_regen | tail -n 1) || fail "replay $scen $prof"
+            profile=$prof volume=100 mode=idle_regen pops=off | tail -n 1) || fail "replay $scen $prof" # pops: P_pops
         echo "METRICS $scen $prof $M"
         peak=$(num "$M" peak); cap=$(num "$M" peak_cap); delta=$(num "$M" max_delta)
         silent=$(num "$M" silent_fraction); opens=$(num "$M" opens); closes=$(num "$M" closes)

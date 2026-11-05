@@ -89,6 +89,7 @@ public final class Synth {
     // EV state
     private double evPh, padA, padB, whPh, lfoPh, lp1, lp2;
     private final OutputStage stage;
+    private Pops pops;
 
     private final float[] bufA = new float[CH], bufB = new float[CH];
 
@@ -113,6 +114,11 @@ public final class Synth {
         fromProfile = profile;
         profile = p;
         xfade = 1 - xfade; // keeps the voice weights continuous when switching mid-fade
+    }
+
+    /** pops mixed into the voice before the output stage (null: none) */
+    public void setPops(Pops p) {
+        pops = p;
     }
 
     public Profile profile() {
@@ -166,6 +172,7 @@ public final class Synth {
                         fading = false;
                     }
                 }
+                if (pops != null) x += pops.next();
                 double s = stage.process(x);
                 double g = a0 + (a1 - a0) * ((i + 1) * invN);
                 out[off + pos + i] = (short) (int) (s * g * FS);

@@ -148,6 +148,7 @@ public final class TestMain {
         s.profile = p;
         s.mode = mode;
         s.behavior = "classic";
+        s.pops = "off"; // 0.1.x had none; P_pops tests them
         return s;
     }
 
@@ -271,6 +272,17 @@ public final class TestMain {
             if (r.c.lastParams().rpm >= goal) return r.t - t0;
         }
         return 4000;
+    }
+
+    /** at t0 + 1 s: full load at rpm/70 km/h, then the foot comes off; 2 s of samples pulled through */
+    static void liftOff(Pops p, double rpm, long t0) {
+        long t = t0;
+        for (int b = 0; b < 300; b++) { // 3 s in 10 ms blocks
+            double load = b < 100 ? 0.9 : 0.0;
+            p.update(rpm, load, 70, t);
+            for (int i = 0; i < BLOCK; i++) p.next();
+            t += 10;
+        }
     }
 
     // ------------------------------------------------------------------ pack fixtures
@@ -1822,6 +1834,50 @@ public final class TestMain {
                 r.gear = Sig.GEAR_P;
                 r.run(3000);
                 check(r.c.lastParams().targetGain == 0, "classic keeps P silent");
+            }
+        });
+
+        // ---------------- P1-P5 exhaust pops on lift-off (owner's choice after car check 2: engine braking plus
+        // pops, with a setting)
+        l.add(new T("P_pops") {
+            void run() {
+                // P1 off: none
+                Pops p = new Pops(SR, 1);
+                p.setLevel(0);
+                liftOff(p, 4000, 0);
+                eq(p.episodes(), 0, "P1 off");
+                // P2 a lift-off at 4000 rpm: 3..8 bursts within 1.5 s
+                p = new Pops(SR, 1);
+                p.setLevel(1);
+                liftOff(p, 4000, 0);
+                eq(p.episodes(), 1, "P2 one episode");
+                check(p.bursts() >= 3 && p.bursts() <= 8, "P2 bursts " + p.bursts());
+                check(p.lastBurstMs() - p.episodeStartMs() <= 1500, "P2 within 1.5 s: " + (p.lastBurstMs() - p.episodeStartMs()));
+                // P3 a second lift-off 2 s later: still one episode (4 s apart at least)
+                liftOff(p, 4000, 2000);
+                eq(p.episodes(), 1, "P3 rate limit");
+                liftOff(p, 4000, 6000);
+                eq(p.episodes(), 2, "P3 again after 4 s");
+                // P4 low rpm: none
+                Pops q = new Pops(SR, 1);
+                q.setLevel(2);
+                liftOff(q, 1800, 0);
+                eq(q.episodes(), 0, "P4 none at 1800 rpm");
+                // P5 inside the output bounds, through the whole chain
+                Settings st = iceSettings(Profile.ICE_SHIFT, 100);
+                st.pops = "strong";
+                Rig r = new Rig(st);
+                for (int k = 0; k < 6; k++) {
+                    r.speed = 70;
+                    r.pedal = 100;
+                    r.kw = 80;
+                    r.run(2500);
+                    r.pedal = 0;
+                    r.kw = -10;
+                    r.run(2500);
+                }
+                check(r.capViolations == 0 && r.peak <= 30000, "P5 bounds: violations " + r.capViolations + " peak " + r.peak);
+                check(r.c.pops().episodes() >= 2, "P5 pops happened in the chain: " + r.c.pops().episodes());
             }
         });
 

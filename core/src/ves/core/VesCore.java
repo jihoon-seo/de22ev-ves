@@ -23,6 +23,7 @@ public final class VesCore {
     private final Synth synth;
     private final EngineModel model;
     private final EngineParams params = new EngineParams();
+    private final Pops pops;
     private volatile Settings settings = new Settings();
     private Profile current;
     private double lastGain;
@@ -35,6 +36,8 @@ public final class VesCore {
         current = settings.profile;
         model = new EngineModel(current);
         synth = new Synth(this.sampleRate, current, 0x5EED);
+        pops = new Pops(this.sampleRate, 0x9095);
+        synth.setPops(pops);
     }
 
     public int sampleRate() {
@@ -133,6 +136,8 @@ public final class VesCore {
         }
         lastNow = nowMs;
         model.update(signals, s, nowMs, params);
+        pops.setLevel(Pops.level(s.pops));
+        pops.update(params.rpm, params.load, params.speedKph, nowMs);
         boolean enabled = s.enabled && s.volume > 0;
         double target = enabled ? params.targetGain * GainEnvelope.volumeToLinear(s.volume) : 0;
         boolean want = enabled && (target > 0 || env.value() > 0);
@@ -156,6 +161,10 @@ public final class VesCore {
         EngineParams p = new EngineParams();
         p.copyFrom(params);
         return p;
+    }
+
+    public Pops pops() {
+        return pops;
     }
 
     public double lastGain() {
