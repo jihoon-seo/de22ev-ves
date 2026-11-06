@@ -29,10 +29,12 @@ case "$1" in
 esac
 exit 0
 EOF
-    printf '#!/bin/bash\necho "I/MicomAudioService: startAudio 69"\necho "I/Other: unrelated"\n' > "$M/bin/logcat"
+    printf '#!/bin/bash\necho "logcat $*" >> "$MOCK/calls"\necho "I/MicomAudioService: startAudio 69"\necho "I/Other: unrelated"\n' > "$M/bin/logcat"
+    mkdir -p "$M/logs/de22ev-ves"; echo "vesd: old run" > "$M/logs/de22ev-ves/vesd.log"
     chmod +x "$M/bin/"*
     sed -i -e "s#/system/bin/hmgapid#$M/bin/hmgapid#g" -e "s#/data/nemesis#$M/nemesis#g" \
-        -e "s#/proc/self/status#$M/procstatus#g" -e "s#^export PATH=.*#export PATH=$M/bin:\$PATH#" "$M/usb/VES_MOD/run.sh"
+        -e "s#/proc/self/status#$M/procstatus#g" -e "s#/data/hmgapi/logs#$M/logs#g" \
+        -e "s#^export PATH=.*#export PATH=$M/bin:\$PATH#" "$M/usb/VES_MOD/run.sh"
     : > "$M/calls"
 }
 run_kit() {   # run_kit MODE -> sets STATUS and OUTDIR
@@ -65,6 +67,12 @@ if [ "$STATUS" = UPDATED_IN_USE_NOW ] \
     && order "hmgapid engine install" "hmgapid enable de22ev-ves" "hmgapid engine apps" "hmgapid service-restart de22ev-ves vesd"; then
     pass "update: install, enable, app update, service restart, no car restart"
 else fail "update" "status=$STATUS calls=$(tr '\n' ';' < "$M/calls")"; fi
+# the running vesd's logs and its logcat lines are saved before the restart (evidence for the next report)
+if grep -q "vesd: old run" "$OUTDIR/service-logs-before/vesd.log" 2>/dev/null \
+    && grep -q MicomAudioService "$OUTDIR/logcat-ves-before.txt" && ! grep -q unrelated "$OUTDIR/logcat-ves-before.txt" \
+    && order "logcat" "hmgapid service-restart de22ev-ves vesd"; then
+    pass "update: the old service logs and logcat saved before the restart"
+else fail "update logs" "$(ls "$OUTDIR"); calls=$(tr '\n' ';' < "$M/calls")"; fi
 
 run_kit status
 if [ "$STATUS" = STATUS_WRITTEN ] && grep -q "service vesd started" "$OUTDIR/hmgapi-log.txt" \

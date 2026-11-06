@@ -75,6 +75,11 @@ cp "$KIT/$ZIP" "$LOCAL/$ZIP" || fail COPY_PACKAGE
 dump_state before
 UPDATE=no
 grep -q "^$ID	" "$OUT/before-mods.txt" && UPDATE=yes
+if [ "$UPDATE" = yes ]; then
+    # the running vesd restarts below: keep its logs and logcat lines for the next report
+    cp -r /data/hmgapi/logs/de22ev-ves "$OUT/service-logs-before" 2>/dev/null
+    logcat -d -v time 2>/dev/null | grep -E "HMG-API|MicomAudio|AudioFlinger|AudioTrack|de22ev-ves|vesd" > "$OUT/logcat-ves-before.txt"
+fi
 "$H" engine install "$LOCAL/$ZIP" --uuid "$UUID" > "$OUT/install.txt" 2>&1 || fail "INSTALL_FAILED (see install.txt)"
 "$H" enable "$ID" > "$OUT/enable.txt" 2>&1 || fail "ENABLE_FAILED (see enable.txt)"
 if [ "$UPDATE" = yes ]; then
