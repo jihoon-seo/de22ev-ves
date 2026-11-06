@@ -54,7 +54,7 @@ order() {   # order PATTERN...: the calls appear in this order
 
 setup DE22EV.KOR.0000.V039.001.260902
 run_kit install
-if [ "$STATUS" = INSTALLED_RESTART_THE_CAR ] && grep -q "engine install .*de22ev-ves-0.2.3.zip --uuid 3c503596-94a4-8f10-901e-d6da35861d6a" "$M/calls" \
+if [ "$STATUS" = INSTALLED_RESTART_THE_CAR ] && grep -q "engine install .*de22ev-ves-0.2.4.zip --uuid 3c503596-94a4-8f10-901e-d6da35861d6a" "$M/calls" \
     && order "hmgapid engine install" "hmgapid enable de22ev-ves"; then
     pass "first install: signed package, then enable; the car restart attaches the tile, star key and widget"
 else fail "install" "status=$STATUS calls=$(tr '\n' ';' < "$M/calls")"; fi

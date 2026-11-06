@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.4
+
+- Fix: 0.2.3 still never started the sound, and the status froze (drives 2026-11-05/06: stuck on
+  "주행 중 · 재생", or on "안내 음성 중 (작게)" with no prompt playing). Android 4.4 starts a
+  streaming AudioTrack only when its buffer is exactly full (framesReady() >= frameCount), and
+  0.2.3 filled whole 220-frame blocks only: 3960 of the car's 4096 frames. The audio loop then
+  waited for room forever without rendering, so the engine model, the prompt policy and the
+  status stopped at that moment, and a prompt or chime that started later never ended in the
+  status (it was judged with the frozen clock). The touch click had nothing to do with it.
+  0.2.3's host test started its model track a block short of full, so it passed.
+- The buffer is now filled exactly: the last block is written in part (TrackFeeder), to the
+  track's real frame count (AudioTrack.getNativeFrameCount).
+- A fresh AudioTrack for each sound start (released when the sound stops), instead of pausing,
+  flushing and reusing one.
+- A track that stays full and doesn't play for a second is replaced (backing off 1, 2, 4 ... 30 s),
+  a failed write too; meanwhile the engine model and the prompt policy keep running, so the
+  status stays live and the channel is still closed when it should be.
+- The app's status shows "소리 처리 멈춤" when vesd's sound loop stops and "소리 출력 안 됨" when
+  the sound is on but the track doesn't play, instead of the state it froze in. The STATUS answer
+  has an `audio` line (loop and play age, track frames, resets), and vesd logs a line a minute
+  while the sound is on.
+- The USB kit's update saves the running vesd's logs and logcat lines to the USB before it
+  restarts the service.
+
 ## 0.2.3
 
 - Fix: from 0.2.0 the sound never started and the status stayed on "공회전" (drive 2026-11-05).
