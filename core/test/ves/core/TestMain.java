@@ -522,6 +522,155 @@ public final class TestMain {
 
     // ------------------------------------------------------------------ tests
 
+    /**
+     * One MODE_STREAM track on Android 4.4's AudioFlinger, in 5 ms mixer steps. A new or restarted track plays only
+     * once framesReady() >= mFrameCount, the whole buffer (Tracks.cpp Track::isReady; addTrack_l sets FS_FILLING),
+     * and an underrun puts it back to filling. AudioTrack.write blocks while the buffer is full. frames: the track's
+     * real frame count; dead: a track that never plays.
+     */
+    static final class Flinger {
+        final int frames;
+        final boolean dead;
+        long written, played;
+        boolean running, blocked;
+        int starts;
+
+        int discard; // the first frames written vanish (4.4's lazy flush racing the first mix)
+
+        Flinger(int frames, boolean dead) {
+            this.frames = frames;
+            this.dead = dead;
+        }
+
+        int write(int n) {
+            if (discard > 0) {
+                int d = Math.min(discard, n);
+                discard -= d;
+                return d + (n > d ? write(n - d) : 0); // accepted, but never reaches the server
+            }
+            long space = frames - (written - played);
+            if (n <= space) {
+                written += n;
+                start();
+                return n;
+            }
+            written += Math.max(0, space);
+            start();
+            if (!running) { // full and still not playing: a blocking write waits forever (vesd's audio thread hangs)
+                blocked = true;
+                return (int) Math.max(0, space);
+            }
+            written += n - Math.max(0, space); // room comes as it plays: a wait of a few ms
+            return n;
+        }
+
+        void start() {
+            if (!running && !dead && written - played >= frames) {
+                running = true;
+                starts++;
+            }
+        }
+
+        void step() {
+            if (!running) return;
+            played += 110; // 5 ms at 22050 Hz
+            if (played >= written) {
+                played = written;
+                running = false;
+            }
+        }
+
+        int fill() {
+            return (int) (written - played);
+        }
+    }
+
+    /**
+     * vesd's audio loop (Vesd.audioLoop) driven by the production TrackFeeder against Flinger tracks, in 5 ms
+     * steps for ms. make: a new track (OPEN, RESET). reopenEvery: CLOSE and OPEN again every so many ms (0: never).
+     * Returns {frames played, resets, rendered blocks, hung writes, worst ms from an OPEN to playing, dropped}.
+     */
+    interface Tracks {
+        Flinger make(int n);
+    }
+
+    static long[] loop(TrackFeeder fd, Tracks make, int ms, long reopenEvery) {
+        int made = 0;
+        Flinger f = make.make(made++);
+        fd.newTrack(f.frames);
+        long played = 0, rendered = 0, resets = 0, worstStart = 0, openedAt = 0;
+        boolean waitingStart = true;
+        long sleepUntil = 0;
+        for (long t = 0; t < ms; t += 5) {
+            if (reopenEvery > 0 && t > 0 && t % reopenEvery == 0) { // CLOSE (release) then OPEN (a fresh track)
+                played += f.played;
+                f = make.make(made++);
+                fd.newTrack(f.frames);
+                openedAt = t;
+                waitingStart = true;
+            }
+            for (int k = 0; k < 64 && t >= sleepUntil; k++) {
+                int d = fd.next(f.played, t);
+                if (d > 0) {
+                    fd.wrote(f.write(d));
+                    if (f.blocked) return new long[] { played + f.played, resets, rendered, 1, worstStart, fd.dropped() };
+                    continue;
+                }
+                if (d == TrackFeeder.WAIT) break;
+                if (d == TrackFeeder.RESET) {
+                    played += f.played;
+                    f = make.make(made++);
+                    fd.newTrack(f.frames);
+                    fd.resetDone(t);
+                    resets++;
+                    continue;
+                }
+                rendered++; // RENDER or DROP: a block is rendered (the engine model, prompts and status go on)
+                if (d == TrackFeeder.DROP) {
+                    fd.droppedBlock();
+                    sleepUntil = t + 10;
+                    break;
+                }
+                fd.rendered();
+            }
+            f.step();
+            if (waitingStart && f.running) {
+                worstStart = Math.max(worstStart, t - openedAt);
+                waitingStart = false;
+            }
+        }
+        if (waitingStart) worstStart = Math.max(worstStart, ms - openedAt);
+        return new long[] { played + f.played, resets, rendered, 0, worstStart, fd.dropped() };
+    }
+
+    /**
+     * vesd's audio loop (Vesd.audioLoop) against a Flinger for ms milliseconds: render a block, write as much of it
+     * as the pacer allows, wait 5 ms when it allows nothing. Returns {frames played, max queue after the first
+     * second, starts, 1 if a write hung}.
+     */
+    static long[] feed(WritePacer w, Flinger f, int block, int ms) {
+        return feed(w, f, block, ms, -1, 0);
+    }
+
+    /** with a gap: the writer stalls for gapMs from gapAt (a slow block, a busy CPU) */
+    static long[] feed(WritePacer w, Flinger f, int block, int ms, long gapAt, long gapMs) {
+        int pending = 0;
+        long lateFill = 0;
+        for (long t = 0; t < ms; t += 5) {
+            boolean gap = t >= gapAt && t < gapAt + gapMs;
+            for (int k = 0; k < 64 && !f.blocked && !gap; k++) {
+                int n = w.framesToWrite(f.written, f.played, t);
+                if (n <= 0) break;
+                if (pending == 0) pending = block; // the next block is rendered
+                pending -= f.write(Math.min(n, pending));
+            }
+            if (f.blocked) break;
+            f.step();
+            if (t >= 1000) lateFill = Math.max(lateFill, f.fill());
+        }
+        return new long[] { f.played, lateFill, f.starts, f.blocked ? 1 : 0 };
+    }
+
     static List<T> all() {
         List<T> l = new ArrayList<T>();
 
@@ -2192,39 +2341,182 @@ public final class TestMain {
         });
 
         // ---------------- L4 the real AudioTrack (Android 4.4 AudioFlinger): a streaming track starts playing
-        // only once its buffer is full, and goes back to filling after an underrun. 0.2.0-0.2.2 kept 80 ms
+        // only once its whole buffer is full, and goes back to filling after an underrun. 0.2.0-0.2.2 kept 80 ms
         // queued in a 186 ms buffer: playback never started, vesd waited forever (stuck on "idle", silent;
-        // drive 2026-11-05).
+        // drive 2026-11-05). 0.2.3 filled whole blocks only, 3960 of the car's 4096 frames: the same (stuck on
+        // "drive", or on a prompt that came after; drives 2026-11-05/06). Its test started the track at
+        // max - block, a block short of full.
         l.add(new T("L4_pacer_with_fill_to_start_track") {
             void run() {
-                int max = 4096, block = 220;
-                WritePacer w = new WritePacer(1764, block, max);
-                long written = 0, played = 0;
-                boolean running = false;
-                long playedAtEnd;
-                int writes = 0, maxFill = 0, lateFill = 0;
-                long t = 0;
-                for (int step = 0; step < 4000; step++, t += 5) { // 20 s in 5 ms polls
-                    int n = w.framesToWrite(written, played, t);
-                    if (n > 0 && written - played + n <= max) {
-                        written += n;
-                        writes++;
-                    }
-                    if (!running && written - played >= max - block) running = true; // AudioFlinger: full -> start
-                    if (running) {
-                        played += 110; // 5 ms at 22050 Hz
-                        if (played >= written) { // underrun: the track waits to be filled again
-                            played = written;
-                            running = false;
-                        }
-                    }
-                    int fill = (int) (written - played);
-                    maxFill = Math.max(maxFill, fill);
-                    if (t > 5000) lateFill = Math.max(lateFill, fill);
+                int max = 4096, block = 220; // the car: 8192 B minimum buffer, 10 ms blocks
+                long[] r = feed(new WritePacer(1764, block, max), new Flinger(max, false), block, 20000);
+                eq(r[3], 0, "no write hangs");
+                check(r[0] > 22050 * 15, "it plays (" + r[0] + " frames in 20 s)");
+                check(r[1] <= 1764 + 2 * block, "once running, about 80 ms queued: " + r[1]);
+            }
+        });
+        // L5 any buffer size: a frame count that is not a multiple of the block, or smaller than vesd thinks
+        l.add(new T("L5_pacer_any_frame_count") {
+            void run() {
+                int block = 220;
+                int[] sizes = { 4096, 4410, 3528, 4180, 2048, 8192 };
+                for (int f : sizes) {
+                    long[] r = feed(new WritePacer(1764, block, f), new Flinger(f, false), block, 20000);
+                    eq(r[3], 0, f + " frames: no write hangs");
+                    check(r[0] > 22050 * 15, f + " frames: it plays (" + r[0] + " frames in 20 s)");
                 }
-                playedAtEnd = played;
-                check(playedAtEnd > 22050 * 15, "it plays (" + playedAtEnd + " frames in 20 s)");
-                check(lateFill <= 1764 + 2 * block, "once running, about 80 ms queued: " + lateFill);
+                long[] r = feed(new WritePacer(1764, block, 4096), new Flinger(4000, false), block, 20000);
+                eq(r[3], 0, "real buffer smaller than vesd thinks: no write hangs");
+                check(r[0] > 22050 * 15, "real buffer smaller than vesd thinks: it plays (" + r[0] + ")");
+                // a 300 ms gap in the writer mid-drive: the track runs dry, must be filled whole again
+                Flinger g = new Flinger(4096, false);
+                r = feed(new WritePacer(1764, block, 4096), g, block, 20000, 8000, 300);
+                eq(r[3], 0, "after a gap: no write hangs");
+                check(r[2] >= 2, "after a gap: started again (" + r[2] + " starts)");
+                check(r[0] > 22050 * 15, "after a gap: it plays (" + r[0] + ")");
+            }
+        });
+        // L6 a track that never plays (dead, or its buffer bigger than vesd thinks): stuck, never a hung write
+        l.add(new T("L6_pacer_stuck") {
+            void run() {
+                int block = 220;
+                WritePacer w = new WritePacer(1764, block, 4096);
+                Flinger dead = new Flinger(4096, true);
+                long stuckAt = -1, fullAt = -1;
+                int pending = 0;
+                for (long t = 0; t < 3000 && stuckAt < 0; t += 5) {
+                    for (int k = 0; k < 64; k++) {
+                        int n = w.framesToWrite(dead.written, dead.played, t);
+                        if (n <= 0) break;
+                        if (pending == 0) pending = block;
+                        pending -= dead.write(Math.min(n, pending));
+                    }
+                    if (fullAt < 0 && dead.fill() >= 4096) fullAt = t;
+                    if (w.stuck(t)) stuckAt = t;
+                }
+                check(!dead.blocked, "dead track: no write hangs");
+                eq(fullAt, 0, "dead track: filled at once");
+                check(stuckAt >= 1000 && stuckAt <= 1100, "dead track: stuck after ~1 s: " + stuckAt + " ms");
+                w.reset(4096);
+                check(!w.stuck(stuckAt), "a new track: not stuck");
+                eq(w.max(), 4096, "reset keeps the frame count given");
+                int[] sizes = { 4096, 4410, 4180, 2048 };
+                for (int f : sizes) {
+                    WritePacer h = new WritePacer(1764, block, f);
+                    Flinger fl = new Flinger(f, false);
+                    pending = 0;
+                    for (long t = 0; t < 20000; t += 5) {
+                        boolean gap = t >= 8000 && t < 8300;
+                        for (int k = 0; k < 64 && !gap; k++) {
+                            int n = h.framesToWrite(fl.written, fl.played, t);
+                            if (n <= 0) break;
+                            if (pending == 0) pending = block;
+                            pending -= fl.write(Math.min(n, pending));
+                        }
+                        check(!h.stuck(t), f + " frames: a playing track is never stuck (t=" + t + ")");
+                        fl.step();
+                    }
+                }
+            }
+        });
+
+        // L7 the audio loop (TrackFeeder): a fresh track per OPEN plays within a block of filling; a track that
+        // never plays is replaced with a backoff, and the loop keeps rendering meanwhile (no frozen status, the
+        // channel still closes); a lazy-flush loss on the first track costs at most one reset
+        l.add(new T("L7_track_feeder") {
+            void run() {
+                final int block = 220;
+                long[] r = loop(new TrackFeeder(new WritePacer(1764, block, 4096), block), new Tracks() {
+                    public Flinger make(int n) { return new Flinger(4096, false); }
+                }, 20000, 2000);
+                eq(r[3], 0, "reopen x10: no write hangs");
+                eq(r[1], 0, "reopen x10: no resets");
+                check(r[4] <= 1000, "reopen x10: every OPEN plays within 1 s: " + r[4] + " ms");
+                check(r[0] > 22050 * 15, "reopen x10: it plays (" + r[0] + ")");
+                r = loop(new TrackFeeder(new WritePacer(1764, block, 4096), block), new Tracks() {
+                    public Flinger make(int n) {
+                        Flinger f = new Flinger(4096, false);
+                        if (n == 0) f.discard = 880;
+                        return f;
+                    }
+                }, 20000, 0);
+                eq(r[3], 0, "lazy flush: no write hangs");
+                eq(r[1], 1, "lazy flush: one reset brings it back");
+                check(r[0] > 22050 * 15, "lazy flush: it plays (" + r[0] + ")");
+                r = loop(new TrackFeeder(new WritePacer(1764, block, 4096), block), new Tracks() {
+                    public Flinger make(int n) { return new Flinger(4096, true); }
+                }, 20000, 0);
+                eq(r[3], 0, "dead tracks: no write hangs");
+                check(r[1] >= 3 && r[1] <= 5, "dead tracks: resets back off (1+2+4+8 s): " + r[1]);
+                check(r[2] >= (20000 - 1500) / 20, "dead tracks: still rendering a block per 20 ms: " + r[2]);
+                check(r[5] > 0, "dead tracks: blocks dropped meanwhile: " + r[5]);
+                TrackFeeder fd = new TrackFeeder(new WritePacer(1764, block, 4096), block);
+                fd.newTrack(4096);
+                fd.wrote(-6); // a failed write (dead object)
+                eq(fd.next(0, 0), TrackFeeder.RESET, "a failed write: make a new track");
+                // writes that return 0 (interrupted, would block): no busy loop of underruns, then a new track
+                fd = new TrackFeeder(new WritePacer(1764, block, 4096), block);
+                fd.newTrack(4096);
+                long t = 0, head = 0;
+                for (int i = 0; i < 40; i++, t += 5) { // play a while, then the head catches up: dry
+                    int d = fd.next(head, t);
+                    if (d == TrackFeeder.RENDER) {
+                        fd.rendered();
+                        d = fd.next(head, t);
+                    }
+                    if (d > 0) fd.wrote(d);
+                    head = Math.min(fd.written(), head + 110);
+                }
+                head = fd.written();
+                int zeroAt = -1;
+                for (int i = 0; i < 400; i++, t += 4) {
+                    int d = fd.next(head, t);
+                    if (d == TrackFeeder.RENDER) {
+                        fd.rendered();
+                        continue;
+                    }
+                    if (d == TrackFeeder.RESET) {
+                        zeroAt = i;
+                        break;
+                    }
+                    if (d > 0) fd.wrote(0);
+                }
+                check(fd.underruns() <= 1, "zero writes: one underrun, not one per try: " + fd.underruns());
+                check(zeroAt > 0 && zeroAt <= 60, "zero writes: a new track after ~50 tries: " + zeroAt);
+            }
+        });
+
+        // E1 the app's one-line status (StatusLabel): unchanged labels, and a frozen or silent audio loop is shown
+        // as such, never as the state it froze in (0.2.3: "주행 중 · 재생" or "안내 음성 중 (작게)" for hours)
+        l.add(new T("E1_status_label") {
+            void run() {
+                String[][] cases = {
+                        { "error x", "서비스 연결 안 됨" },
+                        { "state=drive rpm=1 open=1 yield=0 gear=1", "주행 중 · 재생" },
+                        { "state=drive rpm=1 open=0 yield=0", "주행 중" },
+                        { "state=idle open=1 yield=0", "공회전" },
+                        { "state=regen open=1 yield=0", "회생제동" },
+                        { "state=park open=0 yield=0", "P/N/R: 무음" },
+                        { "state=not_ready open=0 yield=0", "Ready 아님" },
+                        { "state=stale open=0 yield=0", "차량 신호 없음" },
+                        { "state=idle open=1 yield=1(shared) voice=synth duck=1", "안내 음성 중 (작게)" },
+                        { "state=idle open=0 yield=1(navi) voice=synth", "안내 음성 중 (잠시 멈춤)" },
+                        { "state=drive open=1 yield=0\naudio loop_age_ms=12 play_age_ms=30", "주행 중 · 재생" },
+                        { "state=drive open=1 yield=0\naudio loop_age_ms=3000 play_age_ms=3000", "주행 중 · 재생" },
+                        { "state=drive open=1 yield=1(shared) duck=1\naudio loop_age_ms=4000 play_age_ms=-1",
+                                "소리 처리 멈춤" },
+                        { "state=idle open=1 yield=0\naudio loop_age_ms=20 play_age_ms=4000", "소리 출력 안 됨" },
+                        { "state=idle open=1 yield=1(shared) duck=1\naudio loop_age_ms=20 play_age_ms=3500", "소리 출력 안 됨" },
+                        { "state=idle open=0 yield=0\naudio loop_age_ms=20 play_age_ms=-1", "공회전" },
+                        { "state=idle open=1 yield=0\naudio loop_age_ms=20 play_age_ms=-1 resets=0", "공회전" },
+                };
+                for (String[] c : cases) {
+                    String got = StatusLabel.of(c[0]);
+                    check(c[1].equals(got), "[" + c[0].replace('\n', '|') + "] -> " + got + " (want " + c[1] + ")");
+                }
+                VesCore core = new VesCore(22050);
+                core.renderBlock(new short[220], 220, 500);
+                eq(core.lastRenderMs(), 500, "the last rendered block's time");
             }
         });
 

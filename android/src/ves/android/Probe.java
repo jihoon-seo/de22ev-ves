@@ -525,7 +525,7 @@ final class Probe {
                     ves.core.EngineParams p = d.core.lastParams();
                     b.append(',').append(Math.round(p.rpm)).append(',').append(Vesd.fmt(p.load)).append(',').append(Vesd.fmt(p.regen))
                             .append(',').append(Vesd.fmt(p.targetGain)).append(',').append(Vesd.fmt(d.core.lastGain()))
-                            .append(',').append(p.virtualGear).append(',').append(d.pathOpen ? 1 : 0).append(',').append(d.underruns)
+                            .append(',').append(p.virtualGear).append(',').append(d.pathOpen ? 1 : 0).append(',').append(d.feeder == null ? 0 : d.feeder.underruns())
                             .append(',').append(p.reason);
                 }
                 sig.write(b.append('\n').toString().getBytes("UTF-8"));

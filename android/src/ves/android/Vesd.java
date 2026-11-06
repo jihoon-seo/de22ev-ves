@@ -13,6 +13,7 @@ import ves.core.Settings;
 import ves.core.SharedChannel;
 import ves.core.Sig;
 import ves.core.SignalState;
+import ves.core.TrackFeeder;
 import ves.core.VehicleText;
 import ves.core.WritePacer;
 import ves.core.VesCore;
@@ -45,7 +46,7 @@ public final class Vesd implements MicomAudio.Events {
     volatile String lastError = "";
     volatile boolean fallbackActive;
     volatile long fallbackPolls;
-    volatile long underruns, opens, closes, blocks;
+    volatile long opens, closes, blocks;
     volatile WritePacer pacer;
     volatile boolean exclusive; // a probe owns the audio path
     volatile Settings override; // a probe's settings (null: the owner's)
@@ -328,26 +329,99 @@ public final class Vesd implements MicomAudio.Events {
 
     // ---- the sound
 
+    /** AudioTrack with its real frame count (protected getNativeFrameCount: the track's own mFrameCount on 4.4) */
+    static final class Track extends AudioTrack {
+        Track(int bytes) {
+            super(ANDROID_STREAM_NAVI, RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT, bytes,
+                    AudioTrack.MODE_STREAM);
+        }
+
+        @SuppressWarnings("deprecation")
+        int frames() {
+            try {
+                return getNativeFrameCount();
+            } catch (Throwable e) {
+                return -1;
+            }
+        }
+    }
+
+    volatile TrackFeeder feeder;
+    volatile long trackResets;
+    private long lastHeartbeat;
+
+    /** a new track, playing; null if it can't be made (logged) */
+    Track createTrack(int bytes) {
+        Track t = null;
+        try {
+            t = new Track(bytes);
+            if (t.getState() != AudioTrack.STATE_INITIALIZED) throw new IllegalStateException("state " + t.getState());
+            t.play();
+            return t;
+        } catch (Throwable e) {
+            lastError = "AudioTrack: " + e;
+            Out.log(lastError);
+            if (t != null) t.release();
+            return null;
+        }
+    }
+
+    static void releaseTrack(AudioTrack t) {
+        if (t == null) return;
+        try {
+            t.pause();
+            t.flush();
+        } catch (Throwable ignored) {
+        }
+        t.release();
+    }
+
+    /**
+     * One block at a time: render it, write it in parts as TrackFeeder allows (the track starts only once its
+     * buffer is exactly full), a fresh track per OPEN (released on CLOSE), and a track that doesn't play is
+     * replaced while the model keeps running (TestMain L7 drives TrackFeeder the same way).
+     */
     void audioLoop() {
         int min = AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT);
         int bytes = Math.max(min, RATE / 10 * 2); // >= 100 ms
-        AudioTrack track = null;
+        Track track = null;
         short[] buf = new short[BLOCK];
-        boolean playing = false;
-        long written = 0;
-        // keep ~80 ms queued, not the whole 186 ms minimum buffer (car check 2: response "a little late")
-        pacer = new WritePacer(RATE * 80 / 1000, BLOCK, bytes / 2);
+        boolean playing = false; // the path is open with sound (the track may be missing: retried)
+        // keep ~80 ms queued once playing, not the whole 186 ms minimum buffer (car check 2: response "a little late")
+        TrackFeeder fd = new TrackFeeder(new WritePacer(RATE * 80 / 1000, BLOCK, bytes / 2), BLOCK);
+        feeder = fd;
+        pacer = fd.pacer();
+        Out.log("track: min " + min + " bytes, asking " + bytes);
         while (true) {
-            if (playing && track != null && !exclusive) {
-                long head = track.getPlaybackHeadPosition() & 0xffffffffL;
-                if (pacer.framesToWrite(written, head, SystemClock.uptimeMillis()) == 0) {
+            int d = TrackFeeder.RENDER;
+            if (playing && !exclusive) {
+                long now = SystemClock.uptimeMillis();
+                if (track == null) d = fd.resetDue(now) ? TrackFeeder.RESET : TrackFeeder.DROP;
+                else d = fd.next(track.getPlaybackHeadPosition() & 0xffffffffL, now);
+                heartbeat(track, now);
+                if (d > 0) {
+                    int n = track.write(buf, fd.offset(), d);
+                    fd.wrote(n);
+                    if (n < 0) Out.log("track: write failed " + n);
+                    if (n == 0) SystemClock.sleep(4);
+                    continue;
+                }
+                if (d == TrackFeeder.WAIT) {
                     SystemClock.sleep(4);
                     continue;
                 }
-                if (written > BLOCK * 4 && written - head <= 0) {
-                    underruns++;
-                    pacer.underrun();
+                if (d == TrackFeeder.RESET) {
+                    String why = track == null ? "no track"
+                            : "full " + (fd.written() - (track.getPlaybackHeadPosition() & 0xffffffffL)) + "/"
+                                    + fd.trackFrames() + " frames, not playing";
+                    releaseTrack(track);
+                    track = newTrack(fd, bytes);
+                    fd.resetDone(now);
+                    trackResets++;
+                    Out.log("track: reset " + trackResets + " (" + why + ")");
+                    continue;
                 }
+                // RENDER, or DROP: render anyway (below), so the model, the prompts and the status go on
             }
             long now = SystemClock.uptimeMillis();
             int act;
@@ -358,50 +432,69 @@ public final class Vesd implements MicomAudio.Events {
             if (exclusive) {
                 // a probe test owns the path: keep the model running, stay closed and quiet
                 if (pathOpen) cleanupPath("probe");
-                if (playing && track != null) {
-                    track.pause();
-                    track.flush();
+                if (playing) {
+                    releaseTrack(track);
+                    track = null;
                     playing = false;
                 }
                 SystemClock.sleep(10);
                 continue;
             }
             if (act == AudioPolicy.ACT_OPEN) {
-                if (track == null) {
-                    try {
-                        track = new AudioTrack(ANDROID_STREAM_NAVI, RATE, AudioFormat.CHANNEL_OUT_MONO,
-                                AudioFormat.ENCODING_PCM_16BIT, bytes, AudioTrack.MODE_STREAM);
-                        Out.log("track: stream 12, " + bytes + " bytes, state " + track.getState());
-                    } catch (Throwable e) {
-                        lastError = "AudioTrack: " + e;
-                        Out.log(lastError);
-                        track = null;
-                    }
-                }
+                releaseTrack(track); // none: CLOSE released it
+                track = newTrack(fd, bytes);
+                fd.opened(now);
                 openPath("sound");
-                if (track != null) {
-                    track.play();
-                    playing = true;
-                    written = 0;
-                }
+                playing = true;
+                d = TrackFeeder.RENDER;
             } else if (act == AudioPolicy.ACT_CLOSE && skipStartupClose && !pathOpen) {
                 skipStartupClose = false; // the core's first-tick cleanup, skipped for the stuck test
             } else if (act == AudioPolicy.ACT_CLOSE) {
-                if (playing && track != null) {
-                    track.pause();
-                    track.flush();
-                }
+                releaseTrack(track);
+                track = null;
                 playing = false;
                 cleanupPath(pathOpen ? "silence or voice" : "startup");
             }
-            if (playing && track != null) {
-                int n = track.write(buf, 0, BLOCK);
-                if (n > 0) written += n;
-                else SystemClock.sleep(10);
+            if (playing && d == TrackFeeder.DROP) {
+                fd.droppedBlock();
+                SystemClock.sleep(10);
+            } else if (playing) {
+                fd.rendered(); // written on the next turns
             } else {
                 SystemClock.sleep(10);
             }
         }
+    }
+
+    /** a fresh playing track for the feeder (null: none could be made, retried on the feeder's backoff) */
+    Track newTrack(TrackFeeder fd, int bytes) {
+        Track t = createTrack(bytes);
+        int frames = bytes / 2;
+        if (t != null) {
+            // never above the real count (a blocking write on a full track that isn't playing would hang): 4.4
+            // keeps the count asked for (at least the minimum), the native count is logged if it differs
+            int n = t.frames();
+            if (n > 0 && n < frames) frames = n;
+            if (n != bytes / 2) Out.log("track: " + n + " frames (asked " + bytes / 2 + ")");
+            if (frames < BLOCK * 2) {
+                Out.log("track: too small (" + frames + " frames)");
+                releaseTrack(t);
+                t = null;
+            }
+        }
+        fd.newTrack(frames);
+        return t;
+    }
+
+    /** a line a minute while playing: a frozen or silent loop shows in the log */
+    void heartbeat(AudioTrack t, long now) {
+        if (now - lastHeartbeat < 60000) return;
+        lastHeartbeat = now;
+        TrackFeeder fd = feeder;
+        long head = t == null ? -1 : t.getPlaybackHeadPosition() & 0xffffffffL;
+        Out.log("audio: written " + fd.written() + " head " + head + " frames " + fd.trackFrames() + " step "
+                + fd.headStep() + " resets " + trackResets + " dropped " + fd.dropped() + " underruns "
+                + fd.underruns());
     }
 
     String status() {
@@ -415,9 +508,20 @@ public final class Vesd implements MicomAudio.Events {
             b.append('\n');
             b.append("settings ").append(core.settings()).append(override != null ? " (probe)" : "").append('\n');
         }
+        long now = SystemClock.uptimeMillis();
+        TrackFeeder fd = feeder;
         b.append("path open=").append(pathOpen ? 1 : 0).append(" type=0x").append(Integer.toHexString(ownType))
-                .append(" opens=").append(opens).append(" closes=").append(closes).append(" underruns=").append(underruns)
+                .append(" opens=").append(opens).append(" closes=").append(closes)
+                .append(" underruns=").append(fd == null ? 0 : fd.underruns())
                 .append(" queue_target_ms=").append(pacer == null ? -1 : pacer.target() * 1000 / RATE).append('\n');
+        // loop_age_ms: since the last rendered block (a frozen loop); play_age_ms: since the track last played
+        b.append("audio loop_age_ms=").append(now - core.lastRenderMs());
+        if (fd != null) {
+            b.append(" play_age_ms=").append(pathOpen ? fd.playAge(now) : -1).append(" track_frames=")
+                    .append(fd.trackFrames()).append(" head_step=").append(fd.headStep()).append(" resets=")
+                    .append(trackResets).append(" dropped=").append(fd.dropped());
+        }
+        b.append('\n');
         b.append("hscan connected=").append(hscan.connected ? 1 : 0).append(" bytes=").append(hscan.bytes)
                 .append(" age_ms=").append(hscan.lastDataMs == 0 ? -1 : SystemClock.uptimeMillis() - hscan.lastDataMs)
                 .append(" fallback=").append(fallbackActive ? 1 : 0).append(" polls=").append(fallbackPolls).append('\n');

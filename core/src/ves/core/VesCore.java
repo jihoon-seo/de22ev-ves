@@ -33,7 +33,7 @@ public final class VesCore {
     private volatile Settings settings = new Settings();
     private Profile current;
     private double lastGain;
-    private long lastNow;
+    private volatile long lastNow;
     private int lastAction;
 
     public VesCore(int sampleRate) {
@@ -209,6 +209,11 @@ public final class VesCore {
 
     public Pops pops() {
         return pops;
+    }
+
+    /** the time of the last rendered block (the audio loop's heartbeat) */
+    public long lastRenderMs() {
+        return lastNow;
     }
 
     public double lastGain() {
