@@ -143,30 +143,12 @@ final class Actions {
                 .putExtra("com.hkmc.intent.extra.TOAST_POPUPSHOWING", true));
     }
 
-    /** one short line for the widget and the main screen */
+    /** one short line for the widget and the main screen (ves.core.StatusLabel, host-tested) */
     static String shortStatus(String status) {
-        if (status.startsWith("error")) return "서비스 연결 안 됨";
-        String s = "";
-        for (String l : status.split("\n")) if (l.startsWith("state=")) s = l;
-        String state = field(s, "state");
-        String open = field(s, "open");
-        String yield = field(s, "yield");
-        if (yield != null && yield.startsWith("1")) return s.contains(" duck=1") ? "안내 음성 중 (작게)" : "안내 음성 중 (잠시 멈춤)";
-        if (state == null) return "";
-        if (state.equals("not_ready")) return "Ready 아님";
-        if (state.equals("park") || state.equals("neutral") || state.equals("reverse") || state.equals("gear_none")) return "P/N/R: 무음";
-        if (state.equals("stale")) return "차량 신호 없음";
-        if (state.equals("stopped_silent")) return "정차: 무음";
-        if (state.equals("accel_only_wait")) return "가속 대기";
-        if (state.equals("fade_speed")) return "고속: 줄임";
-        if (state.equals("drive")) return "주행 중" + ("1".equals(open) ? " · 재생" : "");
-        if (state.equals("idle")) return "공회전";
-        if (state.equals("regen")) return "회생제동";
-        return state;
+        return ves.core.StatusLabel.of(status);
     }
 
     static String field(String line, String key) {
-        for (String f : line.split(" ")) if (f.startsWith(key + "=")) return f.substring(key.length() + 1);
-        return null;
+        return ves.core.StatusLabel.field(line, key);
     }
 }

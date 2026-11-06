@@ -62,7 +62,7 @@ mkdir -p build/apk/res/drawable
 "$AAPT2" link -I "$(native "$ANDROID_JAR")" --manifest "$(native app/AndroidManifest.xml)" \
     --min-sdk-version 19 --target-sdk-version 19 --java "$(native build/apk/gen)" \
     -o "$(native build/apk/base.apk)" "$(native build/apk/res.zip)"
-mapfile -t A < <(srcs app/java build/apk/gen android/src/ves/hmg core/src/ves/core/ProbeResume.java)
+mapfile -t A < <(srcs app/java build/apk/gen android/src/ves/hmg core/src/ves/core/ProbeResume.java core/src/ves/core/StatusLabel.java)
 "${JAVA_BIN}javac" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -cp "$(native "$ANDROID_JAR")" \
     -d "$(native build/apk/classes)" "${A[@]}"
 mapfile -t AC < <(find build/apk/classes -name '*.class' | sort | while IFS= read -r f; do native "$f"; done)
