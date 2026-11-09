@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.5
+
+From the first drives with 0.2.4 (2026-11-06: the sound starts right after install):
+
+- Fix: the built-in sound packs (i4t, v6, v8, i6) never loaded on the car since 0.2.0 ("v8: empty",
+  the synth played). HMG-API makes a mod's folder readable by root only and opens just the service's
+  own jar to its user, and vesd runs as system. The packs now travel inside vesd.jar. Packs imported
+  from USB into the user slots were not affected.
+- The status line uses the ICE behaviour's words: "후진: 작게" (R plays quietly), "공회전 (가속)",
+  "엔진 브레이크", "기어 신호 없음". "P/N/R: 무음" is left for the classic behaviour only.
+- If the car refuses the audio channel (startAudio false, seen once in a log), vesd no longer
+  counts it as open: it checks MICOM's audio stack, and otherwise tries again after 1, 2, 4, 8, 16
+  and then every 30 s (status "소리 채널 재시도 중").
+
 ## 0.2.4
 
 - Fix: 0.2.3 still never started the sound, and the status froze (drives 2026-11-05/06: stuck on
