@@ -241,18 +241,26 @@ public final class Vesd implements MicomAudio.Events {
 
     // ---- the path
 
-    void openPath(String why) {
+    /** true when the channel is ours: startAudio accepted, or our type already in MICOM's audio stack */
+    boolean openPath(String why) {
+        boolean ok = false, has = false;
         try {
             core.ownStartCalled(SystemClock.uptimeMillis()); // before the call: the event may beat its return
-            boolean ok = micom.startAudio(ownType);
-            pathOpen = true;
-            opens++;
-            Out.log("path: startAudio(0x" + Integer.toHexString(ownType) + ")=" + ok + " (" + why + ")");
+            ok = micom.startAudio(ownType);
+            if (!ok) has = micom.hasStreamTypeInAudioStack(ownType);
+            Out.log("path: startAudio(0x" + Integer.toHexString(ownType) + ")=" + ok + (ok ? "" : " in stack=" + has)
+                    + " (" + why + ")");
             probe.event("startAudio 0x" + Integer.toHexString(ownType) + " " + ok);
         } catch (Throwable e) {
             lastError = "startAudio: " + e;
             Out.log(lastError);
         }
+        ok |= has;
+        if (ok) {
+            pathOpen = true;
+            opens++;
+        }
+        return ok;
     }
 
     void cleanupPath(String why) {
@@ -442,11 +450,17 @@ public final class Vesd implements MicomAudio.Events {
             }
             if (act == AudioPolicy.ACT_OPEN) {
                 releaseTrack(track); // none: CLOSE released it
-                track = newTrack(fd, bytes);
-                fd.opened(now);
-                openPath("sound");
-                playing = true;
-                d = TrackFeeder.RENDER;
+                if (openPath("sound")) {
+                    core.openResult(true, now);
+                    track = newTrack(fd, bytes);
+                    fd.opened(now);
+                    playing = true;
+                    d = TrackFeeder.RENDER;
+                } else {
+                    // refused: no sound on this channel; the policy tries again later (1, 2, 4 ... 30 s)
+                    core.openResult(false, now);
+                    Out.log("path: refused, retry " + core.policy().retries());
+                }
             } else if (act == AudioPolicy.ACT_CLOSE && skipStartupClose && !pathOpen) {
                 skipStartupClose = false; // the core's first-tick cleanup, skipped for the stuck test
             } else if (act == AudioPolicy.ACT_CLOSE) {

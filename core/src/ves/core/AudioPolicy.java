@@ -172,6 +172,7 @@ public final class AudioPolicy {
             return ACT_NONE;
         }
         if (nowMs - lostAt < HOLDOFF_MS) return ACT_NONE;
+        if (refusals > 0 && nowMs < retryAt) return ACT_NONE;
         if (wantSound) {
             open = true;
             opens++;
@@ -181,6 +182,33 @@ public final class AudioPolicy {
         }
         return ACT_NONE;
     }
+
+    /**
+     * The answer to the last ACT_OPEN's startAudio. Refused (car log 2026-11-06: startAudio(0x45)=false): the path
+     * is not open and gets no CLOSE (an endAudio could cut another user's sound); the next OPEN waits 1, 2, 4, 8,
+     * 16, then 30 s. Accepted: the backoff starts over.
+     */
+    public synchronized void openResult(boolean ok, long nowMs) {
+        if (ok) {
+            refusals = 0;
+            return;
+        }
+        if (open) {
+            open = false;
+            opens--;
+        }
+        refusals++;
+        retryAt = nowMs + Math.min(RETRY_MAX_MS, RETRY_MS << Math.min(refusals - 1, 5));
+    }
+
+    /** refusals since the last accepted startAudio */
+    public synchronized int retries() {
+        return refusals;
+    }
+
+    static final long RETRY_MS = 1000, RETRY_MAX_MS = 30000;
+    private int refusals;
+    private long retryAt = Long.MIN_VALUE;
 
     public synchronized boolean isOpen() {
         return open;

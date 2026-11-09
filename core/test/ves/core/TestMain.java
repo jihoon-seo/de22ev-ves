@@ -2537,6 +2537,59 @@ public final class TestMain {
             }
         });
 
+        // R1 startAudio refused (car log 11-06 08:52:47, "startAudio(0x45)=false"): the path is not open, no
+        // endAudio for it, a new try after 1, 2, 4, 8, 16 then every 30 s; a yield holds the try off
+        l.add(new T("R1_open_refused_retry") {
+            void run() {
+                AudioPolicy p = new AudioPolicy();
+                long t = 0;
+                eq(p.tick(t, true, 0), AudioPolicy.ACT_CLOSE, "first tick: cleanup");
+                t += 10;
+                eq(p.tick(t, true, 0), AudioPolicy.ACT_OPEN, "opens");
+                p.openResult(false, t);
+                check(!p.isOpen(), "refused: not open");
+                eq(p.retries(), 1, "one refusal");
+                t += 10;
+                eq(p.tick(t, true, 0.5), AudioPolicy.ACT_NONE, "refused: no CLOSE (an endAudio could cut someone's sound)");
+                long[] waits = { 1000, 2000, 4000, 8000, 16000, 30000, 30000 };
+                long refusedAt = t - 10;
+                for (int k = 0; k < waits.length; k++) {
+                    long due = refusedAt + waits[k];
+                    long u = refusedAt + 10;
+                    int act = AudioPolicy.ACT_NONE;
+                    for (; u < due + 200 && act != AudioPolicy.ACT_OPEN; u += 10) act = p.tick(u, true, 0);
+                    long openedAt = u - 10;
+                    check(act == AudioPolicy.ACT_OPEN && openedAt >= due && openedAt < due + 20,
+                            "try " + (k + 2) + " after " + waits[k] + " ms: at +" + (openedAt - refusedAt));
+                    refusedAt = openedAt;
+                    p.openResult(false, refusedAt);
+                }
+                p.openResult(true, refusedAt); // (the next OPEN's answer)
+                long u = refusedAt + 30000;
+                int act = AudioPolicy.ACT_NONE;
+                for (; act != AudioPolicy.ACT_OPEN && u < refusedAt + 31000; u += 10) act = p.tick(u, true, 0);
+                p.openResult(true, u);
+                eq(p.retries(), 0, "accepted: the backoff starts over");
+                check(p.isOpen(), "accepted: open");
+                // a yield holds the retry off
+                AudioPolicy q = new AudioPolicy();
+                q.tick(0, true, 0);
+                q.tick(10, true, 0);
+                q.openResult(false, 10);
+                q.onYieldStart("navi", 500, false);
+                boolean opened = false;
+                for (long v = 520; v < 3000; v += 10) opened |= q.tick(v, true, 0) == AudioPolicy.ACT_OPEN;
+                check(!opened, "no retry while a prompt speaks");
+                VesCore c = new VesCore(22050);
+                short[] b = new short[220];
+                c.renderBlock(b, 220, 0);
+                c.openResult(false, 0);
+                check(c.status().contains(" retry=1"), "status shows the retry: " + c.status());
+                check("소리 채널 재시도 중".equals(StatusLabel.of("state=idle open=0 yield=0 retry=1")), "label");
+                check("공회전".equals(StatusLabel.of("state=idle open=1 yield=0")), "label without retry unchanged");
+            }
+        });
+
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {

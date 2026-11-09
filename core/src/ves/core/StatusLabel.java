@@ -25,6 +25,7 @@ public final class StatusLabel {
         String state = field(s, "state");
         String yield = field(s, "yield");
         if (yield != null && yield.startsWith("1")) return s.contains(" duck=1") ? "안내 음성 중 (작게)" : "안내 음성 중 (잠시 멈춤)";
+        if (!"1".equals(open) && num(field(s, "retry")) > 0) return "소리 채널 재시도 중";
         if (state == null) return "";
         if (state.equals("not_ready")) return "Ready 아님";
         // classic's gates (P/N/R silent); the ICE behaviour idles in P/N and plays quietly in R

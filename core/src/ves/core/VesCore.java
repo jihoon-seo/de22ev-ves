@@ -211,6 +211,11 @@ public final class VesCore {
         return pops;
     }
 
+    /** whether the MICOM accepted the startAudio of the last ACT_OPEN (AudioPolicy.openResult) */
+    public void openResult(boolean ok, long nowMs) {
+        policy.openResult(ok, nowMs);
+    }
+
     /** the time of the last rendered block (the audio loop's heartbeat) */
     public long lastRenderMs() {
         return lastNow;
@@ -242,6 +247,8 @@ public final class VesCore {
         if (src.length() > 0) b.append('(').append(src).append(')');
         b.append(" voice=").append(voice());
         if (policy.ducking(lastNow)) b.append(" duck=1");
+        int r = policy.retries();
+        if (r > 0) b.append(" retry=").append(r);
         b.append(" gear=").append(p.virtualGear);
         if (p.shifting) b.append('*');
         b.append(" kph=").append(EngineParams.r2(p.speedKph));
