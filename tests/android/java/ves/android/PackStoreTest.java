@@ -57,8 +57,63 @@ public final class PackStoreTest {
         st.importPack(sticks, "mycar", "user1"); // replace in place
         check("my car".equals(st.load("user1").name) && !new File(data, "packs/.user1.old").exists()
                 && !new File(data, "packs/.user1.new").exists(), "re-import replaces cleanly");
+
+        // built-ins live inside vesd.jar (0.2.5): HMG-API makes the mod's folder root-only and only the
+        // service's own jar readable, so a loose packs/ folder never loaded on the car (vesd runs as system)
+        File mod2 = new File(root, "mod2");
+        writePack(new File(root, "src/v8"), "Cross V8", 1);
+        writePack(new File(root, "src/i6"), "Inline 6", 1);
+        jar(new File(mod2, "vesd.jar"), new File(root, "src"), "packs/", "bad/pack.txt");
+        PackStore j = new PackStore(mod2, data);
+        check(!new File(mod2, "packs").exists(), "no loose packs folder in the mod");
+        try {
+            check("Cross V8".equals(j.load("v8").name), "built-in v8 loads from vesd.jar");
+            check("Inline 6".equals(j.load("i6").name), "built-in i6 loads from vesd.jar");
+        } catch (PackError e) {
+            check(false, "built-in from vesd.jar: " + e.getMessage());
+        }
+        try {
+            j.load("v6");
+            check(false, "a built-in missing from the jar is refused");
+        } catch (PackError e) {
+            check(e.getMessage().contains("empty"), "a built-in missing from the jar: " + e.getMessage());
+        }
+        int before = PackStore.jarOpens;
+        for (int i = 0; i < 5; i++) j.list();
+        String l = j.list();
+        check(l.contains("v8 Cross V8") && l.contains("i6 Inline 6") && l.contains("v6 -") && l.contains("user1 my car"),
+                "list: built-ins from the jar, user slots from data: " + l.replace('\n', ';'));
+        check(PackStore.jarOpens - before <= 1, "list reads the jar's names once: " + (PackStore.jarOpens - before) + " opens");
+        PackStore none = new PackStore(new File(root, "nomod"), data);
+        try {
+            none.load("v8");
+            check(false, "no vesd.jar: refused");
+        } catch (PackError e) {
+            check(true, "no vesd.jar: " + e.getMessage());
+        }
+        check(none.list().contains("v8 -"), "no vesd.jar: list still answers");
         System.out.println(failed == 0 ? "packstore: all checks passed" : "packstore: " + failed + " check(s) failed");
         System.exit(failed == 0 ? 0 : 1);
+    }
+
+    /** a jar with prefix + each folder's files under src (packs/<folder>/<file>), plus one extra entry */
+    static void jar(File out, File src, String prefix, String extra) throws IOException {
+        out.getParentFile().mkdirs();
+        java.util.zip.ZipOutputStream z = new java.util.zip.ZipOutputStream(new FileOutputStream(out));
+        try {
+            z.putNextEntry(new java.util.zip.ZipEntry("classes.dex"));
+            z.write(new byte[] { 1, 2, 3 });
+            for (File d : src.listFiles()) {
+                for (File f : d.listFiles()) {
+                    z.putNextEntry(new java.util.zip.ZipEntry(prefix + d.getName() + "/" + f.getName()));
+                    z.write(java.nio.file.Files.readAllBytes(f.toPath()));
+                }
+            }
+            z.putNextEntry(new java.util.zip.ZipEntry(extra));
+            z.write("x".getBytes("UTF-8"));
+        } finally {
+            z.close();
+        }
     }
 
     static void writePack(File dir, String name, int channels) throws IOException {

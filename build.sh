@@ -51,6 +51,15 @@ mapfile -t S < <(srcs core/src/ves/core android/src android/stubs)
     -d "$(native build/classes)" "${S[@]}"
 mapfile -t C < <(find build/classes/ves -name '*.class' | sort | while IFS= read -r f; do native "$f"; done)
 "${D8[@]}" --lib "$(native "$ANDROID_JAR")" --output "$(native build/vesd)" "${C[@]}"
+# the built-in sound packs (packs/<slot>/: pack.txt + loops), rendered from tools/render/engines (CC0), go
+# inside vesd.jar: HMG-API leaves only the service's own jar readable to its user (system)
+mkdir -p build/render-classes
+mapfile -t R < <(srcs tools/render/src)
+"${JAVA_BIN}javac" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native build/render-classes)" "${R[@]}"
+for e in i4t v6 v8 i6; do
+    "${JAVA_BIN}java" -cp "$(native build/render-classes)" ves.render.Grid "$(native tools/render/engines/$e.txt)" \
+        "$(native build/vesd/packs/$e)" > /dev/null
+done
 "$PY" tools/zipdir.py build/vesd build/mod/vesd.jar
 
 # the app: resources (icon drawn by tools/make_icon.py), R, classes (ves.app + ves.hmg)
@@ -83,15 +92,6 @@ fi
     --ks-pass "file:$(native "$APP_KEYSTORE_PASS")" --min-sdk-version 19 \
     --v1-signing-enabled true --v2-signing-enabled false --v3-signing-enabled false \
     --out "$(native build/mod/app/EngineSound.apk)" "$(native build/apk/aligned.apk)"
-
-# the built-in sound packs (packs/<slot>/: pack.txt + loops), rendered from tools/render/engines (CC0)
-mkdir -p build/render-classes
-mapfile -t R < <(srcs tools/render/src)
-"${JAVA_BIN}javac" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native build/render-classes)" "${R[@]}"
-for e in i4t v6 v8 i6; do
-    "${JAVA_BIN}java" -cp "$(native build/render-classes)" ves.render.Grid "$(native tools/render/engines/$e.txt)" \
-        "$(native build/mod/packs/$e)" > /dev/null
-done
 
 # the mod folder (its source and licence travel with it)
 cp mod/mod.json mod/settings.json mod/README.ko.txt LICENSE THIRD_PARTY.md build/mod/
