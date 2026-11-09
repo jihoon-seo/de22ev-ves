@@ -1950,6 +1950,16 @@ public final class TestMain {
                 r.run(3000);
                 EngineParams o = r.c.lastParams();
                 check(o.targetGain > 0 && o.targetGain <= 0.5 * 0.30 + 0.01, "reverse gain " + o.targetGain + " (" + o.reason + ")");
+                // its own reason (0.2.5): "reverse" is classic's silent gate, shown as "P/N/R: 무음"
+                check("reverse_quiet".equals(o.reason), "ICE reverse reason " + o.reason);
+                Settings cs = iceSettings(Profile.ICE_SMOOTH, 60);
+                cs.behavior = "classic";
+                Rig c = new Rig(cs);
+                c.gear = Sig.GEAR_R;
+                c.speed = 4;
+                c.run(3000);
+                check("reverse".equals(c.c.lastParams().reason) && c.c.lastParams().targetGain == 0,
+                        "classic reverse: silent gate " + c.c.lastParams().reason);
             }
         });
         l.add(new T("B3_ice_free_rev_parked") {
@@ -2509,6 +2519,13 @@ public final class TestMain {
                         { "state=idle open=1 yield=1(shared) duck=1\naudio loop_age_ms=20 play_age_ms=3500", "소리 출력 안 됨" },
                         { "state=idle open=0 yield=0\naudio loop_age_ms=20 play_age_ms=-1", "공회전" },
                         { "state=idle open=1 yield=0\naudio loop_age_ms=20 play_age_ms=-1 resets=0", "공회전" },
+                        // 0.2.5: the ICE states have their own words; "P/N/R: 무음" only for classic's gates
+                        { "state=reverse_quiet open=1 yield=0", "후진: 작게" },
+                        { "state=rev open=1 yield=0", "공회전 (가속)" },
+                        { "state=overrun open=1 yield=0", "엔진 브레이크" },
+                        { "state=gear_none open=0 yield=0", "기어 신호 없음" },
+                        { "state=reverse open=0 yield=0", "P/N/R: 무음" },
+                        { "state=neutral open=0 yield=0", "P/N/R: 무음" },
                 };
                 for (String[] c : cases) {
                     String got = StatusLabel.of(c[0]);

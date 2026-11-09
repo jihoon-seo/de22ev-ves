@@ -27,7 +27,12 @@ public final class StatusLabel {
         if (yield != null && yield.startsWith("1")) return s.contains(" duck=1") ? "안내 음성 중 (작게)" : "안내 음성 중 (잠시 멈춤)";
         if (state == null) return "";
         if (state.equals("not_ready")) return "Ready 아님";
-        if (state.equals("park") || state.equals("neutral") || state.equals("reverse") || state.equals("gear_none")) return "P/N/R: 무음";
+        // classic's gates (P/N/R silent); the ICE behaviour idles in P/N and plays quietly in R
+        if (state.equals("park") || state.equals("neutral") || state.equals("reverse")) return "P/N/R: 무음";
+        if (state.equals("gear_none")) return "기어 신호 없음";
+        if (state.equals("reverse_quiet")) return "후진: 작게";
+        if (state.equals("rev")) return "공회전 (가속)";
+        if (state.equals("overrun")) return "엔진 브레이크";
         if (state.equals("stale")) return "차량 신호 없음";
         if (state.equals("stopped_silent")) return "정차: 무음";
         if (state.equals("accel_only_wait")) return "가속 대기";

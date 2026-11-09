@@ -205,7 +205,7 @@ public final class EngineModel {
                 reason = pRaw > 0.02 ? "rev" : "idle";
             } else if (reversing) {
                 tg = 0.5 * idleG;
-                reason = "reverse";
+                reason = "reverse_quiet"; // not "reverse": that is classic's silent gate
             } else if (stopped || (pRaw < 0.02 && sp <= 5)) {
                 // stopped, or creeping with the foot off: idle
                 tg = pRaw > 0.02 ? Math.max(idleG, driveG) : idleG;
