@@ -31,9 +31,31 @@ inside the tests with known parameters.
   in an editable sidecar `<name>.segments.txt`. Shifts and lift-offs are cut out with 0.2 s either side, a
   quiet part-load hold is left out.
 
+## Model
+
+`Fitter` fits, separately for on-load and off-load frames (a `Model.Layer` each), in one regularized
+least-squares pass (normal equations, Cholesky, a few hundred unknowns):
+
+    log A(n, r) = s_n + h(n fc(r)) + l(r)        dB, fc = r / 120, l(r) = a + b ln(r / rRef)
+
+s_n is the order's own level (the cylinder comb), h a resonance curve over frequency (linear between 25 Hz
+nodes up to the cap), l the level against rpm. The exact gauge freedoms (constants moved between s, h and l)
+and the near one (a log-tilt: h + beta ln f, s_n - beta ln n, b - beta) are fixed explicitly: mean s = 0,
+mean h = 0 and no ln-n tilt in s; a small second-difference penalty keeps h smooth where data are thin.
+Orders within 10 dB of the local floor are masked; an order masked in most frames is absent and never
+synthesized. Above the observed orders, s_n follows a tail that is linear in ln n (fitted over the last
+observed octave) plus the mean residual of n mod cylinders, so the comb carries on down to idle, where far
+more orders fall below the cap. Noise: log N(band, r) = q(band) + m ln r per 1/3-octave band; the crank-wobble
+skirt per band; half orders above -30 dB re the strongest order; per-order phases from the low end on load.
+A model is a private text file (`*.vesmodel`).
+
+`Fitter.fitM0` is the baseline M0: the order envelope over frequency at the lowest measured rpm, held in Hz,
+its level scaled by the overall level slope.
+
 ## Tests
 
 `bash tests/resynth/run.sh [filter]` (also part of `tests/run-all.sh`): RS-W1/W2 (WAV, resampler), RS-T1/T2
 (tracker on a synthetic launch with shifts, lift-off and coast; a V8 pattern with a weak order 1), RS-C1
 (order levels within 0.5 dB through a 2500 rpm/s sweep, floor, a half order), RS-S1 (segments), RS-P2 (no
-derived data tracked).
+derived data tracked), RS-F1..F5 (fit recovery in range and at 800-2000 rpm, gauge invariance, the order model
+against M0 at 800 rpm, masked orders stay silent, a holdout below the fitted rpm).

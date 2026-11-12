@@ -513,7 +513,178 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-F1 fit recovers the fixture: in range per-order RMSE <= 1 dB; 800/1200/2000 rpm <= 2 dB") {
+            void run() {
+                Truth tr = new Truth(4, -1);
+                Orders.Frames fr = fixtureFrames(tr, 3000, 7000, 300, 0.3, 1);
+                Model.Layer m = Fitter.fit(fr, null, 4, new Fitter.Options());
+                double worst = 0;
+                int worstN = 0;
+                for (int n = 1; n <= fr.maxOrder; n++) {
+                    double se = 0;
+                    int c = 0;
+                    for (int k = 0; k < fr.count(); k++) {
+                        if (Float.isNaN(fr.amp[k][n])) continue;
+                        double e = m.predict(n, fr.rpm[k]) - tr.db(n, fr.rpm[k]);
+                        se += e * e;
+                        c++;
+                    }
+                    if (c > 0 && Math.sqrt(se / c) > worst) {
+                        worst = Math.sqrt(se / c);
+                        worstN = n;
+                    }
+                }
+                note("in range: worst per-order RMSE " + f3(worst) + " dB (order " + worstN + ")");
+                check(worst <= 1, "in-range RMSE " + worst + " at order " + worstN);
+                for (double rpm : new double[] {800, 1200, 2000}) {
+                    double e = rmseAt(m, tr, rpm, 120, 6000);
+                    note(rpm + " rpm: RMSE " + f3(e) + " dB over orders in 120-6000 Hz");
+                    check(e <= 2, rpm + " rpm RMSE " + e);
+                }
+            }
+        });
+
+        l.add(new T("RS-F2 gauge invariance: two gauge choices predict the same within 0.01 dB") {
+            void run() {
+                Truth tr = new Truth(4, -1);
+                Orders.Frames fr = fixtureFrames(tr, 3000, 7000, 200, 0.3, 2);
+                Fitter.Options a = new Fitter.Options(), b = new Fitter.Options();
+                b.gauge = 1;
+                Model.Layer ma = Fitter.fit(fr, null, 4, a), mb = Fitter.fit(fr, null, 4, b);
+                double worst = 0;
+                for (double rpm : new double[] {800, 1000, 2000, 3000, 4500, 7000, 7350})
+                    for (int n = 1; n * rpm / 120 <= 8500; n++)
+                        worst = Math.max(worst, Math.abs(ma.predict(n, rpm) - mb.predict(n, rpm)));
+                note("largest difference " + worst + " dB");
+                check(worst <= 0.01, "gauge changes predictions by " + worst + " dB");
+            }
+        });
+
+        l.add(new T("RS-F3 the order model beats the held envelope (M0) at 800 rpm on a cylinder comb") {
+            void run() {
+                Truth tr = new Truth(4, -1);
+                Orders.Frames fr = fixtureFrames(tr, 3000, 7000, 200, 0.3, 3);
+                Model.Layer m1 = Fitter.fit(fr, null, 4, new Fitter.Options());
+                Fitter.Baseline m0 = Fitter.fitM0(fr, null);
+                double e1 = rmseAt(m1, tr, 800, 120, 6000), e0 = 0;
+                int c = 0;
+                for (int n = 1; n * 800 / 120.0 <= 6000; n++) {
+                    if (n * 800 / 120.0 < 120) continue;
+                    double e = m0.predict(n, 800) - tr.db(n, 800);
+                    e0 += e * e;
+                    c++;
+                }
+                e0 = Math.sqrt(e0 / c);
+                note("800 rpm RMSE: model " + f3(e1) + " dB, held envelope " + f3(e0) + " dB");
+                check(e1 < e0, "M1 " + e1 + " not better than M0 " + e0);
+            }
+        });
+
+        l.add(new T("RS-F4 masked orders (within 10 dB of the floor) are not synthesized above the floor") {
+            void run() {
+                Truth tr = new Truth(4, 2); // orders 2 mod 4 sit 3 dB above the floor: masked
+                Orders.Frames fr = fixtureFrames(tr, 3000, 7000, 200, 0.3, 4);
+                Model.Layer m = Fitter.fit(fr, null, 4, new Fitter.Options());
+                int bad = 0, checked = 0;
+                for (double rpm : new double[] {800, 3000, 5000, 7000})
+                    for (int n = 2; n * rpm / 120 <= 8500; n += 4) {
+                        double p = m.predict(n, rpm);
+                        checked++;
+                        if (!Double.isNaN(p) && p > Truth.FLOOR) bad++;
+                    }
+                note(checked + " masked orders checked, " + bad + " synthesized above the floor");
+                check(bad == 0, bad + " masked orders above the floor");
+            }
+        });
+
+        l.add(new T("RS-F5 fit on the upper 60 % of log-rpm: holdout below it within 2 dB RMSE") {
+            void run() {
+                Truth tr = new Truth(4, -1);
+                Orders.Frames all = fixtureFrames(tr, 800, 7000, 400, 0.3, 5);
+                double split = Math.exp(Math.log(800) + 0.4 * Math.log(7000 / 800.0));
+                boolean[] fit = new boolean[all.count()];
+                for (int k = 0; k < fit.length; k++) fit[k] = all.rpm[k] >= split;
+                Model.Layer m = Fitter.fit(all, fit, 4, new Fitter.Options());
+                double se = 0;
+                int c = 0;
+                for (int k = 0; k < fit.length; k++) {
+                    if (fit[k]) continue;
+                    for (int n = 1; n <= all.maxOrder; n++) {
+                        if (Float.isNaN(all.amp[k][n]) || n * all.rpm[k] / 120 < 40) continue;
+                        double e = m.predict(n, all.rpm[k]) - tr.db(n, all.rpm[k]);
+                        se += e * e;
+                        c++;
+                    }
+                }
+                double rmse = Math.sqrt(se / c);
+                note("split at " + Math.round(split) + " rpm, holdout RMSE " + f3(rmse) + " dB over " + c + " order levels");
+                check(rmse <= 2, "holdout RMSE " + rmse);
+            }
+        });
+
         return l;
+    }
+
+    /** a known order x resonance x level truth for the fit tests (dB re amplitude 1) */
+    static final class Truth {
+        static final double FLOOR = -90;
+        final int cyl, maskedClass;
+
+        Truth(int cyl, int maskedClass) {
+            this.cyl = cyl;
+            this.maskedClass = maskedClass;
+        }
+
+        double s(int n) {
+            return (n % cyl == 0 ? 0 : -12) - 4 * Math.log(n) / Math.log(2);
+        }
+
+        static double h(double f) {
+            double lf = Math.log(f);
+            return 6 * Math.exp(-Math.pow((lf - Math.log(400)) / 0.3, 2)) + 4 * Math.exp(-Math.pow((lf - Math.log(2000)) / 0.25, 2))
+                    - 6 * f / 6000;
+        }
+
+        double db(int n, double rpm) {
+            if (maskedClass >= 0 && n % cyl == maskedClass) return FLOOR + 3;
+            return s(n) + h(n * rpm / 120) - 20 + 4.3 * Math.log(rpm / 1000);
+        }
+    }
+
+    /** order frames as the analysis would give them: truth + Gaussian error, log-uniform rpm, f <= 8.5 kHz */
+    static Orders.Frames fixtureFrames(Truth tr, double rLo, double rHi, int count, double errDb, long seed) {
+        Random r = new Random(seed);
+        Orders.Frames fr = new Orders.Frames();
+        int maxOrder = (int) (8500 / (rLo / 120));
+        fr.maxOrder = maxOrder;
+        fr.time = new double[count];
+        fr.rpm = new double[count];
+        fr.amp = new float[count][maxOrder + 1];
+        fr.floor = new float[count][maxOrder + 1];
+        for (int k = 0; k < count; k++) {
+            double rpm = Math.exp(Math.log(rLo) + (Math.log(rHi) - Math.log(rLo)) * (k + 0.5) / count);
+            fr.time[k] = k * 0.02;
+            fr.rpm[k] = rpm;
+            for (int n = 0; n <= maxOrder; n++) {
+                boolean in = n >= 1 && n * rpm / 120 <= 8500;
+                fr.amp[k][n] = in ? (float) (tr.db(n, rpm) + errDb * r.nextGaussian()) : Float.NaN;
+                fr.floor[k][n] = in ? (float) Truth.FLOOR : Float.NaN;
+            }
+        }
+        return fr;
+    }
+
+    /** RMSE over orders with frequency in [fLo, fHi] at one rpm */
+    static double rmseAt(Model.Layer m, Truth tr, double rpm, double fLo, double fHi) {
+        double se = 0;
+        int c = 0;
+        for (int n = 1; n * rpm / 120 <= fHi; n++) {
+            if (n * rpm / 120 < fLo) continue;
+            double e = m.predict(n, rpm) - tr.db(n, rpm);
+            se += e * e;
+            c++;
+        }
+        return Math.sqrt(se / c);
     }
 
     /** the drive's own crank phase, as engine() integrates it, at 256-sample frames */
