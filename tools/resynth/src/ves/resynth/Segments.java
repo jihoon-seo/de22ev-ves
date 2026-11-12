@@ -18,15 +18,17 @@ import java.util.Locale;
  * seg 1.250 3.100 on
  * </pre>
  * Times not covered by a line are excluded. {@link #propose} suggests them from the level and the rpm slope:
- * shifts (rpm falling faster than 100 %/s) are cut out with 0.2 s either side; loud frames (two-class split of
- * the level) that are not falling fast are on-load, quiet frames with falling rpm are off-load (overrun), quiet
- * frames with steady or rising rpm (part load, e.g. a launch hold) are excluded, as are 0.2 s either side of every
- * change between on and off (lift-off, tip-in) and runs shorter than 0.1 s.
+ * shifts (rpm falling faster than 100 %/s) are cut out with 0.2 s either side. Loud frames (two-class split of
+ * the level) with steady or rising rpm are on-load. Frames with falling rpm are off-load (overrun) when they are
+ * at least 2 dB under the median on-load level; quiet frames with steady or rising rpm (part load, e.g. a launch
+ * hold) and loud falling ones are excluded, as are 0.2 s either side of every change between on and off
+ * (lift-off, tip-in), the first and last 0.1 s, and runs shorter than 0.25 s.
  */
 public final class Segments {
     public static final int EXCLUDED = 0, ON = 1, OFF = 2;
     static final String[] NAMES = {"excluded", "on", "off"};
-    static final double SHIFT_SLOPE = -1.0, ON_MIN_SLOPE = -0.5, OFF_MAX_SLOPE = -0.02, GUARD = 0.2, MIN_RUN = 0.1;
+    /** ln rpm per second: shift below SHIFT_SLOPE, falling below FALLING (steady or rising above) */
+    static final double SHIFT_SLOPE = -1.0, FALLING = -0.005, GUARD = 0.2, MIN_RUN = 0.25, EDGE = 0.1, OFF_UNDER = 2;
 
     private final List<double[]> segs = new ArrayList<double[]>(); // {t0, t1, label}
 
@@ -71,11 +73,17 @@ public final class Segments {
         }
         double thr = otsu(lv);
         int[] lab = new int[frames];
+        List<Double> onLev = new ArrayList<Double>();
         for (int k = 0; k < frames; k++) {
-            boolean loud = lev[k] >= thr;
-            if (shift[k] || lev[k] <= -90) lab[k] = EXCLUDED;
-            else if (loud) lab[k] = slope[k] >= ON_MIN_SLOPE ? ON : EXCLUDED;
-            else lab[k] = slope[k] < OFF_MAX_SLOPE ? OFF : EXCLUDED;
+            boolean ok = !shift[k] && lev[k] > -90 && tr.time(k) >= EDGE && tr.time(k) <= tr.tEnd() - EDGE;
+            lab[k] = ok && lev[k] >= thr && slope[k] >= FALLING ? ON : EXCLUDED;
+            if (lab[k] == ON) onLev.add(lev[k]);
+        }
+        java.util.Collections.sort(onLev);
+        double offBelow = onLev.isEmpty() ? thr : onLev.get(onLev.size() / 2) - OFF_UNDER;
+        for (int k = 0; k < frames; k++) {
+            boolean ok = !shift[k] && lev[k] > -90 && tr.time(k) >= EDGE && tr.time(k) <= tr.tEnd() - EDGE;
+            if (ok && lab[k] == EXCLUDED && slope[k] < FALLING && lev[k] < offBelow) lab[k] = OFF;
         }
         int guard = (int) Math.round(GUARD / tr.dt);
         boolean[] cut = new boolean[frames];
