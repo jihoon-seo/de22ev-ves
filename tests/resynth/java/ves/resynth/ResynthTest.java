@@ -622,6 +622,50 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-F6 M0 below the measured rpm: the layer switches under lowBelow and round-trips through a .vesmodel") {
+            void run() throws Exception {
+                Model m = fixtureModel();
+                Model.Layer own = fixtureLayer(0);
+                m.on.low = fixtureLayer(1);
+                m.on.lowBelow = 3000;
+                for (int n = 1; n < 40; n++) {
+                    check(m.on.predict(n, 2000) == m.on.low.predict(n, 2000), "order " + n + " at 2000 rpm not from the low layer");
+                    check(m.on.predict(n, 4000) == own.predict(n, 4000), "order " + n + " at 4000 rpm not from the fit");
+                }
+                File d = tmpDir("f6");
+                try {
+                    File f = new File(d, "m.vesmodel");
+                    m.write(f, "synthetic fixture");
+                    Model b = Model.read(f);
+                    check(b.on.low != null && b.on.lowBelow == 3000, "low layer lost in the file");
+                    for (double rpm : new double[] {800, 2000, 2999, 3000, 5000})
+                        for (int n = 1; n < 40; n++)
+                            near(b.on.predict(n, rpm), m.on.predict(n, rpm), 1e-3, "order " + n + " at " + rpm + " after reading back");
+                } finally {
+                    rmrf(d);
+                }
+            }
+        });
+
+        l.add(new T("RS-F7 below the measured rpm the noise keeps its distance to the orders (no noise-only idle)") {
+            void run() {
+                Model.Layer l = fixtureLayer(0);
+                l.rMin = 3000;
+                l.noiseM = 0; // flat noise, orders falling 4 dB per ln(rpm)
+                for (int b = 0; b < Orders.BANDS; b++) {
+                    double d = (l.noise(b, 1500) - l.noise(b, 3000)) - (l.level(1500) - l.level(3000));
+                    near(d, 0, 1e-9, "band " + b + ": noise moved against the orders by");
+                    near(l.noise(b, 5000) - l.noise(b, 3000), 0, 1e-9, "band " + b + " in range follows m");
+                }
+                Model.Layer low = fixtureLayer(1);
+                low.b = 12;
+                l.low = low;
+                l.lowBelow = 3000;
+                double d = (l.noise(3, 1000) - l.noise(3, 3000)) - (low.level(1000) - low.level(3000));
+                near(d, 0, 1e-9, "with M0 below: noise against M0's level trend");
+            }
+        });
+
         l.add(new T("RS-R1 pack: 42 loops, N * rpm = K * 2646000 (K even), 0.2-2 s, within 1.25M samples and 3 MB") {
             void run() throws Exception {
                 File dir = fixturePack(true);

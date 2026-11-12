@@ -348,28 +348,40 @@ public final class Fitter {
         double predict(double n, double rpm);
     }
 
+    /**
+     * {RMSE, rows, shape RMSE}: the shape RMSE takes out each frame's mean error first (PackVoice brings every
+     * loop to one RMS, so a level offset alone is not heard in a pack)
+     */
     static double[] rmse(Predictor p, Orders.Frames fr, boolean[] use, Options o, double fLo) {
-        double se = 0;
+        double se = 0, shape = 0;
         int c = 0;
         for (int k = 0; k < fr.count(); k++) {
             if (!use[k]) continue;
+            double fs = 0, fs2 = 0;
+            int fc = 0;
             for (int n = 1; n <= fr.maxOrder; n++) {
                 double f = n * fr.rpm[k] / 120;
                 if (f < fLo || f > o.cap || !unmasked(fr, k, n, o.mask)) continue;
                 double v = p.predict(n, fr.rpm[k]);
-                if (Double.isNaN(v)) v = fr.floor == null ? -120 : fr.floor[k][n];
+                if (Double.isNaN(v)) continue; // absent in the model: not synthesized, not scored
                 double e = v - fr.amp[k][n];
-                se += e * e;
-                c++;
+                fs += e;
+                fs2 += e * e;
+                fc++;
             }
+            se += fs2;
+            if (fc > 0) shape += fs2 - fs * fs / fc;
+            c += fc;
         }
-        return new double[] {c > 0 ? Math.sqrt(se / c) : Double.NaN, c};
+        return new double[] {c > 0 ? Math.sqrt(se / c) : Double.NaN, c, c > 0 ? Math.sqrt(Math.max(0, shape) / c) : Double.NaN};
     }
 
     /** the fit of one layer and its gates: in-range RMSE, low-end holdout of M1 and M0 */
     public static final class Report {
         public Model.Layer m1, m0Layer;
         public double inRange, holdM1 = Double.NaN, holdM0 = Double.NaN, split;
+        /** the same with each frame's mean error taken out */
+        public double shapeIn, shapeM1 = Double.NaN, shapeM0 = Double.NaN;
         public int holdRows;
     }
 
@@ -382,11 +394,13 @@ public final class Fitter {
         Report r = new Report();
         final Model.Layer m1 = fit(fr, use, cyl, o);
         r.m1 = m1;
-        r.inRange = rmse(new Predictor() {
+        double[] in = rmse(new Predictor() {
             public double predict(double n, double rpm) {
                 return m1.predict(n, rpm);
             }
-        }, fr, use, o, o.fLo)[0];
+        }, fr, use, o, o.fLo);
+        r.inRange = in[0];
+        r.shapeIn = in[2];
         Baseline b0 = fitM0(fr, use);
         r.m0Layer = b0.toLayer(m1);
         double lo = Math.log(m1.rMin), hi = Math.log(m1.rMax);
@@ -418,6 +432,8 @@ public final class Fitter {
             }, fr, down, o, 40);
             r.holdM1 = e1[0];
             r.holdM0 = e0[0];
+            r.shapeM1 = e1[2];
+            r.shapeM0 = e0[2];
             r.holdRows = (int) e1[1];
         }
         return r;

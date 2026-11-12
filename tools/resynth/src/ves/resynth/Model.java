@@ -45,6 +45,12 @@ public final class Model {
         public double[] halfRel = new double[0];
         public double noiseM;
         public double[] noiseQ = new double[Orders.BANDS], coh = new double[Orders.BANDS];
+        /**
+         * optional: below lowBelow rpm the orders come from this layer instead (M0, the held envelope, where it
+         * extrapolated better than this fit); orders absent here stay absent
+         */
+        public Layer low;
+        public double lowBelow;
 
         public boolean absent(int n) {
             if (n >= 1 && n <= nObs) return absent[n];
@@ -74,6 +80,7 @@ public final class Model {
         public double predict(double n, double rpm) {
             int k = (int) Math.round(n);
             if (absent(k)) return Double.NaN;
+            if (low != null && rpm < lowBelow) return low.predict(k, rpm);
             return sOf(k) + h(k * rpm / 120) + level(rpm);
         }
 
@@ -83,8 +90,20 @@ public final class Model {
             return strongestDb + halfRel[n];
         }
 
-        /** noise PSD dB re 1/Hz in a band at rpm (an unobserved band takes the nearest observed one) */
+        /**
+         * noise PSD dB re 1/Hz in a band at rpm (an unobserved band takes the nearest observed one). Below the
+         * measured rpm the noise follows the orders' level trend from its value at rMin, so the measured balance
+         * of orders and noise carries on down to idle instead of the two extrapolated slopes drifting apart
+         */
         public double noise(int band, double rpm) {
+            if (rMin > 0 && rpm < rMin) {
+                Layer lo = low != null && rpm < lowBelow ? low : this;
+                return noiseAt(band, rMin) + lo.level(rpm) - lo.level(rMin);
+            }
+            return noiseAt(band, rpm);
+        }
+
+        private double noiseAt(int band, double rpm) {
             for (int d = 0; d < Orders.BANDS; d++) {
                 for (int sg = -1; sg <= 1; sg += 2) {
                     int b2 = band + sg * d;
@@ -113,14 +132,19 @@ public final class Model {
         b.append("seed ").append(seed).append('\n');
         for (int n = 1; n < phase.length; n++)
             if (!Double.isNaN(phase[n])) b.append(String.format(Locale.ROOT, "phase %d %.6f %.4f%n", n, phase[n], phaseR[n]));
-        if (on != null) writeLayer(b, "on", on);
-        if (off != null) writeLayer(b, "off", off);
+        for (int i = 0; i < 2; i++) {
+            Layer l = i == 0 ? on : off;
+            if (l == null) continue;
+            writeLayer(b, i == 0 ? "on" : "off", l);
+            if (l.low != null) writeLayer(b, i == 0 ? "on-low" : "off-low", l.low);
+        }
         Files.writeText(f, b.toString());
     }
 
     private static void writeLayer(StringBuilder b, String name, Layer l) {
         b.append("layer ").append(name).append('\n');
         b.append(String.format(Locale.ROOT, "range %.1f %.1f%n", l.rMin, l.rMax));
+        if (l.low != null) b.append(String.format(Locale.ROOT, "below %.1f%n", l.lowBelow));
         b.append(String.format(Locale.ROOT, "level %.6f %.6f %.3f%n", l.a, l.b, l.rRef));
         b.append(String.format(Locale.ROOT, "h %.3f %.3f", l.fLo, l.step));
         for (double v : l.h) b.append(String.format(Locale.ROOT, " %.4f", v));
@@ -168,6 +192,8 @@ public final class Model {
                 else if (k.equals("range")) {
                     cur.rMin = num(p[1]);
                     cur.rMax = num(p[2]);
+                } else if (k.equals("below")) {
+                    cur.lowBelow = num(p[1]);
                 } else if (k.equals("level")) {
                     cur.a = num(p[1]);
                     cur.b = num(p[2]);
@@ -208,6 +234,8 @@ public final class Model {
                 } else if (k.equals("end")) {
                     if ("on".equals(curName)) m.on = cur;
                     else if ("off".equals(curName)) m.off = cur;
+                    else if ("on-low".equals(curName) && m.on != null) m.on.low = cur;
+                    else if ("off-low".equals(curName) && m.off != null) m.off.low = cur;
                     else throw new IOException(f + ": layer " + curName);
                     cur = null;
                 } else throw new IOException(f + ": unknown key " + k);

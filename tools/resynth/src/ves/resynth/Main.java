@@ -19,7 +19,7 @@ public final class Main {
     static final String USAGE = "usage:\n"
             + "  track    <in.wav> <out.track.txt> [cyl=N]\n"
             + "  segments <in.wav> <in.track.txt> <out.segments.txt>\n"
-            + "  fit      <in.wav> <in.track.txt> <in.segments.txt> <out.vesmodel> [cyl=N] [seed=N] [model=m1|m0|auto]\n"
+            + "  fit      <in.wav> <in.track.txt> <in.segments.txt> <out.vesmodel> [cyl=N] [seed=N] [model=auto|m1|m0]\n"
             + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off] [seed=N]\n"
             + "  ab bands <a.wav> <b.wav>\n"
             + "  ab track <in.wav> <in.track.txt> <in.segments.txt> <in.vesmodel> <out-dir> <name> [off=<other.vesmodel>]\n"
@@ -135,12 +135,18 @@ public final class Main {
                 continue;
             }
             Fitter.Report rep = Fitter.report(fr, use, cyl, fo);
+            // M0 is the extrapolation baseline: where it holds out better, it takes over below the measured rpm
             boolean m0 = which.equals("m0") || which.equals("auto") && rep.holdM0 < rep.holdM1;
-            Model.Layer l = m0 ? rep.m0Layer : rep.m1;
+            Model.Layer l = rep.m1;
+            if (m0) {
+                l.low = rep.m0Layer;
+                l.lowBelow = rep.m1.rMin;
+            }
             System.out.println(ln + ": " + c + " frames, rpm " + Math.round(rep.m1.rMin) + ".." + Math.round(rep.m1.rMax)
                     + ", in-range RMSE " + f2(rep.inRange) + " dB, low-end holdout M1 " + f2(rep.holdM1) + " dB, M0 "
-                    + f2(rep.holdM0) + " dB (" + rep.holdRows + " order levels below " + Math.round(rep.split) + " rpm) -> "
-                    + (m0 ? "M0" : "M1"));
+                    + f2(rep.holdM0) + " dB (" + rep.holdRows + " order levels below " + Math.round(rep.split) + " rpm); shape only "
+                    + f2(rep.shapeIn) + " / " + f2(rep.shapeM1) + " / " + f2(rep.shapeM0) + " dB -> "
+                    + (m0 ? "M0 below " + Math.round(rep.m1.rMin) + " rpm, M1 above" : "M1"));
             if (layer == Segments.ON) m.on = l;
             else m.off = l;
             if (layer == Segments.ON) {
