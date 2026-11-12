@@ -6,6 +6,15 @@
 *.jar
 *.zip
 
+# private resynthesis data (tools/resynth): recordings, packs and anything derived from them stay
+# out of git; the tool code is public, its inputs and outputs are not
+*.wav
+pack.txt
+*.vesmodel
+*.segments.txt
+*.track.txt
+/private/
+
 # private signing keys: never commit (keys/author.key.pub is public and tracked)
 *.key
 *.pem
