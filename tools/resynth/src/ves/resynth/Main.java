@@ -20,7 +20,10 @@ public final class Main {
             + "  track    <in.wav> <out.track.txt> [cyl=N]\n"
             + "  segments <in.wav> <in.track.txt> <out.segments.txt>\n"
             + "  fit      <in.wav> <in.track.txt> <in.segments.txt> <out.vesmodel> [cyl=N] [seed=N] [model=m1|m0|auto]\n"
-            + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off] [seed=N]\n";
+            + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off] [seed=N]\n"
+            + "  ab bands <a.wav> <b.wav>\n"
+            + "  ab track <in.wav> <in.track.txt> <in.segments.txt> <in.vesmodel> <out-dir> <name> [off=<other.vesmodel>]\n"
+            + "  demo     <pack-dir> <out-dir> <name> [track=<in.track.txt> segments=<in.segments.txt>]\n";
 
     public static int run(String[] args) {
         try {
@@ -30,6 +33,8 @@ public final class Main {
             if (c.equals("segments")) return segments(args);
             if (c.equals("fit")) return fit(args);
             if (c.equals("render")) return render(args);
+            if (c.equals("ab")) return ab(args);
+            if (c.equals("demo")) return demo(args);
             throw new IllegalArgumentException("unknown command " + c);
         } catch (GitGuard.Refused e) {
             System.err.println(e.getMessage());
@@ -153,6 +158,120 @@ public final class Main {
         }
         if (m.on == null) throw new IOException("no on-load frames to fit");
         m.write(o, "fitted from a private recording; cylinders " + cyl);
+        return 0;
+    }
+
+    /** the 100 ms A/B frames whose centre lies in a segment with this label */
+    static boolean[] frames(Segments sg, int label, int samples) {
+        boolean[] b = new boolean[samples / ThirdOctave.FRAME];
+        for (int k = 0; k < b.length; k++) b[k] = sg.labelAt((k + 0.5) * ThirdOctave.FRAME / (double) PackRenderer.SR) == label;
+        return b;
+    }
+
+    static int ab(String[] a) throws IOException {
+        if (a.length < 2) throw new IllegalArgumentException("ab: bands or track");
+        if (a[1].equals("bands")) {
+            need(a, 4);
+            double[] x = audio(a[2]), y = audio(a[3]);
+            System.out.println("mean 1/3-octave distance " + f2(ThirdOctave.distance(x, y, PackRenderer.SR, null)) + " dB");
+            return 0;
+        }
+        if (!a[1].equals("track")) throw new IllegalArgumentException("ab: bands or track");
+        need(a, 8);
+        File dir = new File(a[6]);
+        GitGuard.check(dir);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
+        String name = a[7];
+        if (!name.matches("[A-Za-z0-9_-]{1,60}")) throw new IllegalArgumentException("ab track: bad name " + name);
+        double[] x = audio(a[2]);
+        Track t = Track.read(new File(a[3]));
+        Segments sg = Segments.read(new File(a[4]));
+        Model m = Model.read(new File(a[5]));
+        String offPath = opt(a, "off", null);
+        Model off = offPath == null ? null : Model.read(new File(offPath));
+        double[] y = TrackSynth.render(m, off, t, sg, x.length, PackRenderer.SR, m.seed);
+        WavIO.write(new File(dir, name + "_orig22k.wav"), x, PackRenderer.SR);
+        WavIO.write(new File(dir, name + "_resynth_track.wav"), y, PackRenderer.SR);
+        double on = ThirdOctave.distance(x, y, PackRenderer.SR, frames(sg, Segments.ON, x.length));
+        double of = ThirdOctave.distance(x, y, PackRenderer.SR, frames(sg, Segments.OFF, x.length));
+        System.out.println("mean 1/3-octave distance: on " + f2(on) + " dB, off " + f2(of) + " dB; wrote " + name
+                + "_orig22k.wav and " + name + "_resynth_track.wav to " + dir);
+        return 0;
+    }
+
+    static ves.core.Pack loadPack(final File dir) throws IOException {
+        try {
+            return ves.core.PackLoader.load(new ves.core.PackLoader.Source() {
+                public byte[] read(String name, int maxBytes) throws IOException {
+                    File f = new File(dir, name);
+                    if (f.length() > maxBytes) throw new IOException(name + " is larger than " + maxBytes + " bytes");
+                    return java.nio.file.Files.readAllBytes(f.toPath());
+                }
+            });
+        } catch (ves.core.PackError e) {
+            throw new IOException("PackLoader rejects " + dir + ": " + e.getMessage());
+        }
+    }
+
+    /** PackVoice (with its output stage) along rpm and load per 256-sample block */
+    static short[] play(ves.core.Pack p, double[] rpm, double[] load, double gain) {
+        ves.core.PackVoice v = new ves.core.PackVoice(PackRenderer.SR);
+        v.setPack(p);
+        int blk = 256;
+        short[] out = new short[rpm.length * blk];
+        ves.core.EngineParams ep = new ves.core.EngineParams();
+        for (int k = 0; k < rpm.length; k++) {
+            ep.rpm = rpm[k];
+            ep.load = load[k];
+            ep.regen = 0;
+            v.render(out, k * blk, blk, ep, gain);
+        }
+        return out;
+    }
+
+    static int demo(String[] a) throws IOException {
+        need(a, 4);
+        File dir = new File(a[2]);
+        GitGuard.check(dir);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
+        String name = a[3];
+        if (!name.matches("[A-Za-z0-9_-]{1,60}")) throw new IllegalArgumentException("demo: bad name " + name);
+        ves.core.Pack p = loadPack(new File(a[1]));
+        double bs = 256.0 / PackRenderer.SR;
+        // 800 -> 7000 -> 800 rpm (6 s each way) on load, the same off load, then 3 s idle at 800
+        int sweep = (int) Math.round(6 / bs), idle = (int) Math.round(3 / bs);
+        int n = 4 * sweep + idle;
+        double[] rpm = new double[n], load = new double[n];
+        for (int k = 0; k < 4 * sweep; k++) {
+            int q = k % (2 * sweep);
+            double u = q < sweep ? q / (double) sweep : 2 - q / (double) sweep;
+            rpm[k] = 800 * Math.pow(7000 / 800.0, u);
+            load[k] = k < 2 * sweep ? 1 : 0;
+        }
+        for (int k = 4 * sweep; k < n; k++) {
+            rpm[k] = 800;
+            load[k] = 1;
+        }
+        WavIO.write16(new File(dir, name + "_demo_sweep.wav"), play(p, rpm, load, 1), PackRenderer.SR);
+        String tp = opt(a, "track", null), sp = opt(a, "segments", null);
+        if (tp != null) {
+            Track t = Track.read(new File(tp));
+            Segments sg = sp == null ? null : Segments.read(new File(sp));
+            int m = (int) (t.tEnd() / bs);
+            double[] r2 = new double[m], l2 = new double[m];
+            double last = 1;
+            for (int k = 0; k < m; k++) {
+                double tt = (k + 0.5) * bs;
+                r2[k] = t.rpmAt(tt);
+                int lab = sg == null ? Segments.ON : sg.labelAt(tt);
+                if (lab == Segments.ON) last = 1;
+                else if (lab == Segments.OFF) last = 0;
+                l2[k] = last;
+            }
+            WavIO.write16(new File(dir, name + "_demo_track.wav"), play(p, r2, l2, 1), PackRenderer.SR);
+        }
+        System.out.println("wrote " + name + "_demo_sweep.wav" + (tp != null ? " and " + name + "_demo_track.wav" : "") + " to " + dir
+                + " (" + p.name + ")");
         return 0;
     }
 

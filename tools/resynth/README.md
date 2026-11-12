@@ -67,6 +67,34 @@ in phase. Noise is shaped per 1/3-octave band in the same DFT, plus the crank-wo
 Each loop peaks at -1 dBFS. The render is seeded and uses StrictMath: two renders are byte-identical. The
 pack folder holds only `pack.txt` and the loops.
 
+## A/B
+
+- `ThirdOctave`: 100 ms frames, power per 1/3-octave band from 100 Hz to 6.3 kHz, distance = mean over frames
+  and bands of the level difference in dB (identical input: 0 dB; a +3 dB shelf: 3 dB).
+- `TrackSynth`: model-direct resynthesis along the recording's own track (its crank phase, the on or off layer
+  as the segments say, the model's noise), for A/B against the recording at 22.05 kHz.
+
+## Command line
+
+Build and run (Git Bash; relative paths, the repo path has spaces):
+
+    find core/src/ves/core tools/resynth/src -name '*.java' > /tmp/rs.txt
+    javac --release 8 -encoding UTF-8 -d build/resynth/classes @/tmp/rs.txt
+    java -cp build/resynth/classes ves.resynth.Main <command> ...
+
+| command | does |
+|---|---|
+| `track <in.wav> <out.track.txt> [cyl=N]` | cycle-frequency track (any rate in, analysed at 22.05 kHz); prints the segments and comb decisions |
+| `segments <in.wav> <track> <out.segments.txt>` | proposes on/off/excluded segments; review and edit the sidecar |
+| `fit <in.wav> <track> <segments> <out.vesmodel> [cyl=N] [seed=N] [model=auto\|m1\|m0]` | fits on and off layers; prints the in-range RMSE and the low-end holdout of M1 and M0 (fit on the upper 60 % of log-rpm, scored below); `auto` keeps M1 unless M0 holds out better |
+| `render <model> <pack-dir> name=<name> [off=<model>] [noise=off] [seed=N]` | writes pack.txt and the 42 loops; `off=` takes the off-load layer from another model |
+| `ab bands <a.wav> <b.wav>` | mean 1/3-octave distance |
+| `ab track <in.wav> <track> <segments> <model> <out-dir> <name> [off=<model>]` | writes `<name>_orig22k.wav` and `<name>_resynth_track.wav`, prints the on-load and off-load distances |
+| `demo <pack-dir> <out-dir> <name> [track=<track> segments=<segments>]` | through PackVoice (with its output stage): `<name>_demo_sweep.wav` (800-7000-800 rpm on load, the same off load, 3 s at 800) and, with a track, `<name>_demo_track.wav` along it |
+
+Every writer refuses a path inside a git worktree (exit 2). Keep the private data in a folder of its own,
+outside any checkout.
+
 ## Tests
 
 `bash tests/resynth/run.sh [filter]` (also part of `tests/run-all.sh`): RS-W1/W2 (WAV, resampler), RS-T1/T2
@@ -76,4 +104,5 @@ derived data tracked), RS-F1..F5 (fit recovery in range and at 800-2000 rpm, gau
 against M0 at 800 rpm, masked orders stay silent, a holdout below the fitted rpm), RS-R1..R9 (a fixture
 pack: exact lengths and limits, PackLoader accepts it, seamless wraps, equal phases, PackVoice at a midpoint
 rpm, nothing above the cap, byte-identical renders, levels against a built-in pack, a 800-7350 rpm sweep),
-RS-P1 (the writer refuses a folder inside a git worktree, exit 2).
+RS-P1/P1b (every writer refuses a folder inside a git worktree, exit 2), RS-A1/A2 (the 1/3-octave distance; the
+fixture model driven along its own track).

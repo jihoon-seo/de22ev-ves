@@ -870,7 +870,93 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-A1 1/3-octave distance: identical input 0 dB, a +3 dB shelf 3 +- 0.2 dB") {
+            void run() {
+                Random r = new Random(41);
+                int n = 3 * SR;
+                double[] a = new double[n];
+                for (int i = 0; i < n; i++)
+                    a[i] = 0.05 * r.nextGaussian() + 0.2 * Math.sin(2 * Math.PI * 440 * i / SR) + 0.1 * Math.sin(2 * Math.PI * 2500 * i / SR);
+                int m = Fft.nextPow2(n);
+                double[] re = new double[m], im = new double[m];
+                System.arraycopy(a, 0, re, 0, n);
+                Fft.fft(re, im, false);
+                double g = Math.pow(10, 3 / 20.0);
+                for (int k = 0; k < m; k++) {
+                    double f = Math.min(k, m - k) * SR / (double) m;
+                    if (f >= 80) {
+                        re[k] *= g;
+                        im[k] *= g;
+                    }
+                }
+                Fft.fft(re, im, true);
+                double[] b = new double[n];
+                for (int i = 0; i < n; i++) b[i] = re[i] / m;
+                double d0 = ThirdOctave.distance(a, a, SR, null), d3 = ThirdOctave.distance(a, b, SR, null);
+                note("identical " + d0 + " dB, shelf " + f3(d3) + " dB");
+                check(d0 == 0, "identical input gives " + d0);
+                near(d3, 3, 0.2, "shelf distance");
+            }
+        });
+
+        l.add(new T("RS-A2 track A/B: the fixture model driven along its own track, mean distance <= 0.5 dB on and off") {
+            void run() {
+                final Model m = fixtureModel();
+                double noiseDb = -60, psd = 10 * Math.log10(2 * Math.pow(10, noiseDb / 10) / SR);
+                for (Model.Layer ly : new Model.Layer[] {m.on, m.off}) {
+                    java.util.Arrays.fill(ly.noiseQ, psd);
+                    ly.noiseM = 0;
+                    java.util.Arrays.fill(ly.coh, 0);
+                }
+                Drive d = launch();
+                Levels lv = new Levels() {
+                    public double db(double n, double rpm, int state) {
+                        return (state == OFF ? m.off : m.on).predict(n, rpm);
+                    }
+                };
+                double[] x = engine(d, lv, new double[0], noiseDb, 51);
+                Track tr = trueTrack(d);
+                Segments sg = new Segments();
+                sg.add(1.7, 3.0, Segments.ON);
+                sg.add(3.5, 6.3, Segments.ON);
+                sg.add(6.9, 9.8, Segments.ON);
+                sg.add(10.3, 14, Segments.OFF);
+                double[] y = TrackSynth.render(m, null, tr, sg, x.length, SR, 99);
+                double on = ThirdOctave.distance(x, y, SR, mask(sg, Segments.ON, x.length));
+                double off = ThirdOctave.distance(x, y, SR, mask(sg, Segments.OFF, x.length));
+                note("mean 1/3-octave distance: on " + f3(on) + " dB, off " + f3(off) + " dB");
+                check(on <= 0.5 && off <= 0.5, "distance on " + on + " off " + off);
+            }
+        });
+
+        l.add(new T("RS-P1b the A/B, demo, track, segments and fit writers refuse a git worktree too (exit 2)") {
+            void run() throws Exception {
+                File root = tmpDir("p1b");
+                try {
+                    File repo = new File(root, "repo");
+                    new File(repo, ".git").mkdirs();
+                    String in = new File(root, "missing.wav").getPath(), o = new File(repo, "out").getPath();
+                    String[][] cmds = {{"ab", "track", in, in, in, in, o, "n"}, {"demo", in, o, "n"}, {"track", in, o + ".track.txt"},
+                            {"segments", in, in, o + ".segments.txt"}, {"fit", in, in, in, o + ".vesmodel"}};
+                    for (String[] c : cmds) {
+                        int rc = Main.run(c);
+                        check(rc == 2, c[0] + (c[0].equals("ab") ? " " + c[1] : "") + ": exit " + rc);
+                    }
+                    check(repo.list().length == 1, "something was written: " + java.util.Arrays.toString(repo.list()));
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
         return l;
+    }
+
+    /** per 100 ms A/B frame: is its centre in a segment with this label */
+    static boolean[] mask(Segments sg, int label, int samples) {
+        boolean[] b = new boolean[samples / ThirdOctave.FRAME];
+        for (int k = 0; k < b.length; k++) b[k] = sg.labelAt((k + 0.5) * ThirdOctave.FRAME / (double) SR) == label;
+        return b;
     }
 
     // ------------------------------------------------------------------ pack fixtures
