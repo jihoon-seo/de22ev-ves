@@ -26,6 +26,13 @@ public final class PackRenderer {
             4900, 5400, 6000, 6615, 7350};
     public static final double CAP = 8500, LOW = 40, PEAK = 0.8913, MIN_RMS = 0.0188, MIN_SECONDS = 0.9;
     /** the crank wobble repeats every WOBBLE cycles, so every loop holds a multiple of it; Bessel sidebands kept */
+    /**
+     * the mean level (dB) of the pack through the car's speaker stage (ves.core.OutputStage: 120 Hz high-pass, +11 dB
+     * on 400-2500 Hz, drive), over 800-6000 rpm on and off load; pack.txt's level line trims the pack to it. The
+     * built-in packs measure -9.9 (v6) to -4.8 dB (v8); recordings with more energy in the lifted band would sound
+     * louder and drive the soft clip harder.
+     */
+    public static final double TARGET_DB = -7;
     static final int WOBBLE = 4, SIDEBANDS = 4;
 
     public static final class Options {
@@ -190,5 +197,50 @@ public final class PackRenderer {
             }
         }
         Files.writeText(new File(dir, "pack.txt"), txt.toString());
+        // the level trim needs the loops as PackVoice plays them: measure the untrimmed pack, then add the line
+        double db = stageLevelDb(load(dir));
+        double trim = Math.max(-24, Math.min(12, Math.round((TARGET_DB - db) * 10) / 10.0));
+        txt.insert(txt.indexOf("aligned yes\n"), String.format(java.util.Locale.ROOT, "level %.1f\n", trim));
+        Files.writeText(new File(dir, "pack.txt"), txt.toString());
+    }
+
+    static ves.core.Pack load(final File dir) throws IOException {
+        try {
+            return ves.core.PackLoader.load(new ves.core.PackLoader.Source() {
+                public byte[] read(String name, int maxBytes) throws IOException {
+                    File f = new File(dir, name);
+                    if (f.length() > maxBytes) throw new IOException(name + " too large");
+                    return java.nio.file.Files.readAllBytes(f.toPath());
+                }
+            });
+        } catch (ves.core.PackError e) {
+            throw new IOException("rendered pack does not load: " + e.getMessage());
+        }
+    }
+
+    /**
+     * the pack's mean level (dB) through the speaker stage's linear part (fed 60 dB down, far below the soft
+     * clip), 1 s per point at 800-6000 rpm, on and off load, as PackVoice renders it (level trim included)
+     */
+    public static double stageLevelDb(ves.core.Pack p) {
+        double sum = 0;
+        int n = 0;
+        for (double load : new double[] { 1, 0 }) {
+            for (int rpm : new int[] { 800, 1200, 1600, 2000, 2500, 3000, 4000, 5000, 6000 }) {
+                ves.core.PackVoice v = new ves.core.PackVoice(SR);
+                v.setPack(p);
+                float[] x = new float[SR];
+                v.renderRaw(x, x.length, rpm, load, 0);
+                ves.core.OutputStage st = new ves.core.OutputStage(SR);
+                double ss = 0;
+                for (int i = 0; i < x.length; i++) {
+                    double y = st.process(x[i] * 0.001) / 0.001;
+                    if (i >= SR / 10) ss += y * y; // past the high-pass's start
+                }
+                sum += 10 * Math.log10(Math.max(ss / (x.length - SR / 10), 1e-20));
+                n++;
+            }
+        }
+        return sum / n;
     }
 }

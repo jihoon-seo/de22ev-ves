@@ -74,6 +74,13 @@ band's measured skirt power), so envelopes stay flat, also through PackVoice's c
 -1 dBFS. The render is seeded and uses StrictMath: two renders are byte-identical. The
 pack folder holds only `pack.txt` and the loops.
 
+PackVoice brings every loop to the same raw RMS, but the car's speaker stage (`ves.core.OutputStage`) lifts
+400-2500 Hz by 11 dB before a soft clip, and recordings can carry much more there than the built-in packs
+(-9.9 to -4.8 dB through the stage's linear part), so an untrimmed pack sounds louder and drives the clip
+harder. `PackRenderer` measures the rendered pack the way
+PackVoice plays it (800-6000 rpm, on and off load) and writes `level <dB>` so that mean is
+`PackRenderer.TARGET_DB` (-7 dB).
+
 ## A/B
 
 - `ThirdOctave`: 100 ms frames, power per 1/3-octave band from 100 Hz to 6.3 kHz, distance = mean over frames

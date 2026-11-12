@@ -697,6 +697,40 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-L1 the pack's level line puts its mean speaker-stage level at PackRenderer.TARGET_DB (+-0.3 dB)") {
+            void run() throws Exception {
+                for (boolean noise : new boolean[] { true, false }) {
+                    File d = fixturePack(noise);
+                    String txt = new String(readAll(new File(d, "pack.txt")), "UTF-8");
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^level (-?[0-9]+\\.[0-9])$").matcher(txt);
+                    check(m.find(), "pack.txt has a level line with one decimal");
+                    ves.core.Pack p = loadPack(d);
+                    // the stage's linear part (high-pass, 400-2500 Hz lift, drive) at a level far below the soft clip
+                    double sum = 0;
+                    int n = 0;
+                    for (double load : new double[] { 1, 0 }) {
+                        for (int rpm : new int[] { 800, 1200, 1600, 2000, 2500, 3000, 4000, 5000, 6000 }) {
+                            ves.core.PackVoice v = new ves.core.PackVoice(22050);
+                            v.setPack(p);
+                            float[] x = new float[22050];
+                            v.renderRaw(x, x.length, rpm, load, 0);
+                            ves.core.OutputStage st = new ves.core.OutputStage(22050);
+                            double ss = 0;
+                            for (int i = 0; i < x.length; i++) {
+                                double y = st.process(x[i] * 0.001) / 0.001;
+                                if (i >= 2205) ss += y * y;
+                            }
+                            sum += 10 * Math.log10(ss / (x.length - 2205));
+                            n++;
+                        }
+                    }
+                    double mean = sum / n;
+                    check(Math.abs(mean - PackRenderer.TARGET_DB) <= 0.3, "noise " + noise + ": mean stage level " + mean
+                            + " dB, target " + PackRenderer.TARGET_DB + ", level " + m.group(1));
+                }
+            }
+        });
+
         l.add(new T("RS-R2 PackLoader.load accepts the pack: aligned, 21 on and 21 off loops, cylinders") {
             void run() throws Exception {
                 ves.core.Pack p = loadPack(fixturePack(true));
@@ -760,6 +794,8 @@ public final class ResynthTest {
                         ves.core.Pack.Loop a = p.on[i], b = p.on[i + 1];
                         double mid = Math.sqrt((double) a.rpm * b.rpm);
                         double[] ga = gains(a), gb = gains(b);
+                        ga[0] *= p.level; // the pack's level trim, as PackVoice.setPack applies it
+                        gb[0] *= p.level;
                         double[] ra = renderAt(p, a.rpm), rb = renderAt(p, b.rpm), rm = renderAt(p, mid);
                         double dip = 20 * Math.log10(rms(rm) / Math.sqrt(0.5 * (rms(ra) * rms(ra) + rms(rb) * rms(rb))));
                         worstDip = Math.max(worstDip, -dip);
