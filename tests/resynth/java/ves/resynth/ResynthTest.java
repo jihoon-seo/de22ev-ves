@@ -888,6 +888,40 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-R10 a strong crank-wobble skirt (0.3) is phase modulation: the sweep's 100 ms level spread stays <= 1.5 dB") {
+            void run() throws Exception {
+                Model m = fixtureModel();
+                for (Model.Layer ly : new Model.Layer[] {m.on, m.off}) java.util.Arrays.fill(ly.coh, 0.3);
+                File root = tmpDir("r10");
+                try {
+                    PackRenderer.Options o = new PackRenderer.Options();
+                    o.noise = false;
+                    PackRenderer.write(new File(root, "p"), "Wobble (resynth)", m, null, o);
+                    ves.core.Pack p = loadPack(new File(root, "p"));
+                    ves.core.PackVoice v = new ves.core.PackVoice(22050);
+                    v.setPack(p);
+                    int total = 10 * 22050;
+                    float[] y = new float[total], blk = new float[16];
+                    for (int i = 0; i < total; i += 16) {
+                        v.renderRaw(blk, 16, 800 * Math.pow(7350 / 800.0, i / (double) total), 1, 0);
+                        System.arraycopy(blk, 0, y, i, Math.min(16, total - i));
+                    }
+                    double lo = 999, hi = -999;
+                    for (int w = 1; w + 1 < total / 2205; w++) {
+                        double ss = 0;
+                        for (int i = w * 2205; i < (w + 1) * 2205; i++) ss += y[i] * y[i];
+                        double dbv = 10 * Math.log10(ss / 2205);
+                        lo = Math.min(lo, dbv);
+                        hi = Math.max(hi, dbv);
+                    }
+                    note("100 ms levels " + f3(lo) + ".." + f3(hi) + " dB");
+                    check(hi - lo <= 1.5, "level spread " + (hi - lo) + " dB");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
         l.add(new T("RS-P1 the pack writer refuses a folder inside a git worktree (exit 2)") {
             void run() throws Exception {
                 File root = tmpDir("p1");

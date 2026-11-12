@@ -6,15 +6,16 @@ import java.util.Random;
 
 /**
  * Renders a {@link Model} into a pack of crank-aligned loops for ves.core.PackVoice ({@code aligned yes}):
- * on and off layers at the {@link #GRID} rpm, 800-7350. Every loop holds K whole engine cycles (K even, so half
- * orders close too) and starts at crank phase 0: N * rpm = K * 2646000 exactly (2646000 = 120 * 22050), about
- * 0.9-1.07 s. Synthesis is additive in the loop-length DFT at 22050 Hz (no decimation): order n on bin K n,
+ * on and off layers at the {@link #GRID} rpm, 800-7350. Every loop holds K whole engine cycles (K a multiple of
+ * 4: even, so half orders close too, and whole periods of the crank wobble) and starts at crank phase 0:
+ * N * rpm = K * 2646000 exactly (2646000 = 120 * 22050), 0.9 s to about 1.4 s. Synthesis is additive in the loop-length DFT at 22050 Hz (no decimation): order n on bin K n,
  * half order n + 1/2 on K n + K/2, so a loop is exactly periodic. Orders below 40 Hz are dropped and nothing
  * goes above 8.5 kHz (PackVoice plays the top loop up to 1.22x faster). Phases per order are the same in every
  * loop and both layers (measured where coherent, else seeded random), so PackVoice's linear crossfade sums
  * neighbours in phase. Noise is shaped per 1/3-octave band in the same DFT (periodic in the loop) with random
- * phases, plus the crank-wobble skirt in the bins beside each order. Each loop peaks at -1 dBFS (PackVoice
- * brings every loop to the same RMS anyway). Seeded and StrictMath-based: two renders are byte-identical.
+ * phases, plus the crank-wobble skirt beside each order: the Bessel sidebands of one phase wobble shared by all
+ * orders, loops and layers, so envelopes stay flat, also through a crossfade. Each loop peaks at -1 dBFS
+ * (PackVoice brings every loop to the same RMS anyway). Seeded and StrictMath-based: two renders are byte-identical.
  */
 public final class PackRenderer {
     private PackRenderer() {
@@ -24,6 +25,8 @@ public final class PackRenderer {
     public static final int[] GRID = {800, 900, 1000, 1125, 1260, 1400, 1575, 1764, 2000, 2250, 2520, 2800, 3150, 3500, 3920, 4410,
             4900, 5400, 6000, 6615, 7350};
     public static final double CAP = 8500, LOW = 40, PEAK = 0.8913, MIN_RMS = 0.0188, MIN_SECONDS = 0.9;
+    /** the crank wobble repeats every WOBBLE cycles, so every loop holds a multiple of it; Bessel sidebands kept */
+    static final int WOBBLE = 4, SIDEBANDS = 4;
 
     public static final class Options {
         public boolean noise = true, skirt = true;
@@ -31,10 +34,10 @@ public final class PackRenderer {
         public int idle = 800;
     }
 
-    /** cycles in the loop at rpm: the smallest even K with N whole and at least MIN_SECONDS long */
+    /** cycles in the loop at rpm: the smallest K, a multiple of WOBBLE, with N whole and at least MIN_SECONDS long */
     public static int cycles(int rpm) {
         int min = (int) Math.ceil(MIN_SECONDS * SR);
-        for (int k = 2; ; k += 2) {
+        for (int k = WOBBLE; ; k += WOBBLE) {
             long p = (long) k * CYCLE;
             if (p % rpm == 0 && p / rpm >= min) return k;
         }
@@ -52,6 +55,19 @@ public final class PackRenderer {
         return p;
     }
 
+    /** Bessel function of the first kind J_m(x), m >= 0, by its power series (|x| small here) */
+    static double besselJ(int m, double x) {
+        double t = 1, s;
+        for (int i = 1; i <= m; i++) t *= x / 2 / i;
+        s = t;
+        for (int k = 1; k < 60; k++) {
+            t *= -(x * x / 4) / (k * (double) (k + m));
+            s += t;
+            if (Math.abs(t) < 1e-17 * Math.abs(s)) break;
+        }
+        return s;
+    }
+
     /** one loop as doubles (before the -1 dBFS normalisation) */
     static double[] synth(Model m, Model.Layer l, int rpm, int layer, Options o) {
         int k = cycles(rpm), n = (int) ((long) k * CYCLE / rpm);
@@ -65,20 +81,25 @@ public final class PackRenderer {
             double d = l.predict(o2, rpm);
             if (!Double.isNaN(d) && o2 * fc >= LOW) strongest = Math.max(strongest, d);
         }
-        int skirtBins = Math.max(1, k / 4);
+        // crank wobble: one sinusoidal phase wobble of WOBBLE cycles, its phase the same in every loop and layer
+        // (every K is a multiple of WOBBLE, so PackVoice's aligned crossfade sees the same wobble in both loops),
+        // applied as true phase modulation: order n plays A cos(2 pi n theta + phi + mu sin(2 pi theta / WOBBLE
+        // + psi)), i.e. Bessel sidebands J_j(mu) every K / WOBBLE bins, with mu from the band's skirt power:
+        // 2 J_1^2 / J_0^2 = kappa for small mu (mu = sqrt(2 ln(1 + kappa))). The envelope stays flat.
+        double psi = randomPhases(m.seed ^ 0x2545F4914F6CDD1DL, 1)[0];
+        int side = k / WOBBLE;
         for (int o2 = (int) Math.ceil(LOW / fc); o2 <= nMax; o2++) {
             double d = l.predict(o2, rpm);
             if (Double.isNaN(d)) continue;
-            double a = Math.pow(10, d / 20);
-            add(re, im, k * o2, a * n / 2, m.phaseOf(o2, ph));
-            double kappa = o.skirt ? l.coh(Orders.band(o2 * fc)) : 0;
-            if (kappa > 0) {
-                double mag = n * Math.sqrt(kappa * a * a / 2 / (2 * skirtBins) / 2);
-                for (int j = 1; j <= skirtBins; j++)
-                    for (int sg = -1; sg <= 1; sg += 2) {
-                        int b = k * o2 + sg * j;
-                        if (b > 0 && b * (double) SR / n <= CAP) add(re, im, b, mag, 2 * Math.PI * noise.nextDouble());
-                    }
+            double a = Math.pow(10, d / 20), phi = m.phaseOf(o2, ph);
+            double kappa = o.skirt ? Math.min(1, l.coh(clampBand(o2 * fc))) : 0;
+            double mu = Math.sqrt(2 * Math.log(1 + kappa));
+            int jMax = mu > 0 ? SIDEBANDS : 0;
+            for (int j = -jMax; j <= jMax; j++) {
+                int b = k * o2 + j * side;
+                if (b <= 0 || b * (double) SR / n > CAP) continue;
+                double bj = besselJ(Math.abs(j), mu) * (j < 0 && (j & 1) != 0 ? -1 : 1);
+                add(re, im, b, Math.abs(bj) * a * n / 2, phi + j * psi + (bj < 0 ? Math.PI : 0));
             }
         }
         for (int o2 = 0; o2 < l.halfRel.length; o2++) {
@@ -93,9 +114,7 @@ public final class PackRenderer {
                 double f = b * df;
                 if (f > CAP) break;
                 if (b % k == 0) continue;
-                int band = Orders.band(f);
-                if (band < 0) band = f < Orders.bandCentre(0) ? 0 : Orders.BANDS - 1;
-                double psd = Math.pow(10, l.noise(band, rpm) / 10);
+                double psd = Math.pow(10, l.noise(clampBand(f), rpm) / 10);
                 add(re, im, b, n * Math.sqrt(psd * df / 2), 2 * Math.PI * noise.nextDouble());
             }
         }
@@ -103,6 +122,12 @@ public final class PackRenderer {
         double[] x = new double[n];
         for (int i = 0; i < n; i++) x[i] = re[i] / n;
         return x;
+    }
+
+    /** the 1/3-octave band of f, the end bands below and above */
+    static int clampBand(double f) {
+        int b = Orders.band(f);
+        return b >= 0 ? b : f < Orders.bandCentre(0) ? 0 : Orders.BANDS - 1;
     }
 
     /** adds magnitude mag at phase ph to bin b and its conjugate */
