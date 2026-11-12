@@ -371,6 +371,33 @@ public final class TestMain {
         return new MapSource(m);
     }
 
+    /** mono 16-bit 22050 Hz WAV of the given samples */
+    static byte[] wavPcm(short[] x) {
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.allocate(44 + 2 * x.length).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        b.put("RIFF".getBytes()).putInt(36 + 2 * x.length).put("WAVE".getBytes());
+        b.put("fmt ".getBytes()).putInt(16).putShort((short) 1).putShort((short) 1).putInt(22050).putInt(44100)
+                .putShort((short) 2).putShort((short) 16);
+        b.put("data".getBytes()).putInt(2 * x.length);
+        for (short v : x) b.putShort(v);
+        return b.array();
+    }
+
+    /**
+     * an aligned loop of k whole cycles at rpm, its length rounded down to a sample (as tools/render's
+     * Grid.loopSamples can): a quiet order-4 tone, the last cycle loud
+     */
+    static short[] markedLoop(int rpm, int k) {
+        double spc = 2646000.0 / rpm; // 120 * 22050 / rpm
+        int len = (int) Math.floor(k * spc);
+        short[] x = new short[len];
+        for (int i = 0; i < len; i++) {
+            double cyc = i / spc;
+            double amp = cyc >= k - 1 ? 12000 : 1000;
+            x[i] = (short) (amp * Math.sin(2 * Math.PI * 4 * cyc));
+        }
+        return x;
+    }
+
     static double rmsOf(PackVoice v, double rpm, double load, double regen) {
         float[] x = new float[SR / 2];
         v.renderRaw(x, x.length, rpm, load, regen);
@@ -2587,6 +2614,42 @@ public final class TestMain {
                 check(c.status().contains(" retry=1"), "status shows the retry: " + c.status());
                 check("소리 채널 재시도 중".equals(StatusLabel.of("state=idle open=0 yield=0 retry=1")), "label");
                 check("공회전".equals(StatusLabel.of("state=idle open=1 yield=0")), "label without retry unchanged");
+            }
+        });
+
+        // G8 aligned loops whose length was rounded down to a sample still play their last whole cycle
+        // (0.2.5 truncated len/spc to whole cycles: 6500 rpm, 43 cycles = 17504.3 samples -> 42 played)
+        l.add(new T("G8_aligned_last_cycle") {
+            void run() throws Exception {
+                int[][] loops = { { 1100, 7 }, { 2000, 9 }, { 6500, 43 } };
+                java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+                StringBuilder t = new StringBuilder("name marked\ncylinders 4\nidle 800\nredline 6500\naligned yes\n");
+                for (int[] lk : loops) {
+                    String f = "m" + lk[0] + ".wav";
+                    m.put(f, wavPcm(markedLoop(lk[0], lk[1])));
+                    t.append("loop ").append(f).append(" rpm=").append(lk[0]).append(" load=on\n");
+                }
+                m.put("pack.txt", t.toString().getBytes());
+                Pack p = PackLoader.load(new MapSource(m));
+                check(p.aligned, "aligned pack");
+                for (int[] lk : loops) {
+                    if (lk[0] == 2000) continue; // a whole number of samples per loop: fine either way
+                    PackVoice v = new PackVoice(SR);
+                    v.setPack(p);
+                    double spc = 2646000.0 / lk[0];
+                    int frames = (int) (3 * lk[1] * spc);
+                    float[] out = new float[frames];
+                    v.renderRaw(out, frames, lk[0], 1, 0);
+                    double peak = 0, quiet = 0;
+                    for (float y : out) peak = Math.max(peak, Math.abs(y));
+                    // the loud last cycle comes round once per loop: about 1/k of the samples near the peak
+                    int loud = 0;
+                    for (float y : out) if (Math.abs(y) > 0.5 * peak) loud++;
+                    double share = loud / (double) frames;
+                    for (int i = 0; i < (int) spc; i++) quiet = Math.max(quiet, Math.abs(out[i]));
+                    check(peak > 5 * quiet, lk[0] + " rpm: the last (loud) cycle is played (peak " + peak + " vs quiet " + quiet + ")");
+                    check(share > 0.3 / lk[1], lk[0] + " rpm: loud share " + share + " (one cycle in " + lk[1] + ")");
+                }
             }
         });
 

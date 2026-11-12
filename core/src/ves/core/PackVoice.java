@@ -159,7 +159,11 @@ public final class PackVoice {
         short[] s = lp.pcm;
         int len = s.length;
         double spc = 120.0 * sr / lp.rpm; // samples per engine cycle in this loop
-        int cycles = Math.max(1, (int) (len / spc + 1e-6));
+        // whole cycles in the loop; a length rounded down by under a sample still holds its last cycle (0.2.5
+        // truncated: 43 cycles at 6500 rpm are 17504.3 samples, so only 42 played and the wrap missed the seam)
+        double k = len / spc;
+        long kr = Math.round(k);
+        int cycles = Math.max(1, (int) ((kr - k) * spc < 1.0 && kr > k - 1e-9 ? kr : Math.floor(k + 1e-6)));
         double scale = amp / 32768.0;
         double c = cyc % cycles;
         for (int i = 0; i < n; i++) {
