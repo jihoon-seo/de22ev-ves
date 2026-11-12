@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.6
+
+- Eight user slots for sound packs (user1 to user8, was 3). The app's sound button opens a list of
+  all 13 choices with each slot's pack name, instead of stepping through them one tap at a time.
+- Fix: in aligned packs, a loop whose length was rounded down to a sample lost its last engine
+  cycle (43 cycles at 6500 rpm are 17504.3 samples: 42 played), so the wrap missed the loop's seam.
+  It now plays every whole cycle.
+- Optional `level <dB>` line in pack.txt (-24 to 12): turns a whole pack down or up after the
+  per-loop level matching, for packs that sound louder or clip on the car's speaker.
+- tools/resynth: a host tool that tracks the engine cycle in a recording, measures its order
+  spectra, fits an order x resonance model, extrapolates it down to idle and renders an aligned
+  pack with a level line. It is for packs you keep on your own car: recordings and everything made
+  from them stay out of git (.gitignore, and the tool refuses to write inside a git worktree).
+
 ## 0.2.5
 
 From the first drives with 0.2.4 (2026-11-06: the sound starts right after install):

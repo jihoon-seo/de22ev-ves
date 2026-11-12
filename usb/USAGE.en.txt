@@ -1,4 +1,4 @@
-Virtual engine sound (HMG-API mod de22ev-ves 0.2.5) - for DE22EV.KOR V039 260902 only, test version
+Virtual engine sound (HMG-API mod de22ev-ves 0.2.6) - for DE22EV.KOR V039 260902 only, test version
 
 What it does
 - Makes an engine-like sound live from speed, accelerator pedal and motor power (read only) and plays
