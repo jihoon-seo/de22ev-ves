@@ -15,7 +15,7 @@ import java.util.Map;
  * response       soft|normal|sport                 default normal
  * behavior       ice|classic: ice (0.2.0 default) sounds whenever Ready (idle in P/N/D, quiet in R, engine
  *                braking when coasting); classic keeps the 0.1.x modes (P/N/R silent, mode decides)  default ice
- * sound          synth|i4t|v6|v8|i6|user1|user2|user3: the procedural synth or a sound pack (built-in, or
+ * sound          synth|i4t|v6|v8|i6|user1..user8: the procedural synth or a sound pack (built-in, or
  *                imported from USB into a user slot); a missing pack falls back to the synth   default synth
  * prompts        duck|pause: under navigation prompts and alerts play at 30 % or stop (calls, ringing and
  *                voice recognition always stop)  default duck
@@ -30,7 +30,7 @@ public final class Settings {
     public static final String[] BEHAVIORS = {"ice", "classic"};
     public static final String[] POPS = {"off", "soft", "strong"};
     public static final String[] PROMPTS = {"duck", "pause"};
-    public static final String[] SOUNDS = {"synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3"};
+    public static final String[] SOUNDS = {"synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
 
     public boolean enabled = false;
     public int volume = 40;

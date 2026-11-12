@@ -54,6 +54,26 @@ public final class PackStoreTest {
                 check(true, "refused " + bad[0] + " -> " + bad[1] + ": " + e.getMessage());
             }
         }
+        // eight user slots (0.2.6)
+        check("my car".equals(st.importPack(sticks, "mycar", "user8")) && "my car".equals(st.load("user8").name),
+                "import into user8 and load it");
+        String all = st.list();
+        int last = -1;
+        boolean ordered = true;
+        for (int i = 1; i <= 8; i++) {
+            int at = all.indexOf("user" + i + " ");
+            ordered &= at > last;
+            last = at;
+        }
+        check(ordered, "list shows user1..user8 in order: " + all.replace('\n', ';'));
+        for (String bad : new String[] { "user0", "user9", "user10" }) {
+            try {
+                st.importPack(sticks, "mycar", bad);
+                check(false, "refused slot " + bad);
+            } catch (PackError e) {
+                check(true, "refused slot " + bad + ": " + e.getMessage());
+            }
+        }
         st.importPack(sticks, "mycar", "user1"); // replace in place
         check("my car".equals(st.load("user1").name) && !new File(data, "packs/.user1.old").exists()
                 && !new File(data, "packs/.user1.new").exists(), "re-import replaces cleanly");

@@ -23,7 +23,7 @@ import ves.core.PackLoader;
  * <li>built-in slots (i4t, v6, v8, i6): entries packs/&lt;slot&gt;/ inside the mod's vesd.jar. HMG-API makes
  * the mod's folder root-only and only the service's own jar readable to its user (system), so a loose
  * packs/ folder never loaded on the car (0.2.0-0.2.4: "v8: empty", the synth played);</li>
- * <li>user slots (user1..3): the service's own data folder, packs/&lt;slot&gt;/ (HMGAPI_DATA), filled by
+ * <li>user slots (user1..8): the service's own data folder, packs/&lt;slot&gt;/ (HMGAPI_DATA), filled by
  * import from the stick's VES/packs/&lt;name&gt;/.</li>
  * </ul>
  * An import validates the pack on the stick with PackLoader, copies pack.txt and its .wav files into a
@@ -47,8 +47,12 @@ final class PackStore {
                 new File(d != null ? d : "/data/hmgapi/run/de22ev-ves/vesd"));
     }
 
+    /** the user slots (the app's Actions.USER_SLOTS; 8 since 0.2.6) */
+    static final String[] USER_SLOTS = { "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
+
     static boolean isUserSlot(String s) {
-        return "user1".equals(s) || "user2".equals(s) || "user3".equals(s);
+        for (String u : USER_SLOTS) if (u.equals(s)) return true;
+        return false;
     }
 
     /** a user slot's folder (null for anything else) */
@@ -128,9 +132,7 @@ final class PackStore {
         StringBuilder b = new StringBuilder();
         List<String> slots = new ArrayList<String>();
         for (String s : BUILT_IN) slots.add(s);
-        slots.add("user1");
-        slots.add("user2");
-        slots.add("user3");
+        for (String s : USER_SLOTS) slots.add(s);
         for (String s : slots) b.append(s).append(' ').append(nameOf(s)).append('\n');
         return b.toString();
     }
@@ -174,7 +176,7 @@ final class PackStore {
 
     /** copies VES/packs/&lt;name&gt; into a user slot; returns the pack's name */
     String importPack(List<String> usbFolders, String name, String slot) throws PackError, IOException {
-        if (!isUserSlot(slot)) throw new PackError("slot must be user1, user2 or user3");
+        if (!isUserSlot(slot)) throw new PackError("slot must be user1 .. user8");
         if (name == null || !name.matches("[A-Za-z0-9_-]{1,40}")) throw new PackError("bad pack folder name");
         File src = null;
         for (String u : usbFolders) {

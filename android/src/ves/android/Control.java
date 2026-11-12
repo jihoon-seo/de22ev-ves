@@ -84,7 +84,7 @@ final class Control implements Runnable {
         return "error unknown command\n";
     }
 
-    /** PACK LIST | PACK USB | PACK IMPORT <user1..3> <folder> */
+    /** PACK LIST | PACK USB | PACK IMPORT <user1..8> <folder> */
     String pack(String[] a) {
         String sub = a.length > 1 ? a[1].toUpperCase() : "";
         try {
@@ -100,7 +100,7 @@ final class Control implements Runnable {
                 if (a[2].equals(d.packSlot)) d.loadPack(a[2]);
                 return "ok\n" + a[2] + " " + name + "\n";
             }
-            return "error usage: PACK LIST | PACK USB | PACK IMPORT <user1..3> <folder>\n";
+            return "error usage: PACK LIST | PACK USB | PACK IMPORT <user1..8> <folder>\n";
         } catch (Throwable e) {
             return "error " + e.getMessage() + "\n";
         }

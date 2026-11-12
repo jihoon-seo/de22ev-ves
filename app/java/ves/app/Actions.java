@@ -25,8 +25,11 @@ final class Actions {
     static final String[] PROFILE_NAMES = { "내연기관 (부드럽게)", "내연기관 (가상 변속)", "EV 미래형" };
     static final String[] MODES = { "idle_regen", "stop_silent_regen", "accel_only", "drive_all" };
     static final String[] MODE_NAMES = { "정차 공회전 + 회생음", "정차 무음 + 회생음", "가속할 때만", "주행 중 항상 (회생음 없음)" };
-    static final String[] SOUNDS = { "synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3" };
-    static final String[] SOUND_NAMES = { "합성음", "4기통 터보", "V6", "V8", "직렬 6기통", "사용자 1", "사용자 2", "사용자 3" };
+    static final String[] SOUNDS = { "synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
+    static final String[] SOUND_NAMES = { "합성음", "4기통 터보", "V6", "V8", "직렬 6기통", "사용자 1", "사용자 2", "사용자 3",
+            "사용자 4", "사용자 5", "사용자 6", "사용자 7", "사용자 8" };
+    /** the user sound-pack slots (vesd's PackStore.USER_SLOTS) */
+    static final String[] USER_SLOTS = { "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
     static final String[] BEHAVIORS = { "ice", "classic" };
     static final String[] BEHAVIOR_NAMES = { "내연기관처럼", "예전 방식" };
     static final String[] PROMPTS = { "duck", "pause" };
@@ -104,6 +107,13 @@ final class Actions {
     }
 
     /** next value of a choice key; returns it */
+    /** sets a choice setting to value */
+    static void set(String key, String value) throws IOException {
+        JSONObject o = load();
+        put(o, key, value);
+        save(o);
+    }
+
     static String cycle(String key, String[] values) throws IOException {
         JSONObject o = load();
         String cur = o.optString(key);

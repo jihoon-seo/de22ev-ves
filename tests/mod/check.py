@@ -65,6 +65,16 @@ for key, arr in (('behavior', 'BEHAVIORS'), ('pops', 'POPS'), ('sound', 'SOUNDS'
     want = re.findall(r'"([^"]*)"', m.group(1)) if m else None
     have = [o['value'] for s2 in st['settings'] if s2['key'] == key for o in s2['options']]
     check('choice %s options == ves.core.Settings.%s' % (key, arr), have == want, '%s vs %s' % (have, want))
+# every app choice list has a name per value (0.2.6: 8 user slots)
+for arr in sorted(set(lists.values())):
+    m = re.search(r'static final String\[\] %s = \{([^}]*)\}' % arr, actions)
+    n = re.search(r'static final String\[\] %s_NAMES = \{([^}]*)\}' % arr, actions)
+    if m and n:
+        check('%s_NAMES has a name per value' % arr, len(re.findall(r'"([^"]*)"', m.group(1))) == len(re.findall(r'"([^"]*)"', n.group(1))), arr)
+# the app's import dialog takes the user slots from Actions, not a list of its own
+main = read('app/java/ves/app/MainActivity.java')
+check('MainActivity has no slot list of its own', '"user1"' not in main and 'new String[3]' not in main, 'hardcoded user slots')
+check('Actions.USER_SLOTS lists user1..user8', re.search(r'USER_SLOTS = \{\s*"user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"\s*\}', actions) is not None, 'USER_SLOTS')
 for s in st['settings']:
     if s['type'] != 'choice':
         continue

@@ -21,7 +21,7 @@ speed, accelerator pedal and motor power, with on/off and volume controls.
   pack: loops at fixed rpm, on-load and overrun, crossfaded and pitch-shifted to the virtual rpm.
   Four packs are built in (inline-4 turbo, V6, cross-plane V8, inline-6), rendered offline by
   `tools/render`, a Java port of [DasEtwas/enginesound](https://github.com/DasEtwas/enginesound)
-  (MIT); the rendered packs are CC0. Own packs can be imported from USB into three user slots (see
+  (MIT); the rendered packs are CC0. Own packs can be imported from USB into eight user slots (see
   [Sound packs](#sound-packs)). The car has no motor-rpm signal, so the rpm is computed from speed
   and load (smoothly, or with virtual gear shifts).
 - **Behaviour.** By default like an ICE car: whenever Ready, it idles in P, N and D (and revs with
@@ -65,7 +65,7 @@ import stay on your car; only use recordings you may use.
 |---|---|
 | `enabled` | off (default) / on |
 | `volume` | 0–100 (default 40) |
-| `sound` | `synth` (default), `i4t`, `v6`, `v8`, `i6`, `user1`–`user3` |
+| `sound` | `synth` (default), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice` (default: sound whenever Ready) / `classic` (the `mode` below) |
 | `prompts` | under prompts and alerts: `duck` (default, 30 %) / `pause`; calls and voice recognition always pause |

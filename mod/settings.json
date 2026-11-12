@@ -29,7 +29,12 @@
         { "value": "i6", "title": "직렬 6기통" },
         { "value": "user1", "title": "사용자 소리 팩 1" },
         { "value": "user2", "title": "사용자 소리 팩 2" },
-        { "value": "user3", "title": "사용자 소리 팩 3" }
+        { "value": "user3", "title": "사용자 소리 팩 3" },
+        { "value": "user4", "title": "사용자 소리 팩 4" },
+        { "value": "user5", "title": "사용자 소리 팩 5" },
+        { "value": "user6", "title": "사용자 소리 팩 6" },
+        { "value": "user7", "title": "사용자 소리 팩 7" },
+        { "value": "user8", "title": "사용자 소리 팩 8" }
       ]
     },
     {

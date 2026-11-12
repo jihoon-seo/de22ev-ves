@@ -70,7 +70,13 @@ public final class MainActivity extends Activity {
         minus.setOnClickListener(volumeBy(-5));
         plus.setOnClickListener(volumeBy(5));
 
-        sound = setting(root, Prefs.SOUND, Actions.SOUNDS);
+        sound = big(root, "…", 0);
+        sound.setTextSize(20);
+        sound.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                chooseSound();
+            }
+        });
         Button imp = big(root, "USB에서 소리 팩 가져오기 (VES/packs)", 0);
         imp.setTextSize(18);
         imp.setOnClickListener(new View.OnClickListener() {
@@ -243,12 +249,31 @@ public final class MainActivity extends Activity {
         }).start();
     }
 
+    /** the engine sound from a list (13 choices: cycling through them took up to 12 taps) */
+    private void chooseSound() {
+        final String[] values = Actions.SOUNDS;
+        String[] labels = new String[values.length];
+        for (int i = 0; i < values.length; i++) {
+            String n = packNames.get(values[i]);
+            labels[i] = Actions.SOUND_NAMES[i] + ("synth".equals(values[i]) ? "" : n == null || n.equals("-") ? " (비어 있음)" : " (" + n + ")");
+        }
+        new AlertDialog.Builder(this).setTitle("엔진 소리").setItems(labels, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface d, final int which) {
+                act(new Op() {
+                    public void run() throws Exception {
+                        Actions.set(Prefs.SOUND, values[which]);
+                    }
+                });
+            }
+        }).show();
+    }
+
     private void chooseSlot(final String[] folders) {
         new AlertDialog.Builder(this).setTitle("가져올 소리 팩").setItems(folders, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface d, final int which) {
-                final String[] slots = { "user1", "user2", "user3" };
-                String[] labels = new String[3];
-                for (int i = 0; i < 3; i++) {
+                final String[] slots = Actions.USER_SLOTS;
+                String[] labels = new String[slots.length];
+                for (int i = 0; i < slots.length; i++) {
                     String n = packNames.get(slots[i]);
                     labels[i] = "사용자 " + (i + 1) + (n == null || n.equals("-") ? " (비어 있음)" : " (" + n + " 덮어씀)");
                 }

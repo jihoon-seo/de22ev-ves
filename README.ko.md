@@ -19,7 +19,7 @@
 - **소리.** 합성음(4기통 엔진 또는 EV 미래형) 또는 소리 팩: 고정 회전수에서 만든 가속/감속 루프를
   가상 회전수에 맞춰 섞고 음높이를 바꿉니다. 4가지 팩(4기통 터보, V6, 크로스플레인 V8, 직렬 6기통)이
   들어 있습니다. [DasEtwas/enginesound](https://github.com/DasEtwas/enginesound)(MIT)를 Java로 옮긴
-  `tools/render`로 PC에서 만든 것이고, 만든 팩은 CC0입니다. 직접 만든 팩을 USB에서 사용자 칸 3개로
+  `tools/render`로 PC에서 만든 것이고, 만든 팩은 CC0입니다. 직접 만든 팩을 USB에서 사용자 칸 8개로
   가져올 수 있습니다([소리 팩](#소리-팩)). 이 차에는 모터 회전수 신호가 없어서 속도와 부하로 회전수를
   계산합니다(부드럽게 또는 가상 변속).
 - **동작.** 기본은 내연기관처럼: Ready면 P/N/D에서 공회전(P/N에서는 페달로 회전수가 오름), R에서는
@@ -59,7 +59,7 @@ loop r2000_off.wav rpm=2000 load=off
 |---|---|
 | `enabled` | 끔(기본) / 켬 |
 | `volume` | 0–100 (기본 40) |
-| `sound` | `synth`(기본), `i4t`, `v6`, `v8`, `i6`, `user1`–`user3` |
+| `sound` | `synth`(기본), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
 | `profile` | 회전수 움직임(합성음은 소리 종류도): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice`(기본: Ready면 항상 소리) / `classic`(아래 `mode`를 따름) |
 | `prompts` | 안내 음성·알림음 때: `duck`(기본, 30%로 계속) / `pause`(멈춤). 전화·음성인식 때는 항상 멈춤 |

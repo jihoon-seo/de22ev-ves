@@ -2186,6 +2186,21 @@ public final class TestMain {
         });
 
         // ---------------- I1-I2 the sound setting: the synth or a pack (falls back to the synth)
+        // SL1 eight user slots (0.2.6): user1..user8 parse, anything else falls back to the synth
+        l.add(new T("SL1_eight_user_slots") {
+            void run() {
+                for (int i = 1; i <= 8; i++) {
+                    java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+                    m.put("sound", "user" + i);
+                    eq(Settings.fromMap(m).sound.equals("user" + i) ? 1 : 0, 1, "user" + i + " parses");
+                }
+                for (String bad : new String[] { "user0", "user9", "user10" }) {
+                    java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+                    m.put("sound", bad);
+                    check("synth".equals(Settings.fromMap(m).sound), bad + " falls back to the synth");
+                }
+            }
+        });
         l.add(new T("I1_pack_or_synth") {
             void run() throws Exception {
                 Settings st = iceSettings(Profile.ICE_SMOOTH, 60);
