@@ -52,10 +52,28 @@ A model is a private text file (`*.vesmodel`).
 `Fitter.fitM0` is the baseline M0: the order envelope over frequency at the lowest measured rpm, held in Hz,
 its level scaled by the overall level slope.
 
+## Pack
+
+`PackRenderer` renders a model into a pack for `ves.core.PackVoice` (`aligned yes`): on and off loops at
+800 (K even), 900, 1000, 1125, 1260, 1400, 1575, 1764, 2000, 2250, 2520, 2800, 3150, 3500, 3920, 4410, 4900,
+5400, 6000, 6615 and 7350 rpm, 42 loops. Every loop holds K whole engine cycles from crank phase 0:
+N * rpm = K * 2646000 exactly (2646000 = 120 * 22050), K even so half orders close too, about 0.9-1.07 s; the
+whole pack is about 0.88M samples (PackLoader allows 1.25M) and 1.8 MB (PackStore takes up to 3 MB). The
+synthesis is additive in the loop-length DFT at 22050 Hz: order n on bin K n, so a loop is exactly periodic
+and wraps without a seam. Orders below 40 Hz are dropped, nothing goes above 8.5 kHz (the top loop plays up
+to 1.22x faster at 9000 rpm). Every order has the same phase in every loop and both layers (the measured one
+where it is coherent, R >= 0.5, else seeded random), so PackVoice's linear crossfade between neighbours adds
+in phase. Noise is shaped per 1/3-octave band in the same DFT, plus the crank-wobble skirt beside each order.
+Each loop peaks at -1 dBFS. The render is seeded and uses StrictMath: two renders are byte-identical. The
+pack folder holds only `pack.txt` and the loops.
+
 ## Tests
 
 `bash tests/resynth/run.sh [filter]` (also part of `tests/run-all.sh`): RS-W1/W2 (WAV, resampler), RS-T1/T2
 (tracker on a synthetic launch with shifts, lift-off and coast; a V8 pattern with a weak order 1), RS-C1
 (order levels within 0.5 dB through a 2500 rpm/s sweep, floor, a half order), RS-S1 (segments), RS-P2 (no
 derived data tracked), RS-F1..F5 (fit recovery in range and at 800-2000 rpm, gauge invariance, the order model
-against M0 at 800 rpm, masked orders stay silent, a holdout below the fitted rpm).
+against M0 at 800 rpm, masked orders stay silent, a holdout below the fitted rpm), RS-R1..R9 (a fixture
+pack: exact lengths and limits, PackLoader accepts it, seamless wraps, equal phases, PackVoice at a midpoint
+rpm, nothing above the cap, byte-identical renders, levels against a built-in pack, a 800-7350 rpm sweep),
+RS-P1 (the writer refuses a folder inside a git worktree, exit 2).

@@ -343,6 +343,86 @@ public final class Fitter {
         return new double[][] {ph, R};
     }
 
+    /** RMSE (dB) of a predictor over the unmasked orders of the selected frames, f in [fLo, cap] */
+    interface Predictor {
+        double predict(double n, double rpm);
+    }
+
+    static double[] rmse(Predictor p, Orders.Frames fr, boolean[] use, Options o, double fLo) {
+        double se = 0;
+        int c = 0;
+        for (int k = 0; k < fr.count(); k++) {
+            if (!use[k]) continue;
+            for (int n = 1; n <= fr.maxOrder; n++) {
+                double f = n * fr.rpm[k] / 120;
+                if (f < fLo || f > o.cap || !unmasked(fr, k, n, o.mask)) continue;
+                double v = p.predict(n, fr.rpm[k]);
+                if (Double.isNaN(v)) v = fr.floor == null ? -120 : fr.floor[k][n];
+                double e = v - fr.amp[k][n];
+                se += e * e;
+                c++;
+            }
+        }
+        return new double[] {c > 0 ? Math.sqrt(se / c) : Double.NaN, c};
+    }
+
+    /** the fit of one layer and its gates: in-range RMSE, low-end holdout of M1 and M0 */
+    public static final class Report {
+        public Model.Layer m1, m0Layer;
+        public double inRange, holdM1 = Double.NaN, holdM0 = Double.NaN, split;
+        public int holdRows;
+    }
+
+    /**
+     * fits the layer (M1) and M0 on all its frames; the holdout fits both on the upper 60 % of the layer's
+     * log-rpm span and scores them on the lower 40 % (orders 40 Hz up to the cap)
+     */
+    public static Report report(Orders.Frames fr, boolean[] use, int cyl, Options o) {
+        use = all(fr, use);
+        Report r = new Report();
+        final Model.Layer m1 = fit(fr, use, cyl, o);
+        r.m1 = m1;
+        r.inRange = rmse(new Predictor() {
+            public double predict(double n, double rpm) {
+                return m1.predict(n, rpm);
+            }
+        }, fr, use, o, o.fLo)[0];
+        Baseline b0 = fitM0(fr, use);
+        r.m0Layer = b0.toLayer(m1);
+        double lo = Math.log(m1.rMin), hi = Math.log(m1.rMax);
+        r.split = Math.exp(lo + 0.4 * (hi - lo));
+        boolean[] up = new boolean[use.length], down = new boolean[use.length];
+        int nu = 0, nd = 0;
+        for (int k = 0; k < use.length; k++) {
+            if (!use[k]) continue;
+            if (fr.rpm[k] >= r.split) {
+                up[k] = true;
+                nu++;
+            } else {
+                down[k] = true;
+                nd++;
+            }
+        }
+        if (nu >= 10 && nd >= 3) {
+            final Model.Layer h1 = fit(fr, up, cyl, o);
+            final Baseline h0 = fitM0(fr, up);
+            double[] e1 = rmse(new Predictor() {
+                public double predict(double n, double rpm) {
+                    return h1.predict(n, rpm);
+                }
+            }, fr, down, o, 40);
+            double[] e0 = rmse(new Predictor() {
+                public double predict(double n, double rpm) {
+                    return h0.predict(n, rpm);
+                }
+            }, fr, down, o, 40);
+            r.holdM1 = e1[0];
+            r.holdM0 = e0[0];
+            r.holdRows = (int) e1[1];
+        }
+        return r;
+    }
+
     // ------------------------------------------------------------------ M0: the held envelope
 
     /** baseline M0: the order envelope over frequency at the lowest measured rpm, held in Hz, level scaled */
@@ -359,6 +439,29 @@ public final class Fitter {
                 e = j >= env.length - 1 ? env[env.length - 1] : env[j] + (env[j + 1] - env[j]) * (p - j);
             }
             return e + g * Math.log(rpm / r0);
+        }
+
+        /** M0 as a model layer (no comb: s = 0, h = the envelope, l = g ln(r / r0)); noise etc. from like */
+        public Model.Layer toLayer(Model.Layer like) {
+            Model.Layer l = new Model.Layer();
+            l.cyl = like.cyl;
+            l.rMin = like.rMin;
+            l.rMax = like.rMax;
+            l.nObs = 0;
+            l.tailRes = new double[] {0};
+            l.fLo = fLo;
+            l.step = STEP;
+            l.h = env.clone();
+            l.a = 0;
+            l.b = g;
+            l.rRef = r0;
+            l.halfRel = like.halfRel;
+            l.noiseM = like.noiseM;
+            l.noiseQ = like.noiseQ.clone();
+            l.coh = like.coh.clone();
+            // noise is relative to like's reference rpm: carry it over
+            for (int b = 0; b < l.noiseQ.length; b++) l.noiseQ[b] += like.noiseM * Math.log(r0 / like.rRef);
+            return l;
         }
     }
 

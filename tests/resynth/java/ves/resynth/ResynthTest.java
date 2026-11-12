@@ -622,7 +622,408 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-R1 pack: 42 loops, N * rpm = K * 2646000 (K even), 0.2-2 s, within 1.25M samples and 3 MB") {
+            void run() throws Exception {
+                File dir = fixturePack(true);
+                ves.core.Pack p = loadPack(dir);
+                int total = 0;
+                long bytes = 0;
+                for (ves.core.Pack.Loop[] layer : new ves.core.Pack.Loop[][] {p.on, p.off}) {
+                    check(layer.length == PackRenderer.GRID.length, "loops per layer " + layer.length);
+                    for (ves.core.Pack.Loop lp : layer) {
+                        int n = lp.pcm.length;
+                        long prod = (long) n * lp.rpm;
+                        check(prod % PackRenderer.CYCLE == 0, lp.rpm + " rpm: N * rpm not a whole number of cycles");
+                        long k = prod / PackRenderer.CYCLE;
+                        check(k % 2 == 0, lp.rpm + " rpm: odd cycle count " + k);
+                        check(n >= 4410 && n <= 44100, lp.rpm + " rpm: length " + n);
+                        check(n >= 0.9 * 22050 && n <= 1.3 * 22050, lp.rpm + " rpm: " + n / 22050.0 + " s");
+                        total += n;
+                    }
+                }
+                File[] files = dir.listFiles();
+                for (File f : files) {
+                    bytes += f.length();
+                    check(f.getName().equals("pack.txt") || f.getName().matches("[a-z0-9_-]{1,60}\\.wav"), "stray file " + f.getName());
+                }
+                check(files.length == 43, "files in the pack folder: " + files.length);
+                note(total + " samples, " + bytes + " bytes");
+                check(total <= ves.core.PackLoader.MAX_SAMPLES, "samples " + total);
+                check(bytes <= 3 * 1024 * 1024, "bytes " + bytes);
+            }
+        });
+
+        l.add(new T("RS-R2 PackLoader.load accepts the pack: aligned, 21 on and 21 off loops, cylinders") {
+            void run() throws Exception {
+                ves.core.Pack p = loadPack(fixturePack(true));
+                check(p.aligned, "aligned");
+                check(p.on.length == 21 && p.off.length == 21, "on " + p.on.length + " off " + p.off.length);
+                check(p.cylinders == 4 && p.idleRpm == 800 && p.redlineRpm == 7350, "cyl/idle/redline " + p.cylinders + "/"
+                        + p.idleRpm + "/" + p.redlineRpm);
+                check(p.on[0].rpm == 800 && p.on[20].rpm == 7350, "rpm range");
+                check(p.name.equals("Fixture (resynth)"), "name " + p.name);
+            }
+        });
+
+        l.add(new T("RS-R3 every loop wraps without a jump: |end - start| <= 1.2 x the largest in-loop step") {
+            void run() throws Exception {
+                ves.core.Pack p = loadPack(fixturePack(true));
+                double worst = 0;
+                for (ves.core.Pack.Loop[] layer : new ves.core.Pack.Loop[][] {p.on, p.off})
+                    for (ves.core.Pack.Loop lp : layer) {
+                        short[] s = lp.pcm;
+                        int step = 0;
+                        for (int i = 1; i < s.length; i++) step = Math.max(step, Math.abs(s[i] - s[i - 1]));
+                        double r = Math.abs(s[0] - s[s.length - 1]) / (double) step;
+                        worst = Math.max(worst, r);
+                    }
+                note("largest wrap jump / largest in-loop step " + f3(worst));
+                check(worst <= 1.2, "wrap jump ratio " + worst);
+            }
+        });
+
+        l.add(new T("RS-R4 order phases are the same in every loop and both layers (within 2 degrees)") {
+            void run() throws Exception {
+                ves.core.Pack p = loadPack(fixturePack(true));
+                double worst = 0;
+                int checked = 0;
+                double[] ref = new double[2000];
+                java.util.Arrays.fill(ref, Double.NaN);
+                for (ves.core.Pack.Loop[] layer : new ves.core.Pack.Loop[][] {p.on, p.off})
+                    for (ves.core.Pack.Loop lp : layer) {
+                        double[][] sp = loopOrders(lp);
+                        double top = 0;
+                        for (int n = 1; n < sp[0].length; n++) top = Math.max(top, sp[0][n]);
+                        for (int n = 1; n < sp[0].length; n++) {
+                            if (sp[0][n] < top * 0.01) continue; // orders within 40 dB of the strongest
+                            if (Double.isNaN(ref[n])) ref[n] = sp[1][n];
+                            double d = Math.abs(Math.IEEEremainder(sp[1][n] - ref[n], 2 * Math.PI));
+                            worst = Math.max(worst, Math.toDegrees(d));
+                            checked++;
+                        }
+                    }
+                note(checked + " order phases, worst " + f3(worst) + " degrees");
+                check(worst <= 2, "phase differs by " + worst + " degrees");
+            }
+        });
+
+        l.add(new T("RS-R5 PackVoice at a geometric midpoint: top 20 orders interpolate within 0.5 dB, RMS dip <= 1 dB (<= 3 with noise)") {
+            void run() throws Exception {
+                for (boolean noise : new boolean[] {false, true}) {
+                    ves.core.Pack p = loadPack(fixturePack(noise));
+                    double worstOrder = 0, worstDip = 0;
+                    for (int i : new int[] {0, 7, 14, 19}) {
+                        ves.core.Pack.Loop a = p.on[i], b = p.on[i + 1];
+                        double mid = Math.sqrt((double) a.rpm * b.rpm);
+                        double[] ga = gains(a), gb = gains(b);
+                        double[] ra = renderAt(p, a.rpm), rb = renderAt(p, b.rpm), rm = renderAt(p, mid);
+                        double dip = 20 * Math.log10(rms(rm) / Math.sqrt(0.5 * (rms(ra) * rms(ra) + rms(rb) * rms(rb))));
+                        worstDip = Math.max(worstDip, -dip);
+                        if (!noise) {
+                            double[][] sa = loopOrders(a), sb = loopOrders(b);
+                            double[] meas = constantOrders(rm, mid);
+                            int no = Math.min(Math.min(sa[0].length, sb[0].length), meas.length);
+                            double[] expect = new double[no];
+                            for (int n = 1; n < no; n++) {
+                                double re = 0.5 * (ga[0] * sa[0][n] * Math.cos(sa[1][n]) + gb[0] * sb[0][n] * Math.cos(sb[1][n]));
+                                double im = 0.5 * (ga[0] * sa[0][n] * Math.sin(sa[1][n]) + gb[0] * sb[0][n] * Math.sin(sb[1][n]));
+                                expect[n] = Math.hypot(re, im);
+                            }
+                            Integer[] idx = new Integer[no - 1];
+                            for (int n = 1; n < no; n++) idx[n - 1] = n;
+                            final double[] ex = expect;
+                            java.util.Arrays.sort(idx, new java.util.Comparator<Integer>() {
+                                public int compare(Integer x, Integer y) {
+                                    return Double.compare(ex[y], ex[x]);
+                                }
+                            });
+                            for (int q = 0; q < 20; q++) {
+                                int n = idx[q];
+                                worstOrder = Math.max(worstOrder, Math.abs(20 * Math.log10(meas[n] / expect[n])));
+                            }
+                        }
+                    }
+                    note((noise ? "with noise" : "harmonic only") + ": worst order error " + f3(worstOrder) + " dB, worst RMS dip "
+                            + f3(worstDip) + " dB");
+                    if (!noise) check(worstOrder <= 0.5, "order interpolation off by " + worstOrder + " dB");
+                    check(worstDip <= (noise ? 3 : 1), "RMS dip " + worstDip + " dB");
+                }
+            }
+        });
+
+        l.add(new T("RS-R6 nothing above the cap (8.5 kHz) above -60 dBFS in any loop") {
+            void run() throws Exception {
+                ves.core.Pack p = loadPack(fixturePack(true));
+                double worst = -999;
+                for (ves.core.Pack.Loop[] layer : new ves.core.Pack.Loop[][] {p.on, p.off})
+                    for (ves.core.Pack.Loop lp : layer) {
+                        int n = lp.pcm.length;
+                        double[] re = new double[n], im = new double[n];
+                        for (int i = 0; i < n; i++) re[i] = lp.pcm[i] / 32768.0;
+                        Fft.dft(re, im, false);
+                        for (int k = (int) Math.ceil(PackRenderer.CAP * n / 22050.0) + 1; k <= n / 2; k++)
+                            worst = Math.max(worst, 20 * Math.log10(2 * Math.hypot(re[k], im[k]) / n + 1e-30));
+                    }
+                note("highest bin above the cap " + f3(worst) + " dBFS");
+                check(worst < -60, "content above the cap at " + worst + " dBFS");
+            }
+        });
+
+        l.add(new T("RS-R7 two renders are byte-identical") {
+            void run() throws Exception {
+                File a = tmpDir("r7a"), b = tmpDir("r7b");
+                try {
+                    Model m = fixtureModel();
+                    PackRenderer.write(new File(a, "p"), "Fixture (resynth)", m, null, new PackRenderer.Options());
+                    PackRenderer.write(new File(b, "p"), "Fixture (resynth)", m, null, new PackRenderer.Options());
+                    File[] fa = new File(a, "p").listFiles();
+                    check(fa.length == 43, "files " + fa.length);
+                    for (File f : fa)
+                        check(java.util.Arrays.equals(readAll(f), readAll(new File(new File(b, "p"), f.getName()))), f.getName() + " differs");
+                } finally {
+                    rmrf(a);
+                    rmrf(b);
+                }
+            }
+        });
+
+        l.add(new T("RS-R8 loop levels and crest factor within a built-in pack's + 1 dB") {
+            void run() throws Exception {
+                String bp = System.getProperty("resynth.builtin");
+                File bd = bp == null ? null : new File(bp);
+                if (bd == null || !new File(bd, "pack.txt").isFile()) {
+                    note("SKIP: no built-in pack rendered (" + bp + ")");
+                    return;
+                }
+                double[] mine = levels(loadPack(fixturePack(true))), theirs = levels(loadPack(bd));
+                note("resynth: RMS " + f3(mine[0]) + ".." + f3(mine[1]) + " dBFS, crest up to " + f3(mine[2]) + " dB; built-in: RMS "
+                        + f3(theirs[0]) + ".." + f3(theirs[1]) + " dBFS, crest up to " + f3(theirs[2]) + " dB");
+                check(mine[2] <= theirs[2] + 1, "crest " + mine[2] + " above built-in " + theirs[2] + " + 1 dB");
+                check(mine[0] >= theirs[0] - 1, "quietest loop " + mine[0] + " below built-in " + theirs[0] + " - 1 dB");
+                check(mine[1] <= -1, "loudest loop RMS " + mine[1]);
+            }
+        });
+
+        l.add(new T("RS-R9 10 s 800-7350 rpm sweep through PackVoice: steps <= 1.3 x the steepest loop, 100 ms level spread <= 1.5 dB") {
+            void run() throws Exception {
+                ves.core.Pack p = loadPack(fixturePack(true));
+                double steep = 0;
+                double[] g = new ves.core.PackVoiceProbe().gains(p.on);
+                for (int k = 0; k < p.on.length; k++) {
+                    short[] s = p.on[k].pcm;
+                    int st = 0;
+                    for (int i = 1; i < s.length; i++) st = Math.max(st, Math.abs(s[i] - s[i - 1]));
+                    st = Math.max(st, Math.abs(s[0] - s[s.length - 1]));
+                    steep = Math.max(steep, g[k] * st / 32768.0);
+                }
+                ves.core.PackVoice v = new ves.core.PackVoice(22050);
+                v.setPack(p);
+                int total = 10 * 22050;
+                float[] y = new float[total];
+                float[] blk = new float[16];
+                for (int i = 0; i < total; i += 16) {
+                    double rpm = 800 * Math.pow(7350 / 800.0, i / (double) total);
+                    v.renderRaw(blk, 16, rpm, 1, 0);
+                    System.arraycopy(blk, 0, y, i, Math.min(16, total - i));
+                }
+                double maxStep = 0;
+                for (int i = 1; i < total; i++) maxStep = Math.max(maxStep, Math.abs(y[i] - y[i - 1]));
+                int win = 2205;
+                double lo = 999, hi = -999;
+                for (int w = 1; w + 1 < total / win; w++) { // skip the first window (start-up)
+                    double ss = 0;
+                    for (int i = w * win; i < (w + 1) * win; i++) ss += y[i] * y[i];
+                    double dbv = 10 * Math.log10(ss / win);
+                    lo = Math.min(lo, dbv);
+                    hi = Math.max(hi, dbv);
+                }
+                note("max step " + f3(maxStep) + " vs steepest loop " + f3(steep) + " (x" + f3(maxStep / steep) + "), 100 ms levels "
+                        + f3(lo) + ".." + f3(hi) + " dB");
+                check(maxStep <= 1.3 * steep, "step " + maxStep + " > 1.3 x " + steep);
+                check(hi - lo <= 1.5, "level spread " + (hi - lo) + " dB");
+            }
+        });
+
+        l.add(new T("RS-P1 the pack writer refuses a folder inside a git worktree (exit 2)") {
+            void run() throws Exception {
+                File root = tmpDir("p1");
+                try {
+                    File model = new File(root, "m.vesmodel");
+                    fixtureModel().write(model, "synthetic fixture");
+                    for (boolean asFile : new boolean[] {false, true}) {
+                        File repo = new File(root, asFile ? "wt" : "repo");
+                        repo.mkdirs();
+                        File git = new File(repo, ".git");
+                        if (asFile) Files.writeText(git, "gitdir: elsewhere\n");
+                        else git.mkdirs();
+                        File out = new File(repo, "deep/pack");
+                        int rc = Main.run(new String[] {"render", model.getPath(), out.getPath(), "name=Fixture"});
+                        check(rc == 2, (asFile ? ".git file" : ".git folder") + ": exit " + rc);
+                        check(!out.exists(), "wrote into " + out);
+                    }
+                    File ok = new File(root, "free/pack");
+                    int rc = Main.run(new String[] {"render", model.getPath(), ok.getPath(), "name=Fixture"});
+                    check(rc == 0 && new File(ok, "pack.txt").isFile(), "outside git: exit " + rc);
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
         return l;
+    }
+
+    // ------------------------------------------------------------------ pack fixtures
+
+    /** a synthetic 4-cylinder model: comb tail, two resonances, noise 30 dB under the orders, a small skirt */
+    static Model fixtureModel() {
+        Model m = new Model();
+        m.cyl = 4;
+        m.seed = 7;
+        m.on = fixtureLayer(0);
+        m.off = fixtureLayer(1);
+        return m;
+    }
+
+    static Model.Layer fixtureLayer(int off) {
+        Model.Layer l = new Model.Layer();
+        l.cyl = 4;
+        l.rMin = 3000;
+        l.rMax = 7000;
+        l.rRef = 4500;
+        l.a = off == 1 ? -32 : -22;
+        l.b = 4;
+        l.nObs = 0;
+        l.tailA = 0;
+        l.tailB = off == 1 ? -9 : -6;
+        l.tailRes = new double[] {6, -6, -2, -6};
+        l.fLo = 0;
+        l.step = 25;
+        l.h = new double[341];
+        for (int j = 0; j < l.h.length; j++) l.h[j] = Truth.h(Math.max(25, j * 25));
+        for (int b = 0; b < Orders.BANDS; b++) {
+            l.noiseQ[b] = -95 - 0.5 * b - 10 * off;
+            l.coh[b] = 0.02;
+        }
+        l.noiseM = 6;
+        return l;
+    }
+
+    static final java.util.Map<Boolean, File> PACKS = new java.util.HashMap<Boolean, File>();
+
+    /** the fixture model rendered once per run (with or without noise), in a temp folder */
+    static File fixturePack(boolean noise) throws Exception {
+        File d = PACKS.get(noise);
+        if (d != null) return d;
+        File root = tmpDir("pack" + noise);
+        root.deleteOnExit();
+        d = new File(root, "fixture");
+        PackRenderer.Options o = new PackRenderer.Options();
+        o.noise = noise;
+        PackRenderer.write(d, "Fixture (resynth)", fixtureModel(), null, o);
+        PACKS.put(noise, d);
+        return d;
+    }
+
+    static byte[] readAll(File f) throws IOException {
+        java.io.InputStream in = new java.io.FileInputStream(f);
+        try {
+            ByteArrayOutputStream o = new ByteArrayOutputStream();
+            byte[] b = new byte[65536];
+            int r;
+            while ((r = in.read(b)) > 0) o.write(b, 0, r);
+            return o.toByteArray();
+        } finally {
+            in.close();
+        }
+    }
+
+    static ves.core.Pack loadPack(final File dir) throws Exception {
+        return ves.core.PackLoader.load(new ves.core.PackLoader.Source() {
+            public byte[] read(String name, int maxBytes) throws IOException {
+                File f = new File(dir, name);
+                if (f.length() > maxBytes) throw new IOException(name + " too large");
+                return readAll(f);
+            }
+        });
+    }
+
+    /** {amplitude[], phase[]} of whole orders in an aligned loop (K cycles: order n on bin K n) */
+    static double[][] loopOrders(ves.core.Pack.Loop lp) {
+        int n = lp.pcm.length;
+        int k = (int) ((long) n * lp.rpm / PackRenderer.CYCLE);
+        double[] re = new double[n], im = new double[n];
+        for (int i = 0; i < n; i++) re[i] = lp.pcm[i] / 32768.0;
+        Fft.dft(re, im, false);
+        int orders = (n / 2 - 1) / k;
+        double[][] r = new double[2][orders + 1];
+        for (int o = 1; o <= orders; o++) {
+            r[0][o] = 2 * Math.hypot(re[k * o], im[k * o]) / n;
+            r[1][o] = Math.atan2(im[k * o], re[k * o]);
+        }
+        return r;
+    }
+
+    /** PackVoice's level-matching gain of one loop */
+    static double[] gains(ves.core.Pack.Loop lp) {
+        return new ves.core.PackVoiceProbe().gains(new ves.core.Pack.Loop[] {lp});
+    }
+
+    /** 2 s of PackVoice on load at a constant rpm (the first 0.5 s dropped) */
+    static double[] renderAt(ves.core.Pack p, double rpm) {
+        ves.core.PackVoice v = new ves.core.PackVoice(22050);
+        v.setPack(p);
+        int total = 2 * 22050;
+        float[] y = new float[total];
+        v.renderRaw(y, total, rpm, 1, 0);
+        double[] d = new double[total - 11025];
+        for (int i = 0; i < d.length; i++) d[i] = y[11025 + i];
+        return d;
+    }
+
+    static double rms(double[] x) {
+        double s = 0;
+        for (double v : x) s += v * v;
+        return Math.sqrt(s / x.length);
+    }
+
+    /** mean order amplitudes of a constant-rpm signal (computed order tracking with a constant track) */
+    static double[] constantOrders(double[] x, double rpm) {
+        double fc = rpm / 120;
+        int frames = (x.length - 1) / 256 + 1;
+        double[] f = new double[frames];
+        java.util.Arrays.fill(f, fc);
+        Orders.Frames fr = Orders.analyse(x, 22050, Track.fromFc(0, 256 / 22050.0, f), 10000);
+        double[] a = new double[fr.maxOrder + 1];
+        for (int n = 1; n <= fr.maxOrder; n++) {
+            double s = 0;
+            int c = 0;
+            for (int k = 0; k < fr.count(); k++)
+                if (!Float.isNaN(fr.amp[k][n])) {
+                    s += Math.pow(10, fr.amp[k][n] / 20);
+                    c++;
+                }
+            a[n] = c > 0 ? s / c : 0;
+        }
+        return a;
+    }
+
+    /** {lowest loop RMS dBFS, highest loop RMS dBFS, highest crest factor dB} */
+    static double[] levels(ves.core.Pack p) {
+        double lo = 999, hi = -999, crest = 0;
+        for (ves.core.Pack.Loop[] layer : new ves.core.Pack.Loop[][] {p.on, p.off})
+            for (ves.core.Pack.Loop lp : layer) {
+                double ss = 0, pk = 0;
+                for (short v : lp.pcm) {
+                    ss += (double) v * v;
+                    pk = Math.max(pk, Math.abs((double) v));
+                }
+                double r = Math.sqrt(ss / lp.pcm.length) / 32768;
+                lo = Math.min(lo, 20 * Math.log10(r));
+                hi = Math.max(hi, 20 * Math.log10(r));
+                crest = Math.max(crest, 20 * Math.log10(pk / 32768 / r));
+            }
+        return new double[] {lo, hi, crest};
     }
 
     /** a known order x resonance x level truth for the fit tests (dB re amplitude 1) */
