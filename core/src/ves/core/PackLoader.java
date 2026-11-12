@@ -17,6 +17,7 @@ import java.util.List;
  * idle   800
  * redline 6500
  * aligned yes          (optional: loops start at the same crank angle, whole cycles; see Pack.aligned)
+ * level -4.5           (optional: level trim in dB, -24..12, at most 2 decimals; see Pack.level)
  * loop v8_0800_on.wav rpm=800 load=on [start=0] [end=17640]
  * loop v8_0800_off.wav rpm=800 load=off
  * </pre>
@@ -55,6 +56,7 @@ public final class PackLoader {
         String name = null;
         int cyl = 4, idle = 800, redline = 6500;
         boolean aligned = false;
+        double level = 1;
         List<Pack.Loop> on = new ArrayList<Pack.Loop>(), off = new ArrayList<Pack.Loop>();
         int lineNo = 0, total = 0;
         for (String raw : text.split("\n")) {
@@ -68,6 +70,7 @@ public final class PackLoader {
             else if (k.equals("idle")) idle = num(f, 1, 300, 2000, lineNo);
             else if (k.equals("redline")) redline = num(f, 1, 2000, 12000, lineNo);
             else if (k.equals("aligned")) aligned = f.length > 1 && f[1].equals("yes");
+            else if (k.equals("level")) level = levelDb(f, lineNo);
             else if (k.equals("loop")) {
                 if (on.size() + off.size() >= MAX_LOOPS) throw new PackError("more than " + MAX_LOOPS + " loops");
                 if (f.length < 2 || !f[1].matches("[a-z0-9_-]{1,60}\\.wav")) throw new PackError("line " + lineNo + ": bad file name");
@@ -100,7 +103,7 @@ public final class PackLoader {
         if (a.length < 3) throw new PackError("needs at least 3 on-load loops");
         if (a[0].rpm > 1200 || a[a.length - 1].rpm < 4000) throw new PackError("on-load loops must reach from <=1200 to >=4000 rpm");
         if (b.length == 1) throw new PackError("needs 0 or at least 2 off-load loops");
-        return new Pack(name, cyl, idle, redline, aligned, a, b.length == 0 ? a : b);
+        return new Pack(name, cyl, idle, redline, aligned, level, a, b.length == 0 ? a : b);
     }
 
     private static Pack.Loop[] sorted(List<Pack.Loop> l) {
@@ -121,6 +124,15 @@ public final class PackLoader {
     private static int num(String[] f, int i, int lo, int hi, int line) throws PackError {
         if (f.length <= i) throw new PackError("line " + line + ": missing value");
         return parseInt(f[i], lo, hi, line);
+    }
+
+    /** "level <dB>": -24..12 dB, plain decimal (no exponent, NaN or infinity), as a gain */
+    private static double levelDb(String[] f, int line) throws PackError {
+        if (f.length != 2) throw new PackError("line " + line + ": level takes one value in dB");
+        if (!f[1].matches("[-+]?[0-9]{1,2}(\\.[0-9]{1,2})?")) throw new PackError("line " + line + ": not a level in dB: " + f[1]);
+        double db = Double.parseDouble(f[1]);
+        if (db < -24 || db > 12) throw new PackError("line " + line + ": level " + f[1] + " out of range (-24..12 dB)");
+        return Math.pow(10, db / 20);
     }
 
     private static int parseInt(String v, int lo, int hi, int line) throws PackError {

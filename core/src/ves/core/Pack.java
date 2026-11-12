@@ -24,13 +24,20 @@ public final class Pack {
      * constant-power crossfade.
      */
     public final boolean aligned;
+    /**
+     * the pack's level trim (pack.txt "level <dB>", -24..12; 1 without one): PackVoice multiplies every loop's
+     * level-matching gain by it. Loops are matched on raw RMS, but the output stage lifts 400-2500 Hz by 11 dB,
+     * so a pack with its energy there (resynthesized recordings) sounds louder and drives the soft clip harder.
+     */
+    public final double level;
     /** on-load loops by rising rpm */
     public final Loop[] on;
     /** off-load (overrun) loops by rising rpm; the same array as on when the pack has none */
     public final Loop[] off;
 
-    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, Loop[] on, Loop[] off) {
+    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, double level, Loop[] on, Loop[] off) {
         this.aligned = aligned;
+        this.level = level;
         this.name = name;
         this.cylinders = cylinders;
         this.idleRpm = idleRpm;

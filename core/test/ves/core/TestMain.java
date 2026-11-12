@@ -2634,6 +2634,50 @@ public final class TestMain {
 
         // G8 aligned loops whose length was rounded down to a sample still play their last whole cycle
         // (0.2.5 truncated len/spc to whole cycles: 6500 rpm, 43 cycles = 17504.3 samples -> 42 played)
+        // PL1 pack level (0.2.6): "level <dB>" in pack.txt scales every loop after level matching; packs whose
+        // energy sits in the speaker's 400-2500 Hz lift (resynthesized ones) otherwise drive the soft clip hard
+        l.add(new T("PL1_pack_level") {
+            Pack withLevel(String line) throws PackError {
+                java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+                StringBuilder t = new StringBuilder("name lv\ncylinders 4\nidle 800\nredline 6500\naligned yes\n");
+                if (line != null) t.append(line).append('\n');
+                for (int[] lk : new int[][] { { 1100, 7 }, { 2000, 9 }, { 6500, 43 } }) {
+                    String f = "m" + lk[0] + ".wav";
+                    m.put(f, wavPcm(markedLoop(lk[0], lk[1])));
+                    t.append("loop ").append(f).append(" rpm=").append(lk[0]).append(" load=on\n");
+                }
+                m.put("pack.txt", t.toString().getBytes());
+                return PackLoader.load(new MapSource(m));
+            }
+
+            double rms(Pack p) {
+                PackVoice v = new PackVoice(SR);
+                v.setPack(p);
+                float[] out = new float[22050];
+                v.renderRaw(out, out.length, 2000, 1, 0);
+                double ss = 0;
+                for (float y : out) ss += (double) y * y;
+                return Math.sqrt(ss / out.length);
+            }
+
+            void run() throws Exception {
+                Pack none = withLevel(null), m6 = withLevel("level -6"), z = withLevel("level 0"), p35 = withLevel("level 3.5");
+                check(none.level == 1.0, "no level line: 1.0 (" + none.level + ")");
+                double r0 = rms(none);
+                check(Math.abs(rms(m6) / r0 - Math.pow(10, -6 / 20.0)) < 0.002, "level -6: RMS x 0.501 (" + rms(m6) / r0 + ")");
+                check(rms(z) == r0, "level 0: unchanged");
+                check(Math.abs(rms(p35) / r0 - Math.pow(10, 3.5 / 20.0)) < 0.002, "level 3.5: RMS x 1.496 (" + rms(p35) / r0 + ")");
+                for (String bad : new String[] { "level", "level x", "level -24.5", "level 12.5", "level 1e1", "level NaN", "level 3 4" }) {
+                    try {
+                        withLevel(bad);
+                        check(false, "refused: " + bad);
+                    } catch (PackError e) {
+                        check(true, "refused: " + bad + " (" + e.getMessage() + ")");
+                    }
+                }
+                check(withLevel("level -24").level > 0 && withLevel("level 12").level > 3.9, "the range ends -24 and 12 load");
+            }
+        });
         l.add(new T("G8_aligned_last_cycle") {
             void run() throws Exception {
                 int[][] loops = { { 1100, 7 }, { 2000, 9 }, { 6500, 43 } };

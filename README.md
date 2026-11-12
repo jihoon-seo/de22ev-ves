@@ -55,7 +55,9 @@ loop r2000_off.wav rpm=2000 load=off
 
 At least 3 on-load loops reaching from at most 1200 to at least 4000 rpm; off-load (overrun) loops
 are optional. Loops are 0.2–2 s, at most 64 of them and 2.5 MB of audio; file names
-`[a-z0-9_-].wav`. Put the folder under `VES/packs/` on the USB stick and use "USB에서 소리 팩
+`[a-z0-9_-].wav`. Each loop is brought to the same level; an optional `level -4.5` line (dB,
+-24 to 12) turns the whole pack down or up, for packs that sound louder or clip on the car's
+speaker. Put the folder under `VES/packs/` on the USB stick and use "USB에서 소리 팩
 가져오기" in the app: vesd validates it, copies it into a user slot and checks the copy. Packs you
 import stay on your car; only use recordings you may use.
 

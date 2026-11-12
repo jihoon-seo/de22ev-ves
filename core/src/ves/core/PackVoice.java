@@ -9,6 +9,7 @@ package ves.core;
  * interpolated across the block; loop indices and weights are worked out every SEG samples.
  * Aligned packs (Pack.aligned: rendered, every loop starting at the same crank angle) are played on one
  * shared engine-cycle phase, so neighbouring loops sum in phase: linear crossfades, no comb-filter dips.
+ * The pack's level trim (Pack.level) scales every loop after the level matching.
  * Allocation-free after setPack; one thread.
  */
 public final class PackVoice {
@@ -41,6 +42,8 @@ public final class PackVoice {
         phOff = new double[p == null ? 0 : p.off.length];
         gOn = gains(p == null ? new Pack.Loop[0] : p.on);
         gOff = gains(p == null ? new Pack.Loop[0] : p.off);
+        for (int k = 0; k < gOn.length; k++) gOn[k] *= p.level;
+        for (int k = 0; k < gOff.length; k++) gOff[k] *= p.level;
     }
 
     static double[] gains(Pack.Loop[] L) {
