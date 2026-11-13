@@ -85,5 +85,51 @@ final class LevelTests {
                 check(c.clampedSamples() == 0, "no clamps before rendering");
             }
         });
+
+        // ---------------- T1a: pulling away with the pedal down keeps the drive level (behaviour ice)
+        l.add(new TestMain.T("M1_launch_level_no_dip") {
+            void run() {
+                TestMain.Rig r = new TestMain.Rig(TestMain.iceSettings(Profile.ICE_SMOOTH, 70));
+                r.speed = 0;
+                r.pedal = 0;
+                r.kw = 0;
+                r.run(2000);
+                near(r.c.lastParams().targetGain, 0.30, 1e-9, "standing in D: idle level");
+                r.pedal = 40;
+                long t0 = r.t;
+                double runMax = 0, minAfter = 9, maxDip = 0;
+                while (r.t - t0 < 4000) {
+                    double el = (r.t - t0) / 1000.0;
+                    r.speed = 20 * el / 4; // 0 -> 20 km/h linearly in 4 s
+                    r.kw = 1750 * (20 / 3.6 / 4) * (r.speed / 3.6) / 1000 + 1; // the force for that acceleration
+                    r.step();
+                    double g = r.c.lastParams().targetGain;
+                    runMax = Math.max(runMax, g);
+                    if (r.t - t0 >= 500) {
+                        minAfter = Math.min(minAfter, g);
+                        maxDip = Math.max(maxDip, runMax - g);
+                    }
+                }
+                System.out.println("    launch targetGain max=" + runMax + " min(0.5..4 s)=" + minAfter);
+                check(maxDip <= 0.02, "the drive level dips while pulling away: running max " + runMax + " min " + minAfter);
+                // creeping with the foot off stays at idle; lifting off at 10 km/h is engine braking
+                TestMain.Rig q = new TestMain.Rig(TestMain.iceSettings(Profile.ICE_SMOOTH, 70));
+                q.speed = 3;
+                q.pedal = 0;
+                q.kw = 0;
+                q.run(3000);
+                check("idle".equals(q.c.lastParams().reason), "creeping foot-off: " + q.c.lastParams().reason);
+                near(q.c.lastParams().targetGain, 0.30, 1e-9, "creeping foot-off: idle level");
+                q.pedal = 30;
+                q.speed = 10;
+                q.kw = 15;
+                q.run(2000);
+                check("drive".equals(q.c.lastParams().reason), "driving at 10 km/h: " + q.c.lastParams().reason);
+                q.pedal = 0;
+                q.kw = -5;
+                q.run(1000);
+                check("overrun".equals(q.c.lastParams().reason), "lift-off at 10 km/h: " + q.c.lastParams().reason);
+            }
+        });
     }
 }

@@ -214,7 +214,9 @@ public final class EngineModel {
                 tg = overrunG;
                 reason = "overrun";
             } else {
-                tg = idleG + (driveG - idleG) * Math.min(1, sp / 8.0);
+                // pedal down: the drive level from standstill on (0.2.6 blended from idle over 0-8 km/h, so
+                // pulling away dipped from the standing drive level to near idle)
+                tg = Math.max(idleG, driveG);
                 reason = "drive";
             }
         } else if (mode.equals("accel_only")) {
