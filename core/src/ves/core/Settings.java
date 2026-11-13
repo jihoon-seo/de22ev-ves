@@ -19,9 +19,9 @@ import java.util.Map;
  *                vesd.jar) or a pack imported from USB into a user slot. The synth and the CC0 packs (synth, i4t,
  *                v6, v8, i6) are no longer offered (0.2.8): those values, like garbage, give the default.
  *                The synth only plays while no pack is loaded   default vex4
- * prompts        duck|pause|voice: under navigation prompts and alerts play at 30 % or stop (calls, ringing and
- *                voice recognition always stop); voice (experimental, 0.2.7) is duck and also plays at 30 % under
- *                the stock navigation's voice, which takes our channel (AudioPolicy.VOICE_REGRAB_DELAY_MS)
+ * prompts        duck|pause: under navigation chimes and alerts play at 30 % or stop (calls, ringing and voice
+ *                recognition always stop; the stock navigation's voice takes our channel, so it stops either way).
+ *                voice (0.2.7-0.2.9, experimental) reads as duck since 0.2.10: its regrab cut navigation prompts
  *                default duck
  * pops           off|soft|strong: exhaust pops on lift-off (behaviour ice and classic)  default soft
  * fade_above     0 = off, else km/h (fade to silence over +20 km/h)  default 0
@@ -34,7 +34,7 @@ public final class Settings {
     public static final String[] RESPONSES = {"soft", "normal", "sport"};
     public static final String[] BEHAVIORS = {"ice", "classic"};
     public static final String[] POPS = {"off", "soft", "strong"};
-    public static final String[] PROMPTS = {"duck", "pause", "voice"};
+    public static final String[] PROMPTS = {"duck", "pause"};
     public static final String[] SPEED_BOOSTS = {"off", "low", "mid", "high"};
     public static final String[] SOUNDS = {"vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "s2000_baked", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
     public static final String DEFAULT_SOUND = "vex4";

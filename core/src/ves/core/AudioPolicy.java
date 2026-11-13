@@ -68,12 +68,6 @@ public final class AudioPolicy {
             lostPending = true;
             lostAt = nowMs;
         }
-        if ("navi".equals(s) && voiceMode && !voiceGivenUp && !voiceWait
-                && (grace || !open && closedByEnd && nowMs - closedByEndAt <= VOICE_AFTER_END_MS)) {
-            grace = false; // silent (or closed) until VOICE_REGRAB_DELAY_MS into the voice, then ACT_REGRAB
-            voiceWait = true;
-            voiceAt = nowMs;
-        }
         double from = gainAt(nowMs);
         boolean wasDuck = episode && allDuck();
         int i = find(s);
@@ -110,13 +104,7 @@ public final class AudioPolicy {
      * REGRAB_GUARD_MS after a regrab: channelLost.
      */
     public synchronized void channelEnded(long nowMs) {
-        boolean afterVoice = !voiceGivenUp && nowMs - voiceRegrabAt < VOICE_END_GUARD_MS;
-        if (afterVoice) giveUpVoice("channel ended " + (nowMs - voiceRegrabAt) + " ms after the voice regrab");
-        if (!open || afterVoice || nowMs - regrabAt < REGRAB_GUARD_MS) {
-            if (open) {
-                closedByEnd = true;
-                closedByEndAt = nowMs;
-            }
+        if (!open || nowMs - regrabAt < REGRAB_GUARD_MS) {
             channelLost(nowMs);
             return;
         }
@@ -143,10 +131,6 @@ public final class AudioPolicy {
         }
         open = false;
         regrabAt = Long.MIN_VALUE / 2;
-        if (lastRegrabVoice) {
-            giveUpVoice("refused");
-            voiceRegrabAt = Long.MIN_VALUE / 2;
-        }
         refusals++;
         retryAt = nowMs + Math.min(RETRY_MAX_MS, RETRY_MS << Math.min(refusals - 1, 5));
     }
@@ -157,36 +141,6 @@ public final class AudioPolicy {
     }
 
     public static final long REGRAB_WAIT_MS = 100, REGRAB_RAMP_MS = 50, REGRAB_GUARD_MS = 1500;
-    /**
-     * prompts=voice (experimental): after the end that comes before a navigation voice, take the channel back this
-     * long into the voice and play at DUCK_GAIN under it. Given up for the process (back to the duck behaviour) if
-     * the regrab is refused, our channel ends within VOICE_END_GUARD_MS of it, or the voice ends within
-     * VOICE_CUT_MS of it (it may have cut the voice).
-     */
-    public static final long VOICE_REGRAB_DELAY_MS = 400, VOICE_END_GUARD_MS = 2000, VOICE_CUT_MS = 300;
-    /** a voice that starts this long after an end that closed us still counts as the voice after it */
-    static final long VOICE_AFTER_END_MS = 1000;
-    private boolean voiceMode, voiceWait, voiceGivenUp, lastRegrabVoice, closedByEnd;
-    private String voiceReason = "";
-    private long voiceAt, closedByEndAt, voiceRegrabAt = Long.MIN_VALUE / 2;
-
-    /** prompts=voice */
-    public synchronized void setVoiceRegrab(boolean on) {
-        voiceMode = on;
-        if (!on) voiceWait = false;
-    }
-
-    /** "off", "on" or "given up (reason)" */
-    public synchronized String voiceRegrabState() {
-        if (!voiceMode) return "off";
-        return voiceGivenUp ? "given up (" + voiceReason + ")" : "on";
-    }
-
-    private void giveUpVoice(String why) {
-        if (!voiceGivenUp) voiceReason = why;
-        voiceGivenUp = true;
-        voiceWait = false;
-    }
     private boolean grace; // channelEnded while open, waiting REGRAB_WAIT_MS
     private long endedAt, regrabs;
     private long regrabAt = Long.MIN_VALUE / 2, rampAt = Long.MIN_VALUE / 2;
@@ -222,8 +176,6 @@ public final class AudioPolicy {
         expire(nowMs);
         int i = find(s);
         if (i < 0 || !srcActive[i]) return;
-        if ("navi".equals(s) && !voiceGivenUp && nowMs - voiceRegrabAt < VOICE_CUT_MS)
-            giveUpVoice("voice ended " + (nowMs - voiceRegrabAt) + " ms after the voice regrab");
         boolean duck = allDuck();
         double g = gainAt(nowMs);
         srcActive[i] = false;
@@ -253,7 +205,7 @@ public final class AudioPolicy {
     }
 
     private double regrabGain(long now) {
-        if (grace || voiceWait) return 0;
+        if (grace) return 0;
         double f = (now - rampAt) / (double) REGRAB_RAMP_MS;
         return f >= 1 ? 1 : f <= 0 ? 0 : f;
     }
@@ -266,42 +218,19 @@ public final class AudioPolicy {
             return ACT_CLOSE;
         }
         expire(nowMs);
-        if (voiceWait) {
-            int n = find("navi");
-            if (n < 0 || !srcActive[n] || !allDuck() || voiceGivenUp || !voiceMode) {
-                // the voice is over before the delay, or a call joined: as without the voice regrab
-                voiceWait = false;
-                if (open) {
-                    lostAt = endedAt;
-                    return closeByEnd();
-                }
-            } else if (nowMs - voiceAt < VOICE_REGRAB_DELAY_MS) {
-                return ACT_NONE;
-            } else {
-                voiceWait = false;
-                if (!wantSound) return open ? closeByEnd() : ACT_NONE;
-                open = true;
-                closedByEnd = false;
-                lastRegrabVoice = true;
-                voiceRegrabAt = rampAt = nowMs;
-                regrabs++;
-                return ACT_REGRAB;
-            }
-        }
         if (grace) {
             if (episode) { // a voice (or another source) after the end: step aside as for a lost channel
                 grace = false;
                 lostAt = endedAt;
-                return closeByEnd();
+                return close();
             }
             if (nowMs - endedAt < REGRAB_WAIT_MS) return ACT_NONE;
             grace = false;
             if (!wantSound) {
                 lostAt = endedAt;
-                return closeByEnd();
+                return close();
             }
             regrabAt = rampAt = nowMs;
-            lastRegrabVoice = false;
             regrabs++;
             return ACT_REGRAB;
         }
@@ -324,7 +253,6 @@ public final class AudioPolicy {
         if (refusals > 0 && nowMs < retryAt) return ACT_NONE;
         if (wantSound) {
             open = true;
-            closedByEnd = false;
             opens++;
             // the envelope starts from 0 after an OPEN: the silence timer starts now
             silentSince = currentGain > SILENT_GAIN ? Long.MIN_VALUE : nowMs;
@@ -399,13 +327,6 @@ public final class AudioPolicy {
         grace = false;
         closes++;
         return ACT_CLOSE;
-    }
-
-    /** closed because our channel ended (a voice after it can still get the voice regrab) */
-    private int closeByEnd() {
-        closedByEnd = true;
-        closedByEndAt = endedAt;
-        return close();
     }
 
     private double gainAt(long now) {

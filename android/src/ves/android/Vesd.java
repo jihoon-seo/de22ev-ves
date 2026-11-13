@@ -216,17 +216,6 @@ public final class Vesd implements MicomAudio.Events {
         }
         Out.log("micom: " + raw + " -> " + (start ? "yield " : "resume ") + source);
         probe.event(raw + (start ? " yield " : " end ") + source);
-        noteVoiceRegrab();
-    }
-
-    private String voiceRegrabLogged = "off";
-
-    /** prompts=voice: log the give-up once (it lasts for the rest of the process) */
-    synchronized void noteVoiceRegrab() {
-        String v = core.voiceRegrabState();
-        if (v.equals(voiceRegrabLogged)) return;
-        voiceRegrabLogged = v;
-        if (v.startsWith("given up")) Out.log("policy: voice regrab " + v);
     }
 
     public void onOther(String raw) {
@@ -253,7 +242,6 @@ public final class Vesd implements MicomAudio.Events {
         }
         Out.log("micom: " + raw + " by another user -> " + (start ? "yield" : "resume") + " shared");
         probe.event(raw + (start ? " foreign yield shared" : " foreign end shared"));
-        noteVoiceRegrab();
     }
 
     // ---- the path
@@ -485,13 +473,6 @@ public final class Vesd implements MicomAudio.Events {
                 // the navigation's sound ended and took the channel: take it back, track and queue kept
                 if (openPath("regrab")) {
                     core.regrabResult(true, now);
-                    if (!playing) { // prompts=voice: the voice regrab after an end that closed the path
-                        releaseTrack(track);
-                        track = newTrack(fd, bytes);
-                        fd.opened(now);
-                        playing = true;
-                        d = TrackFeeder.RENDER;
-                    }
                 } else {
                     // refused: the channel is not ours, so no endAudio; retried as after a refused OPEN
                     releaseTrack(track);
@@ -500,7 +481,6 @@ public final class Vesd implements MicomAudio.Events {
                     pathOpen = false;
                     core.regrabResult(false, now);
                     Out.log("path: regrab refused, retry " + core.policy().retries());
-                    noteVoiceRegrab();
                 }
             } else if (act == AudioPolicy.ACT_CLOSE && skipStartupClose && !pathOpen) {
                 skipStartupClose = false; // the core's first-tick cleanup, skipped for the stuck test
@@ -562,7 +542,6 @@ public final class Vesd implements MicomAudio.Events {
             for (int i = 0; i < Sig.COUNT; i++) b.append(' ').append(Sig.name(i)).append('=').append(fmt(s.get(i, now)));
             b.append('\n');
             b.append("settings ").append(core.settings()).append(override != null ? " (probe)" : "").append('\n');
-            b.append("voice regrab: ").append(core.voiceRegrabState()).append('\n');
         }
         long now = SystemClock.uptimeMillis();
         TrackFeeder fd = feeder;
