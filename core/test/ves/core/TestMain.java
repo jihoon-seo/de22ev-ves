@@ -1847,6 +1847,7 @@ public final class TestMain {
             }
         });
 
+        PackFormatTests.add(l); // 0.2.8: pack limits, load layers, events, shift sounds
         // ---------------- K1-K4 sound packs: pack.txt + PCM16 mono 22050 Hz WAV loops (built-in packs and
         // the owner's packs from USB, so every input is untrusted)
         l.add(new T("K1_pack_parses") {
