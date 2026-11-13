@@ -2192,8 +2192,8 @@ public final class TestMain {
             }
         });
 
-        // ---------------- I1-I2 the sound setting: the synth or a pack (falls back to the synth)
-        // SL1 eight user slots (0.2.6): user1..user8 parse, anything else falls back to the synth
+        // ---------------- I1-I2 the sound setting: a pack plays whenever one is loaded, the synth only without one
+        // SL1 eight user slots (0.2.6): user1..user8 parse, anything else falls back to the default vex4 (0.2.8)
         l.add(new T("SL1_eight_user_slots") {
             void run() {
                 for (int i = 1; i <= 8; i++) {
@@ -2204,14 +2204,14 @@ public final class TestMain {
                 for (String bad : new String[] { "user0", "user9", "user10" }) {
                     java.util.Map<String, String> m = new java.util.HashMap<String, String>();
                     m.put("sound", bad);
-                    check("synth".equals(Settings.fromMap(m).sound), bad + " falls back to the synth");
+                    check("vex4".equals(Settings.fromMap(m).sound), bad + " falls back to vex4: " + Settings.fromMap(m).sound);
                 }
             }
         });
         l.add(new T("I1_pack_or_synth") {
             void run() throws Exception {
                 Settings st = iceSettings(Profile.ICE_SMOOTH, 60);
-                st.sound = "v8";
+                st.sound = "vex4";
                 Rig r = new Rig(st);
                 r.speed = 30;
                 r.pedal = 30;
@@ -2223,11 +2223,11 @@ public final class TestMain {
                 r.run(1000);
                 check(r.c.status().contains("voice=pack:sine"), "pack plays " + r.c.status());
                 check(r.rms() > 100, "pack audible " + Math.round(r.rms()));
-                st.sound = "synth";
+                st.sound = "synth"; // hidden since 0.2.8: no longer a way past a loaded pack
                 r.c.setSettings(st);
                 r.run(200);
-                check(r.c.status().contains("voice=synth"), "sound=synth ignores a loaded pack");
-                st.sound = "v8";
+                check(r.c.status().contains("voice=pack:sine"), "sound=synth with a pack loaded plays the pack " + r.c.status());
+                st.sound = "vex4";
                 r.c.setSettings(st);
                 r.c.setPack(null);
                 r.run(200);
@@ -2236,13 +2236,13 @@ public final class TestMain {
                 m.put("sound", "user2");
                 check("user2".equals(Settings.fromMap(m).sound), "user slots parse");
                 m.put("sound", "../x");
-                check("synth".equals(Settings.fromMap(m).sound), "garbage -> synth");
+                check("vex4".equals(Settings.fromMap(m).sound), "garbage -> vex4");
             }
         });
         l.add(new T("I2_voice_switch_smooth") {
             void run() throws Exception {
                 Settings st = iceSettings(Profile.ICE_SMOOTH, 100);
-                st.sound = "v8";
+                st.sound = "vex4";
                 st.pops = "off";
                 Rig r = new Rig(st);
                 r.speed = 50;
@@ -2826,6 +2826,7 @@ public final class TestMain {
         });
 
         LevelTests.add(l); // 0.2.7: loudness, launch, makeup, volume curve, speed boost
+        BuiltinTests.add(l); // 0.2.8: built-in packs by default, the synth and the CC0 packs hidden
         return l;
     }
 }

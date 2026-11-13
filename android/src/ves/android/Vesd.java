@@ -138,11 +138,6 @@ public final class Vesd implements MicomAudio.Events {
     /** loads the pack of a slot off the audio thread; the synth plays until (or unless) it is ready */
     void loadPack(final String slot) {
         packSlot = slot;
-        if ("synth".equals(slot)) {
-            core.setPack(null);
-            packNote = "";
-            return;
-        }
         thread("pack", new Runnable() {
             public void run() {
                 try {

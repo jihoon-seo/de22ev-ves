@@ -178,7 +178,7 @@ public final class VesCore {
             g = Math.min(1, t);
             mk = Math.max(1, t);
         }
-        boolean usePack = pack != null && !"synth".equals(s.sound);
+        boolean usePack = pack != null;
         if (usePack && packVoice.pack() != pack) packVoice.setPack(pack);
         if (usePack != usingPack) {
             usingPack = usePack;

@@ -250,13 +250,13 @@ public final class MainActivity extends Activity {
         }).start();
     }
 
-    /** the engine sound from a list (13 choices: cycling through them took up to 12 taps) */
+    /** the engine sound from a list (built-in packs, then the user slots: cycling through them took many taps) */
     private void chooseSound() {
         final String[] values = Actions.SOUNDS;
         String[] labels = new String[values.length];
         for (int i = 0; i < values.length; i++) {
             String n = packNames.get(values[i]);
-            labels[i] = Actions.SOUND_NAMES[i] + ("synth".equals(values[i]) ? "" : n == null || n.equals("-") ? " (비어 있음)" : " (" + n + ")");
+            labels[i] = Actions.SOUND_NAMES[i] + (!Actions.isUserSlot(values[i]) ? "" : n == null || n.equals("-") ? " (비어 있음)" : " (" + n + ")");
         }
         new AlertDialog.Builder(this).setTitle("엔진 소리").setItems(labels, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface d, final int which) {
@@ -318,7 +318,7 @@ public final class MainActivity extends Activity {
         String snd = o.optString(Prefs.SOUND);
         String pn = packNames.get(snd);
         sound.setText("엔진 소리: " + Actions.name(snd, Actions.SOUNDS, Actions.SOUND_NAMES)
-                + ("synth".equals(snd) ? "" : pn == null || pn.equals("-") ? " (비어 있음: 합성음이 나옴)" : " (" + pn + ")"));
+                + (!Actions.isUserSlot(snd) ? "" : pn == null || pn.equals("-") ? " (비어 있음: VEX 4기통이 나옴)" : " (" + pn + ")"));
         profile.setText("회전수: " + Actions.name(o.optString(Prefs.PROFILE), Actions.PROFILES, Actions.PROFILE_NAMES));
         behavior.setText("동작: " + Actions.name(o.optString(Prefs.BEHAVIOR), Actions.BEHAVIORS, Actions.BEHAVIOR_NAMES));
         pops.setText("배기 팝: " + Actions.name(o.optString(Prefs.POPS), Actions.POPS, Actions.POPS_NAMES));

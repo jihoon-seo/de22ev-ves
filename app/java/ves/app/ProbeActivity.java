@@ -188,7 +188,9 @@ public final class ProbeActivity extends Activity {
         add("ui_launcher", "홈 화면 전체 메뉴에 '엔진 사운드' 타일이 있나요?", null, null, "있음", "없음");
         add("ui_star", "설정 > 버튼 설정의 ★ 버튼 목록에 '엔진 사운드 켜기/끄기'가 있나요?", null, null, "있음", "없음");
         add("ui_panel", "분할 화면 설정에서 '엔진 사운드' 위젯을 고를 수 있나요?", null, null, "있음", "없음", "분할 화면 없음");
-        String[][] packs = { { "synth", "합성음" }, { "i4t", "4기통 터보" }, { "v6", "V6" }, { "v8", "V8" }, { "i6", "직렬 6기통" } };
+        // the built-in packs (vesd's PackStore.BUILT_IN, sounds by 히릿)
+        String[][] packs = { { "vex4", "VEX 4기통" }, { "vex_v10", "VEX V10" }, { "ae86", "AE86 4A-GE" }, { "amg_v8", "AMG M156 V8" },
+                { "gt3", "911 GT3" }, { "gtr", "GT-R VR38" }, { "s2000", "S2000 F20C" } };
         for (String[] p : packs) {
             add("pack_" + p[0], "소리 비교: " + p[1] + ". P에서 정차한 채로 버튼을 누르면 6초 동안 공회전 - 회전 올림 - 공회전 소리가 납니다.",
                     p[1] + " 들어 보기 (6초)", "PROBE PACKS " + p[0], "좋음", "괜찮음", "별로", "안 들림");

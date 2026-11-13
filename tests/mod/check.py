@@ -85,6 +85,35 @@ for s in st['settings']:
     check('choice %s options == app list' % s['key'], app == opts, '%s vs %s' % (app, opts))
     check('choice %s default is an option' % s['key'], s['default'] in opts, s['default'])
 
+# 0.2.8: the sounds on offer are the built-in packs (sounds by 히릿) and the user slots, vex4 by default; the
+# procedural synth and the CC0 packs (i4t, v6, v8, i6) are not shown and not selectable
+packstore = read('android/src/ves/android/PackStore.java')
+probe = read('app/java/ves/app/ProbeActivity.java')
+
+
+def jarr(src, name):
+    m = re.search(r'String\[\] %s = \{([^}]*)\}' % name, src)
+    return re.findall(r'"([^"]*)"', m.group(1)) if m else None
+
+
+builtin, uslots = jarr(packstore, 'BUILT_IN'), jarr(packstore, 'USER_SLOTS')
+sound_opts = [o['value'] for s2 in st['settings'] if s2['key'] == 'sound' for o in s2['options']]
+check('MOD-S1 sound options == PackStore.BUILT_IN + USER_SLOTS', builtin and uslots and sound_opts == builtin + uslots,
+      '%s vs %s + %s' % (sound_opts, builtin, uslots))
+m = re.search(r'DEFAULT_SOUND = "(\w+)"', core)
+core_def = m and m.group(1)
+m = re.search(r'o\.put\(Prefs\.SOUND, "(\w+)"\)', actions)
+act_def = m and m.group(1)
+check('MOD-S2 sound default: settings.json == Actions == Settings.DEFAULT_SOUND == vex4',
+      defaults.get('sound') == act_def == core_def == 'vex4', '%s, %s, %s' % (defaults.get('sound'), act_def, core_def))
+HIDDEN = ('synth', 'i4t', 'v6', 'v8', 'i6')
+for tid, name, src in (('MOD-H1', 'Actions', actions), ('MOD-H2', 'MainActivity', main), ('MOD-H3', 'ProbeActivity', probe)):
+    bad = [h for h in HIDDEN if '"%s"' % h in src] + [w for w in ('synth', '합성음') if w in src]
+    check('%s %s offers no synth or CC0 pack' % (tid, name), not bad, 'found %s' % sorted(set(bad)))
+m = re.search(r'String\[\]\[\] packs = \{(.*?)\};', probe, re.S)
+demo = re.findall(r'\{\s*"([^"]*)"', m.group(1)) if m else None
+check('MOD-H4 ProbeActivity demo slots == PackStore.BUILT_IN', demo == builtin, '%s vs %s' % (demo, builtin))
+
 pkg = man.get('package')
 acts = [a.get(A + 'name') for a in man.iter('activity')]
 recv = {r.get(A + 'name'): [x.get(A + 'name') for x in r.iter('action')] for r in man.iter('receiver')}

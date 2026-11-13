@@ -15,8 +15,10 @@ import java.util.Map;
  * response       soft|normal|sport                 default normal
  * behavior       ice|classic: ice (0.2.0 default) sounds whenever Ready (idle in P/N/D, quiet in R, engine
  *                braking when coasting); classic keeps the 0.1.x modes (P/N/R silent, mode decides)  default ice
- * sound          synth|i4t|v6|v8|i6|user1..user8: the procedural synth or a sound pack (built-in, or
- *                imported from USB into a user slot); a missing pack falls back to the synth   default synth
+ * sound          vex4|vex_v10|ae86|amg_v8|gt3|gtr|s2000|user1..user8: a built-in pack (sounds by 히릿, inside
+ *                vesd.jar) or a pack imported from USB into a user slot. The synth and the CC0 packs (synth, i4t,
+ *                v6, v8, i6) are no longer offered (0.2.8): those values, like garbage, give the default.
+ *                The synth only plays while no pack is loaded   default vex4
  * prompts        duck|pause|voice: under navigation prompts and alerts play at 30 % or stop (calls, ringing and
  *                voice recognition always stop); voice (experimental, 0.2.7) is duck and also plays at 30 % under
  *                the stock navigation's voice, which takes our channel (AudioPolicy.VOICE_REGRAB_DELAY_MS)
@@ -34,7 +36,8 @@ public final class Settings {
     public static final String[] POPS = {"off", "soft", "strong"};
     public static final String[] PROMPTS = {"duck", "pause", "voice"};
     public static final String[] SPEED_BOOSTS = {"off", "low", "mid", "high"};
-    public static final String[] SOUNDS = {"synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
+    public static final String[] SOUNDS = {"vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
+    public static final String DEFAULT_SOUND = "vex4";
 
     public boolean enabled = false;
     public int volume = 40;
@@ -43,7 +46,7 @@ public final class Settings {
     public String behavior = "ice";
     public String pops = "soft";
     public String prompts = "duck";
-    public String sound = "synth";
+    public String sound = DEFAULT_SOUND;
     public int idleLevel = 30;
     public int regenLevel = 50;
     public String response = "normal";
@@ -62,7 +65,7 @@ public final class Settings {
         s.behavior = choice(get(m, "behavior", null), BEHAVIORS, "ice");
         s.pops = choice(get(m, "pops", null), POPS, "soft");
         s.prompts = choice(get(m, "prompts", null), PROMPTS, "duck");
-        s.sound = choice(get(m, "sound", null), SOUNDS, "synth");
+        s.sound = choice(get(m, "sound", null), SOUNDS, DEFAULT_SOUND);
         s.idleLevel = integer(get(m, "idle_level", "idleLevel"), 30, 0, 60);
         s.regenLevel = integer(get(m, "regen_level", "regenLevel"), 50, 0, 100);
         s.response = choice(get(m, "response", null), RESPONSES, "normal");
@@ -83,7 +86,7 @@ public final class Settings {
         s.behavior = choice(behavior, BEHAVIORS, "ice");
         s.pops = choice(pops, POPS, "soft");
         s.prompts = choice(prompts, PROMPTS, "duck");
-        s.sound = choice(sound, SOUNDS, "synth");
+        s.sound = choice(sound, SOUNDS, DEFAULT_SOUND);
         s.idleLevel = clamp(idleLevel, 0, 60);
         s.regenLevel = clamp(regenLevel, 0, 100);
         s.response = choice(response, RESPONSES, "normal");

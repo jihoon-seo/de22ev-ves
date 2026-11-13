@@ -25,9 +25,11 @@ final class Actions {
     static final String[] PROFILE_NAMES = { "내연기관 (부드럽게)", "내연기관 (가상 변속)", "EV 미래형" };
     static final String[] MODES = { "idle_regen", "stop_silent_regen", "accel_only", "drive_all" };
     static final String[] MODE_NAMES = { "정차 공회전 + 회생음", "정차 무음 + 회생음", "가속할 때만", "주행 중 항상 (회생음 없음)" };
-    static final String[] SOUNDS = { "synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
-    static final String[] SOUND_NAMES = { "합성음", "4기통 터보", "V6", "V8", "직렬 6기통", "사용자 1", "사용자 2", "사용자 3",
-            "사용자 4", "사용자 5", "사용자 6", "사용자 7", "사용자 8" };
+    /** the built-in packs (vesd's PackStore.BUILT_IN; sounds by 히릿), then the user slots; vex4 is the default */
+    static final String[] SOUNDS = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "user1", "user2", "user3", "user4",
+            "user5", "user6", "user7", "user8" };
+    static final String[] SOUND_NAMES = { "VEX 4기통 (기본)", "VEX V10", "AE86 4A-GE", "AMG M156 V8", "911 GT3", "GT-R VR38", "S2000 F20C",
+            "사용자 1", "사용자 2", "사용자 3", "사용자 4", "사용자 5", "사용자 6", "사용자 7", "사용자 8" };
     /** the user sound-pack slots (vesd's PackStore.USER_SLOTS) */
     static final String[] USER_SLOTS = { "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
     static final String[] BEHAVIORS = { "ice", "classic" };
@@ -63,7 +65,8 @@ final class Actions {
             if (!o.has(Prefs.BEHAVIOR)) o.put(Prefs.BEHAVIOR, "ice");
             if (!o.has(Prefs.POPS)) o.put(Prefs.POPS, "soft");
             if (!o.has(Prefs.PROMPTS)) o.put(Prefs.PROMPTS, "duck");
-            if (!o.has(Prefs.SOUND)) o.put(Prefs.SOUND, "synth");
+            // missing, or no longer offered (0.2.8: the procedural sound and the CC0 packs): the default
+            if (!java.util.Arrays.asList(SOUNDS).contains(o.optString(Prefs.SOUND))) o.put(Prefs.SOUND, "vex4");
             if (!o.has(Prefs.SPEED_BOOST)) o.put(Prefs.SPEED_BOOST, "high");
         } catch (org.json.JSONException e) {
             throw new IOException(e.getMessage());
@@ -134,6 +137,10 @@ final class Actions {
         } catch (org.json.JSONException e) {
             throw new IOException(e.getMessage());
         }
+    }
+
+    static boolean isUserSlot(String s) {
+        return java.util.Arrays.asList(USER_SLOTS).contains(s);
     }
 
     static String name(String value, String[] values, String[] names) {
