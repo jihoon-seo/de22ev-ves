@@ -3,7 +3,6 @@ package ves.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
-import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -33,7 +32,9 @@ import ves.hmg.VesLink;
 public final class MainActivity extends Activity {
     private final Handler h = new Handler();
     private TextView status, volume;
-    private Button power, sound, profile, behavior, pops, prompts, mode, idle, regen, response, fade, speedBoost;
+    // 0.2.10: behavior/mode (the 0.1.x "classic" modes) and fade_above left the screen (they stay in the mod's
+    // HMG-API settings, the Mods tab), and so did the car check (ProbeActivity)
+    private Button power, sound, profile, pops, prompts, idle, regen, response, speedBoost;
     private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
 
@@ -86,24 +87,14 @@ public final class MainActivity extends Activity {
         });
         profile = setting(root, Prefs.PROFILE, Actions.PROFILES);
         LinearLayout r1 = row(root);
-        behavior = setting(r1, Prefs.BEHAVIOR, Actions.BEHAVIORS);
         pops = setting(r1, Prefs.POPS, Actions.POPS);
+        response = setting(r1, Prefs.RESPONSE, Actions.RESPONSE);
         prompts = setting(root, Prefs.PROMPTS, Actions.PROMPTS);
-        mode = setting(root, Prefs.MODE, Actions.MODES);
         LinearLayout r2 = row(root);
         idle = setting(r2, Prefs.IDLE_LEVEL, Actions.IDLE);
         regen = setting(r2, Prefs.REGEN_LEVEL, Actions.REGEN);
-        LinearLayout r3 = row(root);
-        response = setting(r3, Prefs.RESPONSE, Actions.RESPONSE);
-        fade = setting(r3, Prefs.FADE_ABOVE, Actions.FADE);
         speedBoost = setting(root, Prefs.SPEED_BOOST, Actions.SPEED_BOOST);
 
-        Button probe = big(root, "차량 점검 (주차 상태에서)", 0);
-        probe.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                startActivity(new Intent(MainActivity.this, ProbeActivity.class));
-            }
-        });
         text(root, "주행 중에는 조작하지 마세요. 차 밖으로 나가는 보행자 경고음(VESS)은 바꾸지 않습니다.", 15, Color.GRAY);
         setContentView(sv);
     }
@@ -320,16 +311,11 @@ public final class MainActivity extends Activity {
         sound.setText("엔진 소리: " + Actions.name(snd, Actions.SOUNDS, Actions.SOUND_NAMES)
                 + (!Actions.isUserSlot(snd) ? "" : pn == null || pn.equals("-") ? " (비어 있음: VEX 4기통이 나옴)" : " (" + pn + ")"));
         profile.setText("회전수: " + Actions.name(o.optString(Prefs.PROFILE), Actions.PROFILES, Actions.PROFILE_NAMES));
-        behavior.setText("동작: " + Actions.name(o.optString(Prefs.BEHAVIOR), Actions.BEHAVIORS, Actions.BEHAVIOR_NAMES));
         pops.setText("배기 팝: " + Actions.name(o.optString(Prefs.POPS), Actions.POPS, Actions.POPS_NAMES));
-        prompts.setText("안내 음성 때: " + Actions.name(o.optString(Prefs.PROMPTS), Actions.PROMPTS, Actions.PROMPTS_NAMES));
-        mode.setText("예전 방식 동작: " + Actions.name(o.optString(Prefs.MODE), Actions.MODES, Actions.MODE_NAMES));
-        mode.setEnabled("classic".equals(o.optString(Prefs.BEHAVIOR)));
+        prompts.setText("내비 안내 때: " + Actions.name(o.optString(Prefs.PROMPTS), Actions.PROMPTS, Actions.PROMPTS_NAMES));
         idle.setText("공회전 크기 " + o.optString(Prefs.IDLE_LEVEL) + "%");
         regen.setText("회생음 크기 " + o.optString(Prefs.REGEN_LEVEL) + "%");
         response.setText("반응: " + Actions.name(o.optString(Prefs.RESPONSE), Actions.RESPONSE, Actions.RESPONSE_NAMES));
-        String f = o.optString(Prefs.FADE_ABOVE);
-        fade.setText("0".equals(f) ? "고속 줄임: 끔" : "고속 줄임: " + f + " km/h부터");
         speedBoost.setText("고속 보강: " + Actions.name(o.optString(Prefs.SPEED_BOOST), Actions.SPEED_BOOST, Actions.SPEED_BOOST_NAMES));
     }
 

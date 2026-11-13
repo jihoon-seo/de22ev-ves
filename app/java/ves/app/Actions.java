@@ -34,8 +34,9 @@ final class Actions {
     static final String[] USER_SLOTS = { "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
     static final String[] BEHAVIORS = { "ice", "classic" };
     static final String[] BEHAVIOR_NAMES = { "내연기관처럼", "예전 방식" };
-    static final String[] PROMPTS = { "duck", "pause", "voice" };
-    static final String[] PROMPTS_NAMES = { "작게 계속", "멈춤", "안내 음성 중에도 작게 (실험)" };
+    /** the stock navigation's voice takes our channel, so it stops the sound either way (0.2.10: "voice" retired) */
+    static final String[] PROMPTS = { "duck", "pause" };
+    static final String[] PROMPTS_NAMES = { "효과음엔 작게 (음성 안내는 멈춤)", "항상 멈춤" };
     static final String[] POPS = { "off", "soft", "strong" };
     static final String[] POPS_NAMES = { "끔", "약하게", "강하게" };
     static final String[] IDLE = { "10", "20", "30", "40", "50", "60" };
@@ -64,7 +65,8 @@ final class Actions {
             if (!o.has(Prefs.FADE_ABOVE)) o.put(Prefs.FADE_ABOVE, "0");
             if (!o.has(Prefs.BEHAVIOR)) o.put(Prefs.BEHAVIOR, "ice");
             if (!o.has(Prefs.POPS)) o.put(Prefs.POPS, "soft");
-            if (!o.has(Prefs.PROMPTS)) o.put(Prefs.PROMPTS, "duck");
+            // missing, or no longer offered (0.2.10: the "voice" experiment cut navigation prompts): duck
+            if (!java.util.Arrays.asList(PROMPTS).contains(o.optString(Prefs.PROMPTS))) o.put(Prefs.PROMPTS, "duck");
             // missing, or no longer offered (0.2.8: the procedural sound and the CC0 packs): the default
             if (!java.util.Arrays.asList(SOUNDS).contains(o.optString(Prefs.SOUND))) o.put(Prefs.SOUND, "vex4");
             if (!o.has(Prefs.SPEED_BOOST)) o.put(Prefs.SPEED_BOOST, "high");
