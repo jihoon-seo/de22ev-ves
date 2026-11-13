@@ -1136,6 +1136,158 @@ public final class ResynthTest {
             }
         });
 
+        l.add(new T("RS-B1 Json: a valid manifest-like text parses; malformed ones are an IOException") {
+            void run() throws Exception {
+                Object o = Json.parse(" {\"a\": [1, 2.5, -3e2], \"b\": \"x\\\"y\\u0041\\n\", \"c\": {\"d\": true, \"e\": null, \"f\": false}, \"g\": []} ");
+                check(o instanceof java.util.Map, "object");
+                java.util.Map<?, ?> m = (java.util.Map<?, ?>) o;
+                check(java.util.Arrays.asList(1.0, 2.5, -300.0).equals(m.get("a")), "numbers " + m.get("a"));
+                check("x\"yA\n".equals(m.get("b")), "string " + m.get("b"));
+                java.util.Map<?, ?> c = (java.util.Map<?, ?>) m.get("c");
+                check(Boolean.TRUE.equals(c.get("d")) && c.containsKey("e") && c.get("e") == null && Boolean.FALSE.equals(c.get("f")), "literals " + c);
+                check(((java.util.List<?>) m.get("g")).isEmpty(), "empty array");
+                for (String bad : new String[] {"", "{\"a\":1", "{\"a\":1,}", "[1 2]", "{\"a\":01}", "\"abc", "{\"a\":1} x", "nul", "{a:1}",
+                        "[1.]", "[\"\\x\"]", "[-]"}) {
+                    try {
+                        Json.parse(bad);
+                        check(false, "accepted: " + bad);
+                    } catch (IOException e) {
+                        check(e.getMessage() != null, bad);
+                    }
+                }
+            }
+        });
+
+        l.add(new T("RS-B2 bake: PackLoader accepts 3 layers x 3 loops at round(ref_rpm), length N, seamless, crank phase kept, nothing above 9.5 kHz") {
+            void run() throws Exception {
+                File root = tmpDir("b2");
+                try {
+                    File out = new File(root, "pack");
+                    int rc = Main.run(new String[] {"bake", bakeFixture(new File(root, "bake"), null).getPath(), out.getPath(), "name=Bake Fixture"});
+                    check(rc == 0, "bake exit " + rc);
+                    ves.core.Pack p = loadPack(out);
+                    check(p.aligned && p.layers.length == 3 && java.util.Arrays.equals(p.loads, new double[] {0, 0.45, 1}),
+                            "aligned, loads " + java.util.Arrays.toString(p.loads));
+                    check(p.cylinders == 4 && p.redlineRpm == 6700 && p.popRpm == 4000 && p.idleRpm == 800, "header");
+                    int loops = 0;
+                    for (int layer = 0; layer < 3; layer++) {
+                        for (int k = 0; k < BAKE_REF.length; k++) {
+                            ves.core.Pack.Loop lp = p.layers[layer][k];
+                            loops++;
+                            int r = (int) Math.round(BAKE_REF[k]), n = (int) ((long) BAKE_CYC[k] * 2646000 / r);
+                            check(lp.rpm == r && lp.pcm.length == n, "loop " + layer + "/" + k + ": rpm " + lp.rpm + " length " + lp.pcm.length + " vs " + r + " " + n);
+                            double maxStep = 0;
+                            for (int i = 1; i < n; i++) maxStep = Math.max(maxStep, Math.abs(lp.pcm[i] - lp.pcm[i - 1]));
+                            double wrap = Math.abs(lp.pcm[0] - lp.pcm[n - 1]);
+                            check(wrap <= 1.2 * maxStep, "wrap " + wrap + " vs in-loop " + maxStep);
+                            double[] re = new double[n], im = new double[n];
+                            for (int i = 0; i < n; i++) re[i] = lp.pcm[i] / 32768.0;
+                            Fft.dft(re, im, false);
+                            int c = BAKE_CYC[k], best = 1;
+                            double top = 0, above = 0;
+                            for (int b = 1; b < n / 2; b++) {
+                                double pw = re[b] * re[b] + im[b] * im[b];
+                                if (pw > top) {
+                                    top = pw;
+                                    best = b;
+                                }
+                                if (b * 22050.0 / n > 9500) above = Math.max(above, pw);
+                            }
+                            check(best == c, "order 1 on bin " + c + ", the peak is on " + best);
+                            double ph = Math.atan2(im[c], re[c]), d = Math.abs(Math.IEEEremainder(ph - BAKE_PHASE1, 2 * Math.PI));
+                            check(d <= 0.05, "order-1 phase at frame 0 " + ph + " vs " + BAKE_PHASE1);
+                            check(10 * Math.log10(above / top) <= -60, "above 9.5 kHz " + 10 * Math.log10(above / top) + " dB");
+                        }
+                    }
+                    check(loops == 9, "3 x 3 loops");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-B3 bake: the level line puts the pack's speaker-stage level at TARGET_DB (+-0.15 dB)") {
+            void run() throws Exception {
+                File root = tmpDir("b3");
+                try {
+                    File out = new File(root, "pack");
+                    check(Main.run(new String[] {"bake", bakeFixture(new File(root, "bake"), null).getPath(), out.getPath(), "name=Bake"}) == 0, "bake");
+                    String txt = new String(readAll(new File(out, "pack.txt")), "UTF-8");
+                    check(txt.startsWith("# converted by ves.resynth bake (private: never commit)\n"), "header line: " + txt.substring(0, 60));
+                    check(txt.matches("(?s).*\nlevel -?[0-9]+\\.[0-9]\naligned yes\n.*"), "level line before aligned yes");
+                    double db = PackRenderer.stageLevelDb(loadPack(out));
+                    note("stage level " + f3(db) + " dB");
+                    near(db, PackRenderer.TARGET_DB, 0.15, "trimmed level");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-B4 bake: events at 22.05 kHz, floor(frames/2) +-1 samples, peak within 0.5 dB") {
+            void run() throws Exception {
+                File root = tmpDir("b4");
+                try {
+                    File out = new File(root, "pack");
+                    check(Main.run(new String[] {"bake", bakeFixture(new File(root, "bake"), null).getPath(), out.getPath(), "name=Bake"}) == 0, "bake");
+                    ves.core.Pack p = loadPack(out);
+                    int[] kinds = {ves.core.Pack.POP, ves.core.Pack.POP, ves.core.Pack.BUBBLE, ves.core.Pack.SHIFT_UP, ves.core.Pack.SHIFT_DOWN};
+                    int[] index = {0, 1, 0, 0, 0};
+                    for (int e = 0; e < kinds.length; e++) {
+                        short[] s = p.events[kinds[e]][index[e]];
+                        check(Math.abs(s.length - BAKE_EV_FRAMES[e] / 2) <= 1, "event " + e + ": " + s.length + " samples for " + BAKE_EV_FRAMES[e]);
+                        double pk = 0;
+                        for (short v : s) pk = Math.max(pk, Math.abs(v) / 32768.0);
+                        double src = 0;
+                        for (double v : bakeEvent(e)) src = Math.max(src, Math.abs(v));
+                        near(20 * Math.log10(pk / src), 0, 0.5, "event " + e + " peak");
+                    }
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-B5 bake refuses phase_zero != 0, fractional cycles, a frame mismatch (exit 1, nothing written) and a git worktree (exit 2)") {
+            void run() throws Exception {
+                File root = tmpDir("b5");
+                try {
+                    for (String bad : new String[] {"phase", "cycles", "frames"}) {
+                        File out = new File(root, "out-" + bad);
+                        String[] err = new String[1];
+                        int rc = runCapturing(new String[] {"bake", bakeFixture(new File(root, "bake-" + bad), bad).getPath(), out.getPath(), "name=Bad"}, err);
+                        check(rc == 1, bad + ": exit " + rc);
+                        check(!out.exists(), bad + ": wrote " + out);
+                        note(bad + ": " + err[0].trim());
+                    }
+                    File repo = new File(root, "repo");
+                    new File(repo, ".git").mkdirs();
+                    File out = new File(repo, "pack");
+                    int rc = Main.run(new String[] {"bake", bakeFixture(new File(root, "bake-ok"), null).getPath(), out.getPath(), "name=Ok"});
+                    check(rc == 2 && !out.exists(), "inside a worktree: exit " + rc);
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-B6 two bakes are byte-identical") {
+            void run() throws Exception {
+                File root = tmpDir("b6");
+                try {
+                    File m = bakeFixture(new File(root, "bake"), null), a = new File(root, "a"), b = new File(root, "b");
+                    check(Main.run(new String[] {"bake", m.getPath(), a.getPath(), "name=Same"}) == 0, "first");
+                    check(Main.run(new String[] {"bake", m.getPath(), b.getPath(), "name=Same"}) == 0, "second");
+                    String[] names = a.list();
+                    java.util.Arrays.sort(names);
+                    check(names.length == 15, "pack.txt, 9 loops, 5 events: " + names.length);
+                    for (String n : names) check(java.util.Arrays.equals(readAll(new File(a, n)), readAll(new File(b, n))), n + " differs");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
         l.add(new T("RS-A1 1/3-octave distance: identical input 0 dB, a +3 dB shelf 3 +- 0.2 dB") {
             void run() {
                 Random r = new Random(41);
@@ -1304,6 +1456,85 @@ public final class ResynthTest {
                 return readAll(f);
             }
         });
+    }
+
+    // ------------------------------------------------------------------ physics bake fixture (ves.resynth bake)
+
+    static final double[] BAKE_REF = {887.60033545, 2000.3, 4500.7};
+    static final int[] BAKE_CYC = {7, 16, 36};
+    static final double BAKE_PHASE1 = 0.7;
+    static final String[] BAKE_EV = {"decel_pop_0", "decel_pop_1", "decel_bubble_0", "shift_up", "shift_down"};
+    static final int[] BAKE_EV_FRAMES = {4851, 4410, 7056, 7056, 11466};
+    static final double[] BAKE_EV_PEAK = {0.9, 0.7, 0.5, 0.35, 0.32};
+
+    /** frames of a loop at 44.1 kHz, as the baker rounds them */
+    static int bakeFrames(int k) {
+        return (int) Math.round(BAKE_CYC[k] * 120 * 44100 / BAKE_REF[k]);
+    }
+
+    /**
+     * one loop at 44.1 kHz, periodic in its frames: orders 1-6 (order 1 strongest, phase 0.7), every 4th order 8-64
+     * (the speaker's band) and a 10 kHz tone
+     */
+    static double[] bakeLoop(int k, int layer) {
+        int fr = bakeFrames(k), c = BAKE_CYC[k];
+        double g = 0.4 + 0.2 * layer;
+        int b10 = (int) Math.round(10000.0 * fr / 44100);
+        double[] x = new double[fr];
+        for (int i = 0; i < fr; i++) {
+            double t = (double) i / fr, v = 0.05 * Math.cos(2 * Math.PI * b10 * t);
+            for (int n = 1; n <= 6; n++) v += (n == 1 ? 0.3 : 0.1 / n) * Math.cos(2 * Math.PI * n * c * t + (n == 1 ? BAKE_PHASE1 : 0.3 * n));
+            for (int n = 8; n <= 64; n += 4) v += 0.03 * Math.cos(2 * Math.PI * n * c * t + 0.3 * n);
+            x[i] = g * v;
+        }
+        return x;
+    }
+
+    /** event e at 44.1 kHz: a 2 ms attack, then a decaying 500 Hz tone */
+    static double[] bakeEvent(int e) {
+        double[] x = new double[BAKE_EV_FRAMES[e]];
+        for (int i = 0; i < x.length; i++)
+            x[i] = BAKE_EV_PEAK[e] * Math.min(1, i / 88.0) * Math.exp(-i / (0.03 * 44100)) * Math.cos(2 * Math.PI * 500 * (i - 88) / 44100);
+        return x;
+    }
+
+    /**
+     * writes a physics bake into dir (manifest.json, spec.txt, wav/): 3 rpm x off/partial/high, 5 events; mutate
+     * "phase", "cycles" or "frames" breaks the first loop's entry. Returns the manifest.
+     */
+    static File bakeFixture(File dir, String mutate) throws IOException {
+        File wav = new File(dir, "wav");
+        if (!wav.mkdirs()) throw new IOException("cannot make " + wav);
+        String[] loadName = {"off", "partial", "high"};
+        double[] loadVal = {0, 0.45, 1};
+        StringBuilder j = new StringBuilder("{\n \"name\": \"baked\",\n \"source\": \"physics\",\n \"sample_rate\": 44100,\n \"channels\": 1,\n"
+                + " \"sample_format\": \"pcm16\",\n \"load_axis\": [0.0, 0.45, 1.0],\n \"clips\": [\n");
+        boolean first = true;
+        for (int k = 0; k < BAKE_REF.length; k++)
+            for (int ly = 0; ly < 3; ly++) {
+                String f = String.format(java.util.Locale.ROOT, "wav/loop_r%02d_%s.wav", k, loadName[ly]);
+                WavIO.write(new File(dir, f), bakeLoop(k, ly), 44100);
+                int fr = bakeFrames(k);
+                boolean m = first && mutate != null;
+                j.append(first ? "" : ",\n").append("  {\"type\": \"loop\", \"file\": \"").append(f).append("\", \"rpm_index\": ").append(k)
+                        .append(", \"load_index\": ").append(ly).append(", \"ref_rpm\": ").append(BAKE_REF[k]).append(", \"ref_load\": ").append(loadVal[ly])
+                        .append(", \"frames\": ").append(m && mutate.equals("frames") ? fr + 1 : fr)
+                        .append(", \"cycles\": ").append(m && mutate.equals("cycles") ? BAKE_CYC[k] + 0.5 : BAKE_CYC[k])
+                        .append(", \"loop_start\": 0, \"loop_end\": ").append(fr)
+                        .append(", \"phase_zero_frame\": ").append(m && mutate.equals("phase") ? 5 : 0).append('}');
+                first = false;
+            }
+        for (int e = 0; e < BAKE_EV.length; e++) {
+            String f = "wav/event_" + BAKE_EV[e] + ".wav";
+            WavIO.write(new File(dir, f), bakeEvent(e), 44100);
+            j.append(",\n  {\"type\": \"event\", \"file\": \"").append(f).append("\", \"name\": \"").append(BAKE_EV[e])
+                    .append("\", \"frames\": ").append(BAKE_EV_FRAMES[e]).append('}');
+        }
+        j.append("\n ],\n \"pops_from_engine\": true\n}\n");
+        File man = new File(dir, "manifest.json");
+        Files.writeText(man, j.toString());
+        Files.writeText(new File(dir, "spec.txt"), "cylinders=4\nrev_limit_rpm=6700\npop_min_rpm=4000\nnoise=0.3\n");
+        return man;
     }
 
     /** {amplitude[], phase[]} of whole orders in an aligned loop (K cycles: order n on bin K n) */

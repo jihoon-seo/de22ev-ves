@@ -21,6 +21,7 @@ public final class Main {
             + "  segments <in.wav> <in.track.txt> <out.segments.txt>\n"
             + "  fit      <in.wav> <in.track.txt> <in.segments.txt> <out.vesmodel> [cyl=N] [seed=N] [model=auto|m1|m0]\n"
             + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off|<dB>] [seed=N]\n"
+            + "  bake     <manifest.json> <out-pack-dir> name=<pack name>\n"
             + "  ab bands <a.wav> <b.wav>\n"
             + "  ab track <in.wav> <in.track.txt> <in.segments.txt> <in.vesmodel> <out-dir> <name> [off=<other.vesmodel>] [noise=on|off|<dB>]\n"
             + "  demo     <pack-dir> <out-dir> <name> [track=<in.track.txt> segments=<in.segments.txt>]\n"
@@ -34,6 +35,7 @@ public final class Main {
             if (c.equals("segments")) return segments(args);
             if (c.equals("fit")) return fit(args);
             if (c.equals("render")) return render(args);
+            if (c.equals("bake")) return bake(args);
             if (c.equals("ab")) return ab(args);
             if (c.equals("demo")) return demo(args);
             throw new IllegalArgumentException("unknown command " + c);
@@ -292,6 +294,23 @@ public final class Main {
         }
         System.out.println("wrote " + name + "_demo_sweep.wav" + (tp != null ? " and " + name + "_demo_track.wav" : "") + " to " + dir
                 + " (" + p.name + ")");
+        return 0;
+    }
+
+    /** a physics bake (manifest.json, spec.txt, wav/) into an aligned pack: see Bake */
+    static int bake(String[] a) throws IOException {
+        need(a, 3);
+        File dir = new File(a[2]);
+        GitGuard.check(dir);
+        String name = opt(a, "name", null);
+        if (name == null) throw new IllegalArgumentException("bake: name=<pack name> missing");
+        Bake.Result r = Bake.convert(new File(a[1]), name);
+        Bake.write(dir, r);
+        long bytes = 0;
+        for (byte[] b : r.files.values()) bytes += b.length;
+        System.out.println(String.format(Locale.ROOT, "level %.1f", r.trim));
+        System.out.println("wrote " + r.loops + " loops, " + r.events + " events + pack.txt, " + r.samples + " samples, " + bytes
+                + " bytes, to " + dir);
         return 0;
     }
 
