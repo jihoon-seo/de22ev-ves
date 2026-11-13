@@ -135,21 +135,30 @@ public final class Vesd implements MicomAudio.Events {
         }
     }
 
-    /** loads the pack of a slot off the audio thread; the synth plays until (or unless) it is ready */
+    /**
+     * loads the pack of a slot off the audio thread (vex4 when that one does not load); the synth plays until it is
+     * ready, or when not even vex4 loads
+     */
     void loadPack(final String slot) {
         packSlot = slot;
         thread("pack", new Runnable() {
             public void run() {
                 try {
-                    ves.core.Pack p = packs.load(slot);
+                    StringBuilder note = new StringBuilder();
+                    ves.core.Pack p = packs.loadOrDefault(slot, note);
                     if (!slot.equals(packSlot)) return; // changed meanwhile
                     core.setPack(p);
-                    packNote = slot + ": " + p.name;
+                    packNote = note.toString();
+                    Out.log("pack: " + packNote);
+                } catch (ves.core.PackError e) {
+                    if (!slot.equals(packSlot)) return;
+                    core.setPack(null);
+                    packNote = e.getMessage() + " (synth plays)";
                     Out.log("pack: " + packNote);
                 } catch (Throwable e) {
                     if (!slot.equals(packSlot)) return;
                     core.setPack(null);
-                    packNote = slot + ": " + e.getMessage() + " (synth plays)";
+                    packNote = slot + ": " + e + " (synth plays)";
                     Out.log("pack: " + packNote);
                 }
             }

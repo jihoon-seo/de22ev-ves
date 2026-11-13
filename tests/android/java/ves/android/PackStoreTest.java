@@ -112,6 +112,51 @@ public final class PackStoreTest {
             check(true, "no vesd.jar: " + e.getMessage());
         }
         check(none.list().contains("vex4 -"), "no vesd.jar: list still answers");
+
+        // 0.2.8: a chosen pack that does not load falls back to the default built-in (vex4), then to the synth
+        StringBuilder note = new StringBuilder();
+        try {
+            check("911 GT3 992".equals(j.loadOrDefault("gt3", note).name) && note.toString().equals("gt3: 911 GT3 992"),
+                    "PS-F0 a pack that loads is used as it is: " + note);
+        } catch (PackError e) {
+            check(false, "PS-F0 gt3: " + e.getMessage());
+        }
+        note.setLength(0);
+        try {
+            ves.core.Pack p = j.loadOrDefault("user3", note);
+            check("VEX 4-cyl".equals(p.name) && note.indexOf("user3: empty") >= 0 && note.indexOf("vex4 plays") >= 0,
+                    "PS-F1 empty user3 -> the vex4 pack: " + p.name + ", note " + note);
+        } catch (PackError e) {
+            check(false, "PS-F1 empty user3 -> vex4: " + e.getMessage());
+        }
+        check("vex4".equals(PackStore.DEFAULT), "PackStore.DEFAULT is vex4");
+        File src3 = new File(root, "src3"), mod3 = new File(root, "mod3");
+        writePack(new File(src3, "gt3"), "911 GT3 992", 1);
+        jar(new File(mod3, "vesd.jar"), src3, "packs/", "bad/pack.txt");
+        try {
+            new PackStore(mod3, data).loadOrDefault("user3", new StringBuilder());
+            check(false, "PS-F2 no vex4 in the jar + an empty slot: PackError");
+        } catch (PackError e) {
+            check(e.getMessage().contains("user3") && e.getMessage().contains("vex4"), "PS-F2 no vex4 in the jar + an empty slot: " + e.getMessage());
+        }
+        File src4 = new File(root, "src4"), mod4 = new File(root, "mod4");
+        new File(src4, "vex4").mkdirs();
+        write(new File(src4, "vex4/pack.txt"), "name broken\ncylinders 4\n".getBytes("UTF-8"));
+        jar(new File(mod4, "vesd.jar"), src4, "packs/", "bad/pack.txt");
+        PackStore broken = new PackStore(mod4, data);
+        for (String slot : new String[] { "vex4", "user3" }) {
+            try {
+                broken.loadOrDefault(slot, new StringBuilder());
+                check(false, "PS-F3 broken vex4 (" + slot + "): PackError");
+            } catch (PackError e) {
+                String m = e.getMessage();
+                check(m.indexOf("vex4:") == m.lastIndexOf("vex4:"), "PS-F3 broken vex4 (" + slot + "): one PackError, no loop: " + m);
+            }
+        }
+        java.util.List<String> want = new java.util.ArrayList<String>(java.util.Arrays.asList(PackStore.BUILT_IN));
+        want.addAll(java.util.Arrays.asList(PackStore.USER_SLOTS));
+        check(want.equals(java.util.Arrays.asList(ves.core.Settings.SOUNDS)), "PS-L1 Settings.SOUNDS == BUILT_IN + USER_SLOTS: "
+                + java.util.Arrays.asList(ves.core.Settings.SOUNDS));
         System.out.println(failed == 0 ? "packstore: all checks passed" : "packstore: " + failed + " check(s) failed");
         System.exit(failed == 0 ? 0 : 1);
     }

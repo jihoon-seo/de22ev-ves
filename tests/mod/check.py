@@ -104,8 +104,11 @@ m = re.search(r'DEFAULT_SOUND = "(\w+)"', core)
 core_def = m and m.group(1)
 m = re.search(r'o\.put\(Prefs\.SOUND, "(\w+)"\)', actions)
 act_def = m and m.group(1)
-check('MOD-S2 sound default: settings.json == Actions == Settings.DEFAULT_SOUND == vex4',
-      defaults.get('sound') == act_def == core_def == 'vex4', '%s, %s, %s' % (defaults.get('sound'), act_def, core_def))
+m = re.search(r'static final String DEFAULT = "(\w+)"', packstore)
+store_def = m and m.group(1)
+check('MOD-S2 sound default: settings.json == Actions == Settings.DEFAULT_SOUND == PackStore.DEFAULT == vex4',
+      defaults.get('sound') == act_def == core_def == store_def == 'vex4',
+      '%s, %s, %s, %s' % (defaults.get('sound'), act_def, core_def, store_def))
 HIDDEN = ('synth', 'i4t', 'v6', 'v8', 'i6')
 for tid, name, src in (('MOD-H1', 'Actions', actions), ('MOD-H2', 'MainActivity', main), ('MOD-H3', 'ProbeActivity', probe)):
     bad = [h for h in HIDDEN if '"%s"' % h in src] + [w for w in ('synth', '합성음') if w in src]

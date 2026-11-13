@@ -75,6 +75,37 @@ final class PackStore {
         return new File(modDir, "vesd.jar");
     }
 
+    /** the built-in pack that plays when the chosen one does not load (Settings.DEFAULT_SOUND) */
+    static final String DEFAULT = "vex4";
+
+    /**
+     * the pack in a slot, or the DEFAULT built-in when that one does not load; note gets "slot: name" or
+     * "slot: reason (vex4 plays)". PackError when neither loads (then the synth plays); DEFAULT itself is tried once.
+     */
+    Pack loadOrDefault(String slot, StringBuilder note) throws PackError {
+        String why;
+        try {
+            Pack p = load(slot);
+            note.append(slot).append(": ").append(p.name);
+            return p;
+        } catch (PackError e) {
+            why = reason(slot, e);
+            if (DEFAULT.equals(slot)) throw new PackError(why);
+        }
+        try {
+            Pack p = load(DEFAULT);
+            note.append(why).append(" (").append(DEFAULT).append(" plays)");
+            return p;
+        } catch (PackError e) {
+            throw new PackError(why + "; " + reason(DEFAULT, e));
+        }
+    }
+
+    private static String reason(String slot, PackError e) {
+        String m = e.getMessage();
+        return m != null && m.startsWith(slot + ":") ? m : slot + ": " + m;
+    }
+
     /** the pack in a slot; PackError with the reason when it is missing or invalid */
     Pack load(String slot) throws PackError {
         if (isBuiltIn(slot)) return loadBuiltIn(slot);
