@@ -41,6 +41,8 @@ final class Actions {
     static final String[] RESPONSE = { "soft", "normal", "sport" };
     static final String[] RESPONSE_NAMES = { "부드럽게", "보통", "스포티" };
     static final String[] FADE = { "0", "60", "80", "100", "120" };
+    static final String[] SPEED_BOOST = { "off", "low", "mid", "high" };
+    static final String[] SPEED_BOOST_NAMES = { "끔", "약하게", "보통", "강하게" };
 
     private static final HmgClient HMG = new HmgClient(5000);
 
@@ -62,6 +64,7 @@ final class Actions {
             if (!o.has(Prefs.POPS)) o.put(Prefs.POPS, "soft");
             if (!o.has(Prefs.PROMPTS)) o.put(Prefs.PROMPTS, "duck");
             if (!o.has(Prefs.SOUND)) o.put(Prefs.SOUND, "synth");
+            if (!o.has(Prefs.SPEED_BOOST)) o.put(Prefs.SPEED_BOOST, "high");
         } catch (org.json.JSONException e) {
             throw new IOException(e.getMessage());
         }

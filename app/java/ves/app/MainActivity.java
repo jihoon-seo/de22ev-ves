@@ -33,7 +33,7 @@ import ves.hmg.VesLink;
 public final class MainActivity extends Activity {
     private final Handler h = new Handler();
     private TextView status, volume;
-    private Button power, sound, profile, behavior, pops, prompts, mode, idle, regen, response, fade;
+    private Button power, sound, profile, behavior, pops, prompts, mode, idle, regen, response, fade, speedBoost;
     private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
 
@@ -96,6 +96,7 @@ public final class MainActivity extends Activity {
         LinearLayout r3 = row(root);
         response = setting(r3, Prefs.RESPONSE, Actions.RESPONSE);
         fade = setting(r3, Prefs.FADE_ABOVE, Actions.FADE);
+        speedBoost = setting(root, Prefs.SPEED_BOOST, Actions.SPEED_BOOST);
 
         Button probe = big(root, "차량 점검 (주차 상태에서)", 0);
         probe.setOnClickListener(new View.OnClickListener() {
@@ -329,6 +330,7 @@ public final class MainActivity extends Activity {
         response.setText("반응: " + Actions.name(o.optString(Prefs.RESPONSE), Actions.RESPONSE, Actions.RESPONSE_NAMES));
         String f = o.optString(Prefs.FADE_ABOVE);
         fade.setText("0".equals(f) ? "고속 줄임: 끔" : "고속 줄임: " + f + " km/h부터");
+        speedBoost.setText("고속 보강: " + Actions.name(o.optString(Prefs.SPEED_BOOST), Actions.SPEED_BOOST, Actions.SPEED_BOOST_NAMES));
     }
 
     // ---- small view helpers

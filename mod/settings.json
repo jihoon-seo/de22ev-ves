@@ -13,7 +13,7 @@
       "type": "number",
       "default": 40,
       "title": "볼륨 (0-100)",
-      "description": "엔진 사운드 자체의 크기입니다. 차 볼륨과 따로 움직이고, 100에서도 상한이 있습니다."
+      "description": "엔진 사운드 자체의 크기입니다. 차 볼륨과 따로 움직이고, 100에서도 상한이 있습니다. 0.2.7부터 전 구간이 0.2.6보다 6 dB 큽니다."
     },
     {
       "key": "sound",
@@ -145,6 +145,19 @@
         { "value": "80", "title": "80 km/h부터" },
         { "value": "100", "title": "100 km/h부터" },
         { "value": "120", "title": "120 km/h부터" }
+      ]
+    },
+    {
+      "key": "speed_boost",
+      "type": "choice",
+      "default": "high",
+      "title": "고속에서 키우기",
+      "description": "40 km/h부터 110 km/h까지 바람·노면 소음만큼 차츰 키웁니다 (끔 / +3 / +6 / +9 dB). 볼륨이 높으면 상한 때문에 덜 커집니다.",
+      "options": [
+        { "value": "off", "title": "끔" },
+        { "value": "low", "title": "약하게 (+3 dB)" },
+        { "value": "mid", "title": "보통 (+6 dB)" },
+        { "value": "high", "title": "강하게 (+9 dB, 기본)" }
       ]
     }
   ]

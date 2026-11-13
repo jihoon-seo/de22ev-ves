@@ -16,6 +16,7 @@ public final class Prefs {
     public static final String ENABLED = "enabled", VOLUME = "volume", PROFILE = "profile", MODE = "mode",
             IDLE_LEVEL = "idle_level", REGEN_LEVEL = "regen_level", RESPONSE = "response", FADE_ABOVE = "fade_above",
             BEHAVIOR = "behavior", POPS = "pops", SOUND = "sound", PROMPTS = "prompts";
+    public static final String SPEED_BOOST = "speed_boost";
 
     private Prefs() {}
 

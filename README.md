@@ -66,7 +66,7 @@ import stay on your car; only use recordings you may use.
 | key | values |
 |---|---|
 | `enabled` | off (default) / on |
-| `volume` | 0–100 (default 40) |
+| `volume` | 0–100 (default 40); since 0.2.7 every value is 6 dB louder than in 0.2.6 |
 | `sound` | `synth` (default), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice` (default: sound whenever Ready) / `classic` (the `mode` below) |
@@ -77,6 +77,7 @@ import stay on your car; only use recordings you may use.
 | `regen_level` | regen sound 0–100 % |
 | `response` | pedal response `soft` / `normal` / `sport` |
 | `fade_above` | fade out above 60/80/100/120 km/h, or off |
+| `speed_boost` | louder with speed, from 40 km/h up to +3/+6/+9 dB at 110 km/h: `off`, `low`, `mid`, `high` (default); less of it at a high volume |
 
 P, N, R or not Ready is always silent.
 

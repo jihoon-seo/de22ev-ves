@@ -35,6 +35,8 @@ voice recognition always pause it. The experimental setting "voice" plays on qui
 navigation's voice too, but it may cut prompts (if one seems cut, it gives up for the rest of the drive).
 Own sound packs: put pack.txt and WAV loops (22050 Hz mono 16-bit) in VES/packs/<folder>/ on the
 stick and use "USB에서 소리 팩 가져오기" in the app (format: README on GitHub).
+Level: since 0.2.7 every volume value is 6 dB louder than in 0.2.6, and "speed boost" (speed_boost)
+raises the sound from 40 km/h up to +3/+6/+9 dB at 110 km/h (off/low/mid/high, default high).
 Settings: the app, the split-screen widget, the star key action, or HMG-API's Mods tab (there,
 press "Save settings" at the bottom: leaving the screen without it drops the change; Apply
 changes isn't needed).

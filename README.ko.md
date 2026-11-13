@@ -60,7 +60,7 @@ loop r2000_off.wav rpm=2000 load=off
 | 키 | 값 |
 |---|---|
 | `enabled` | 끔(기본) / 켬 |
-| `volume` | 0–100 (기본 40) |
+| `volume` | 0–100 (기본 40). 0.2.7부터 모든 값이 0.2.6보다 6 dB 큼 |
 | `sound` | `synth`(기본), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
 | `profile` | 회전수 움직임(합성음은 소리 종류도): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice`(기본: Ready면 항상 소리) / `classic`(아래 `mode`를 따름) |
@@ -71,6 +71,7 @@ loop r2000_off.wav rpm=2000 load=off
 | `regen_level` | 회생음 0–100% |
 | `response` | 페달 반응 `soft` / `normal` / `sport` |
 | `fade_above` | 60/80/100/120 km/h부터 줄여 끄기, 또는 끔 |
+| `speed_boost` | 40 km/h부터 110 km/h까지 차츰 키우기(+3/+6/+9 dB): `off`, `low`, `mid`, `high`(기본). 볼륨이 높으면 덜 커짐 |
 
 P, N, R이거나 Ready가 아니면 항상 무음입니다.
 
