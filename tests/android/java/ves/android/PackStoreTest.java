@@ -74,6 +74,18 @@ public final class PackStoreTest {
                 check(true, "refused slot " + bad + ": " + e.getMessage());
             }
         }
+        // PS-C1 (0.2.8): a pack the size of S2000 Baked (about 3.3 MB) imports; one over 5 MB is refused
+        writeBig(new File(usb, "packs/big"), "big", 38);
+        check("big".equals(st.importPack(sticks, "big", "user2")) && st.load("user2").on.length == 38,
+                "PS-C1 a 3.4 MB pack imports into a user slot");
+        writeBig(new File(usb, "packs/huge"), "huge", 60);
+        try {
+            st.importPack(sticks, "huge", "user2");
+            check(false, "PS-C1 a pack over 5 MB is refused");
+        } catch (PackError e) {
+            check(e.getMessage().contains("larger than"), "PS-C1 a pack over 5 MB is refused: " + e.getMessage());
+        }
+        check("big".equals(st.load("user2").name), "PS-C1 the refused import leaves user2 as it was");
         st.importPack(sticks, "mycar", "user1"); // replace in place
         check("my car".equals(st.load("user1").name) && !new File(data, "packs/.user1.old").exists()
                 && !new File(data, "packs/.user1.new").exists(), "re-import replaces cleanly");
@@ -192,6 +204,19 @@ public final class PackStoreTest {
         }
         write(new File(dir, "pack.txt"), t.toString().getBytes("UTF-8"));
         write(new File(dir, "readme.txt"), "not copied".getBytes("UTF-8"));
+    }
+
+    /** n on-load loops of 2 s each (88 KB) at distinct rpm from 900 up */
+    static void writeBig(File dir, String name, int n) throws IOException {
+        dir.mkdirs();
+        StringBuilder t = new StringBuilder("name " + name + "\ncylinders 4\nidle 800\nredline 9000\n");
+        for (int i = 0; i < n; i++) {
+            int r = 900 + i * 100;
+            String f = "b" + r + ".wav";
+            write(new File(dir, f), wav(1, 44100, r / 30.0));
+            t.append("loop ").append(f).append(" rpm=").append(r).append(" load=on\n");
+        }
+        write(new File(dir, "pack.txt"), t.toString().getBytes("UTF-8"));
     }
 
     static void write(File f, byte[] b) throws IOException {
