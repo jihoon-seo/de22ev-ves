@@ -11,6 +11,7 @@ echo "== sockets"; bash "$HERE/android/sockets.sh" || RC=1
 echo "== packstore"; bash "$HERE/android/packstore.sh" || RC=1
 echo "== render (packs)"; bash "$HERE/render/run.sh" || RC=1
 echo "== resynth (recordings to packs)"; bash "$HERE/resynth/run.sh" || RC=1
+echo "== packs (built-in packs, sounds by 히릿)"; bash "$HERE/packs/run.sh" || RC=1
 echo "== mod"; python -I "$HERE/mod/check.py" "$HERE/.." || RC=1
 echo "== kit"; bash "$HERE/kit/run.sh" || RC=1
 echo "== hmgapi engine (needs HMGAPI_SRC and dist/)"; bash "$HERE/hmgapi/engine.sh" || RC=1
