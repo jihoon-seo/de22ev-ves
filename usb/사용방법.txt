@@ -13,7 +13,8 @@ USB 준비
 - ZIP을 풀어 NEMESIS.data, NEMESIS.sh, VES_MOD, VES 폴더를 USB 최상위에 놓습니다.
   (VES 폴더가 있어야 차량 점검이 USB를 찾습니다. 없으면 빈 VES 폴더를 만드세요.)
   (다른 키트의 NEMESIS.sh/NEMESIS.data 와 이름이 같으니 바꿔치기됩니다.)
-- VES_MOD/MODE.txt 첫 줄: install(기본) / status / uninstall
+- VES_MOD/MODE.txt 첫 줄: install(기본) / status / uninstall. 설치가 성공하면 status 로 바뀌어,
+  USB를 다시 꽂으면 로그를 모읍니다.
 
 순서
 업데이트: 같은 방법으로 새 버전을 설치하면 설정은 그대로 두고 바꿉니다. STATUS.txt 가 UPDATED_IN_USE_NOW 이면

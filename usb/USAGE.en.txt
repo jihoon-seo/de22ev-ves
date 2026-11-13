@@ -14,7 +14,8 @@ install.txt carries a trusted-author warning; the install goes ahead.
 USB stick
 - Unzip and put NEMESIS.data, NEMESIS.sh and the VES_MOD and VES folders at the top of the USB stick
   (the car check finds the stick only when the VES folder exists; an empty one is fine).
-- The first line of VES_MOD/MODE.txt: install (default) / status / uninstall
+- The first line of VES_MOD/MODE.txt: install (default) / status / uninstall. After a successful
+  install the kit sets it to status, so plugging the stick in again collects the logs.
 
 Steps
 1. Install: start the car, wait about a minute after boot, insert the stick and choose Yes.

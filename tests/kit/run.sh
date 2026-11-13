@@ -58,6 +58,9 @@ if [ "$STATUS" = INSTALLED_RESTART_THE_CAR ] && grep -q "engine install .*de22ev
     && order "hmgapid engine install" "hmgapid enable de22ev-ves"; then
     pass "first install: signed package, then enable; the car restart attaches the tile, star key and widget"
 else fail "install" "status=$STATUS calls=$(tr '\n' ';' < "$M/calls")"; fi
+# a successful install switches the stick to status, so the next run collects the logs instead of reinstalling
+[ "$(head -1 "$M/usb/VES_MOD/MODE.txt")" = status ] && pass "first install: MODE.txt now status" \
+    || fail "first install MODE.txt" "$(cat "$M/usb/VES_MOD/MODE.txt")"
 
 # an update applies at once: hmgapid re-syncs mod apps only when the app list changes (an update
 # keeps it) and doesn't restart a running service on enable, so the kit asks for both
@@ -67,6 +70,8 @@ if [ "$STATUS" = UPDATED_IN_USE_NOW ] \
     && order "hmgapid engine install" "hmgapid enable de22ev-ves" "hmgapid engine apps" "hmgapid service-restart de22ev-ves vesd"; then
     pass "update: install, enable, app update, service restart, no car restart"
 else fail "update" "status=$STATUS calls=$(tr '\n' ';' < "$M/calls")"; fi
+[ "$(head -1 "$M/usb/VES_MOD/MODE.txt")" = status ] && pass "update: MODE.txt now status" \
+    || fail "update MODE.txt" "$(cat "$M/usb/VES_MOD/MODE.txt")"
 # the running vesd's logs and its logcat lines are saved before the restart (evidence for the next report)
 if grep -q "vesd: old run" "$OUTDIR/service-logs-before/vesd.log" 2>/dev/null \
     && grep -q MicomAudioService "$OUTDIR/logcat-ves-before.txt" && ! grep -q unrelated "$OUTDIR/logcat-ves-before.txt" \
@@ -90,5 +95,7 @@ setup CN7.KOR.0000.V039.001.260902
 run_kit install
 case "$STATUS" in "STOPPED: NOT_THIS_CAR"*) pass "other car refused" ;; *) fail "other car" "$STATUS" ;; esac
 grep -q "engine install" "$M/calls" && fail "other car" "it installed" || pass "other car: nothing installed"
+[ "$(head -1 "$M/usb/VES_MOD/MODE.txt")" = install ] && pass "other car: MODE.txt stays install" \
+    || fail "other car MODE.txt" "$(cat "$M/usb/VES_MOD/MODE.txt")"
 
 [ "$FAILED" = 0 ] && echo "kit: all checks passed" || { echo "kit: $FAILED check(s) failed"; exit 1; }

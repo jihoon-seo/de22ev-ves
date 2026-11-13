@@ -1,6 +1,7 @@
 #!/system/bin/sh
 # USB kit for the HMG-API mod de22ev-ves (virtual engine sound in the cabin).
-#   MODE.txt=install    install/update the signed mod and enable it (active after the next boot)
+#   MODE.txt=install    install/update the signed mod and enable it (active after the next boot); on success
+#                       MODE.txt becomes status, so plugging the stick in again collects the logs
 #   MODE.txt=status     copy HMG-API's log, recent logcat and the mod state to USB
 #   MODE.txt=uninstall  disable and remove the mod (stock behaviour after the next boot)
 export PATH=/system/bin:/system/xbin:/data/nemesis/bin
@@ -89,6 +90,8 @@ if [ "$UPDATE" = yes ]; then
     "$H" service-restart "$ID" vesd > "$OUT/service-restart.txt" 2>&1
 fi
 dump_state after
+# installed: the next run of this stick collects the logs instead of installing again
+printf 'status\n' > "$KIT/MODE.txt" && echo "MODE.txt: status" || echo "MODE.txt not switched"
 if [ "$UPDATE" = yes ]; then done_status UPDATED_IN_USE_NOW; exit 0; fi
 # first install: the menu tile, star key action and split-screen widget attach at the next boot
 done_status INSTALLED_RESTART_THE_CAR
