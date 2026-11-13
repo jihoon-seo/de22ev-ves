@@ -82,6 +82,91 @@ final class PackFormatTests {
         }
     }
 
+    static final int[] TONE_RPM = {1050, 2100, 4200, 6300};
+    static final int TONE_LEN = 10080; // 4, 8, 16, 24 whole cycles
+
+    /** one aligned whole-cycle loop: engine order ord at amplitude amp */
+    static short[] toneLoop(int rpm, int ord, double amp) {
+        double spc = 2646000.0 / rpm;
+        short[] x = new short[TONE_LEN];
+        for (int i = 0; i < x.length; i++) x[i] = (short) Math.round(amp * Math.sin(2 * Math.PI * ord * i / spc));
+        return x;
+    }
+
+    /**
+     * an aligned pack with one layer per loads[k] ("off", "0.45", "on", ...): the first count[k] of TONE_RPM, engine
+     * order ord[k] at amplitude amp[k]; extra lines appended to pack.txt
+     */
+    static TestMain.MapSource layered(String[] loads, int[] count, int[] ord, double[] amp, String extra) {
+        java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+        StringBuilder t = new StringBuilder("name layers\ncylinders 4\nidle 800\nredline 6500\naligned yes\n");
+        for (int k = 0; k < loads.length; k++)
+            for (int i = 0; i < count[k]; i++) {
+                String f = "t" + TONE_RPM[i] + "_" + k + ".wav";
+                m.put(f, TestMain.wavPcm(toneLoop(TONE_RPM[i], ord[k], amp[k])));
+                t.append("loop ").append(f).append(" rpm=").append(TONE_RPM[i]).append(" load=").append(loads[k]).append('\n');
+            }
+        if (extra != null) t.append(extra);
+        m.put("pack.txt", t.toString().getBytes());
+        return new TestMain.MapSource(m);
+    }
+
+    /** off / 0.45 / on, orders 8 / 12 / 20, amplitudes 9000 / 6000 / 3000 */
+    static TestMain.MapSource threeLayers(String extra) {
+        return layered(new String[] {"off", "0.45", "on"}, new int[] {4, 4, 4}, new int[] {8, 12, 20}, new double[] {9000, 6000, 3000}, extra);
+    }
+
+    static TestMain.MapSource replace(TestMain.MapSource s, String a, String b) {
+        String t = new String(s.files.get("pack.txt"));
+        check(t.indexOf(a) >= 0, "fixture has " + a);
+        s.files.put("pack.txt", t.replace(a, b).getBytes());
+        return s;
+    }
+
+    static int peak(short[] x) {
+        int p = 0;
+        for (short v : x) p = Math.max(p, Math.abs(v));
+        return p;
+    }
+
+    /** the load whose smoothstep is e (bisection) */
+    static double loadFor(double e) {
+        double lo = 0, hi = 1;
+        for (int i = 0; i < 200; i++) {
+            double mid = (lo + hi) / 2;
+            if (mid * mid * (3 - 2 * mid) < e) lo = mid;
+            else hi = mid;
+        }
+        return (lo + hi) / 2;
+    }
+
+    /** amplitude of DFT bin b over y[from .. from+n) */
+    static double binAmp(float[] y, int from, int n, int b) {
+        double re = 0, im = 0;
+        for (int i = 0; i < n; i++) {
+            double a = 2 * Math.PI * b * (double) i / n;
+            re += y[from + i] * Math.cos(a);
+            im += y[from + i] * Math.sin(a);
+        }
+        return 2 * Math.hypot(re, im) / n;
+    }
+
+    /** {off, partial, high} tone amplitudes at 2100 rpm (8 cycles = 10080 samples: orders 8/12/20 on bins 64/96/160) */
+    static double[] layerAmps(Pack p, double load, double regen) {
+        PackVoice v = new PackVoice(SR);
+        v.setPack(p);
+        float[] y = new float[2 * TONE_LEN];
+        v.renderRaw(y, y.length, 2100, load, regen);
+        return new double[] {binAmp(y, TONE_LEN, TONE_LEN, 64), binAmp(y, TONE_LEN, TONE_LEN, 96), binAmp(y, TONE_LEN, TONE_LEN, 160)};
+    }
+
+    /** the pack, or an assertion failure with the loader's reason */
+    static Pack loadOk(TestMain.MapSource s) throws PackError {
+        String r = refusal(s);
+        check(r == null, "pack refused: " + r);
+        return PackLoader.load(s);
+    }
+
     static String hex(byte[] d, int n) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < n; i++) b.append(String.format("%02x", d[i] & 0xff));
@@ -187,6 +272,93 @@ final class PackFormatTests {
                 check(r != null && r.indexOf("samples") >= 0, "one sample over MAX_SAMPLES: " + r);
                 check(PackLoader.MAX_LOOPS == 96 && PackLoader.MAX_SAMPLES == 2000000, "limits " + PackLoader.MAX_LOOPS + " " + PackLoader.MAX_SAMPLES);
                 check(refusal(TestMain.testPack("oversize")) != null, "K2 oversize still refused");
+            }
+        });
+
+        // K5 load=on|off|<0..1>: up to 4 load layers (a physics bake: off, partial 0.45, high)
+        l.add(new TestMain.T("K5_load_layers_parse") {
+            void run() throws Exception {
+                String r = refusal(threeLayers(null));
+                check(r == null, "off/0.45/on refused: " + r);
+                Pack p = PackLoader.load(threeLayers(null));
+                check(java.util.Arrays.equals(p.loads, new double[] {0, 0.45, 1}), "loads " + java.util.Arrays.toString(p.loads));
+                check(p.layers.length == 3 && p.layers[0] == p.off && p.layers[2] == p.on, "on = top layer, off = load 0");
+                check(Math.abs(peak(p.off[0].pcm) - 9000) < 20 && Math.abs(peak(p.layers[1][0].pcm) - 6000) < 20 && Math.abs(peak(p.on[0].pcm) - 3000) < 20, "layers hold their loops");
+                check(p.on.length == 4 && p.layers[1].length == 4 && p.off.length == 4, "4 loops per layer");
+                // on = 1 = 1.000, off = 0 = 0.0: one layer each
+                TestMain.MapSource s = threeLayers(null);
+                replace(s, "rpm=4200 load=on", "rpm=4200 load=1");
+                replace(s, "rpm=6300 load=on", "rpm=6300 load=1.000");
+                replace(s, "rpm=1050 load=off", "rpm=1050 load=0");
+                replace(s, "rpm=6300 load=off", "rpm=6300 load=0.0");
+                Pack q = PackLoader.load(s);
+                check(q.layers.length == 3 && q.on.length == 4 && q.off.length == 4, "on/1 and off/0 share their layers: " + q.layers.length);
+                // no load-0 layer: the lowest stands in (as off = on in a pack without off-load loops)
+                Pack n = PackLoader.load(layered(new String[] {"0.45", "on"}, new int[] {4, 4}, new int[] {12, 20}, new double[] {6000, 3000}, null));
+                check(n.off == n.layers[0] && n.off == n.layers[1] && Math.abs(peak(n.off[0].pcm) - 6000) < 20, "0.45 stands in for off");
+                check(java.util.Arrays.equals(n.loads, new double[] {0, 0.45, 1}), "stand-in loads " + java.util.Arrays.toString(n.loads));
+                Pack two = PackLoader.load(TestMain.testPack("noff"));
+                check(two.off == two.on && two.layers.length == 2, "no off layer: on stands in");
+                // refused
+                for (String bad : new String[] {"1.5", "-0.1", "0.4567", "0.45.1", ".5", "1.1"}) {
+                    r = refusal(layered(new String[] {"off", bad, "on"}, new int[] {4, 4, 4}, new int[] {8, 12, 20}, new double[] {9000, 6000, 3000}, null));
+                    check(r != null, "load=" + bad + " accepted");
+                }
+                r = refusal(layered(new String[] {"off", "0.2", "0.4", "0.6", "on"}, new int[] {4, 4, 4, 4, 4}, new int[] {8, 9, 10, 11, 20},
+                        new double[] {9000, 8000, 7000, 6000, 3000}, null));
+                check(r != null, "a 5th load accepted");
+                check(refusal(layered(new String[] {"off", "0.2", "0.6", "on"}, new int[] {4, 4, 4, 4}, new int[] {8, 9, 10, 20},
+                        new double[] {9000, 8000, 7000, 3000}, null)) == null, "4 loads refused");
+                r = refusal(layered(new String[] {"off", "0.45", "on"}, new int[] {4, 1, 4}, new int[] {8, 12, 20}, new double[] {9000, 6000, 3000}, null));
+                check(r != null, "a middle layer with one loop accepted");
+                r = refusal(layered(new String[] {"off", "0.45", "on"}, new int[] {4, 4, 2}, new int[] {8, 12, 20}, new double[] {9000, 6000, 3000}, null));
+                check(r != null, "a top layer of two loops accepted");
+            }
+        });
+
+        // G9 PackVoice blends the two load layers around the effective load e = smoothstep(load) x (1 - regen)
+        l.add(new TestMain.T("G9_load_layers_blend") {
+            void run() throws Exception {
+                Pack p = loadOk(threeLayers(null));
+                double[] off = layerAmps(p, 0, 0), par = layerAmps(p, loadFor(0.45), 0), high = layerAmps(p, 1, 0);
+                double a = high[2];
+                System.out.println("    solo amplitudes off " + off[0] + " partial " + par[1] + " high " + a);
+                check(a > 0.3, "the top layer plays at load 1: " + a);
+                near(par[1], a, 0.02 * a, "e = 0.45: the partial layer alone");
+                check(par[0] < 1e-3 * a && par[2] < 1e-3 * a, "e = 0.45: off " + par[0] + " high " + par[2] + " (< -60 dB)");
+                near(off[0], a, 0.02 * a, "load 0: the off layer");
+                check(off[1] < 1e-3 * a && off[2] < 1e-3 * a, "load 0: off only (" + off[1] + ", " + off[2] + ")");
+                check(high[0] < 1e-3 * a && high[1] < 1e-3 * a, "load 1: high only");
+                double[] mid = layerAmps(p, loadFor(0.725), 0);
+                near(mid[1] / par[1], 0.5, 0.01, "e = 0.725: partial at half");
+                near(mid[2] / a, 0.5, 0.01, "e = 0.725: high at half");
+                check(mid[0] < 1e-3 * a, "e = 0.725: no off layer " + mid[0]);
+                double[] rg = layerAmps(p, 1, 1);
+                near(rg[0], a, 0.02 * a, "regen 1: the off layer");
+                check(rg[1] < 1e-3 * a && rg[2] < 1e-3 * a, "regen 1: off only");
+                // a 10 s load ramp at 3000 rpm through layers of the same tone: no clicks, level held
+                Pack same = loadOk(layered(new String[] {"off", "0.45", "on"}, new int[] {4, 4, 4}, new int[] {8, 8, 8},
+                        new double[] {12000, 6000, 3000}, null));
+                PackVoice v = new PackVoice(SR);
+                v.setPack(same);
+                float[] y = new float[1000 * 220]; // 10 s in whole blocks
+                float[] blk = new float[220];
+                for (int b = 0; b < y.length / 220; b++) {
+                    v.renderRaw(blk, 220, 3000, b / (double) (y.length / 220 - 1), 0);
+                    System.arraycopy(blk, 0, y, b * 220, 220);
+                }
+                double lo = 1e9, hi = 0, maxD = 0;
+                for (int k = 1; k < 99; k++) {
+                    double ss = 0;
+                    for (int i = k * 2205; i < (k + 1) * 2205; i++) ss += y[i] * y[i];
+                    lo = Math.min(lo, Math.sqrt(ss / 2205));
+                    hi = Math.max(hi, Math.sqrt(ss / 2205));
+                }
+                for (int i = 1; i < y.length; i++) maxD = Math.max(maxD, Math.abs(y[i] - y[i - 1]));
+                double db = 20 * Math.log10(hi / lo), slope = 2 * Math.PI * 650 / SR * (12000 / 32768.0);
+                System.out.println("    load ramp: level spread " + Math.round(db * 100) / 100.0 + " dB, max step " + maxD);
+                check(db < 1.0, "ramp level spread " + db + " dB");
+                check(maxD <= 1.3 * slope, "ramp max step " + maxD + " vs " + slope);
             }
         });
     }

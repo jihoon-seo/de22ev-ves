@@ -1,10 +1,10 @@
 package ves.core;
 
 /**
- * Plays a sound pack: for each layer (on-load, off-load) the two loops nearest the rpm are crossfaded at
- * constant power on log rpm, each pitch-shifted by rpm / its own rpm (linear interpolation, ratio held to
- * 0.5..2 beyond the pack's range). The layers are blended by load (load 1: on only, load 0: off only); the
- * overrun amount (EngineParams.regen) moves towards the off layer. The mix (plus pops) goes through
+ * Plays a sound pack: for each load layer the two loops nearest the rpm are crossfaded at constant power on
+ * log rpm, each pitch-shifted by rpm / its own rpm (linear interpolation, ratio held to 0.5..2 beyond the pack's
+ * range). The two layers around the effective load e = smoothstep(load) x (1 - regen) are blended (load 1: the
+ * top layer only, load 0 or full overrun: the load-0 layer only; a two-layer pack plays exactly as before 0.2.8). The mix (plus pops) goes through
  * OutputStage, times gain*30000: |sample| never exceeds gain*30000, as with Synth. Parameters are
  * interpolated across the block; loop indices and weights are worked out every SEG samples.
  * Aligned packs (Pack.aligned: rendered, every loop starting at the same crank angle) are played on one
@@ -25,7 +25,7 @@ public final class PackVoice {
     private final OutputStage stage;
     private Pops pops;
     private Pack pack;
-    private double[] phOn = new double[0], phOff = new double[0], gOn = new double[0], gOff = new double[0];
+    private double[][] ph = new double[0][], g = new double[0][]; // per layer
     private final int sr;
     private double cyc; // engine cycles since start (aligned packs)
     private boolean havePrev;
@@ -38,11 +38,10 @@ public final class PackVoice {
 
     public void setPack(Pack p) {
         pack = p;
-        phOn = new double[p == null ? 0 : p.on.length];
-        phOff = new double[p == null ? 0 : p.off.length];
+        ph = new double[p == null ? 0 : p.layers.length][];
+        for (int k = 0; k < ph.length; k++) ph[k] = new double[p.layers[k].length];
         // the gains come with the pack (worked out on the loader thread): this runs on the audio thread
-        gOn = p == null ? new double[0] : p.gainOn;
-        gOff = p == null ? new double[0] : p.gainOff;
+        g = p == null ? new double[0][] : p.gains;
     }
 
     static double[] gains(Pack.Loop[] L) {
@@ -135,13 +134,19 @@ public final class PackVoice {
             return;
         }
         double l = clamp(load, 0, 1);
-        double wOn = l * l * (3 - 2 * l) * (1 - clamp(regen, 0, 1)); // smoothstep, overrun pulls to off
+        double[] lam = pack.loads;
+        int top = lam.length - 1, k = 0;
+        // smoothstep, overrun pulls to off; held to the layers' range
+        double e = clamp(l * l * (3 - 2 * l) * (1 - clamp(regen, 0, 1)), lam[0], lam[top]);
+        while (k < top - 1 && e >= lam[k + 1]) k++;
+        double w = (e - lam[k]) / (lam[k + 1] - lam[k]); // two layers: w = e exactly
         boolean al = pack.aligned;
-        double aOn = al ? wOn : Math.sqrt(wOn), aOff = al ? 1 - wOn : Math.sqrt(1 - wOn);
+        double aHi = al ? w : Math.sqrt(w), aLo = al ? 1 - w : Math.sqrt(1 - w);
         for (int i = 0; i < n; i++) out[at + i] = 0;
         double dc = rpm / 120.0 / sr; // engine cycles per sample (4-stroke)
-        if (aOn > 1e-3) layer(pack.on, phOn, gOn, rpm, aOn, out, at, n, al, cyc, dc, sr);
-        if (aOff > 1e-3) layer(pack.off, phOff, gOff, rpm, aOff, out, at, n, al, cyc, dc, sr);
+        // the upper layer first: the order the on and off layers were summed in before 0.2.8
+        if (aHi > 1e-3) layer(pack.layers[k + 1], ph[k + 1], g[k + 1], rpm, aHi, out, at, n, al, cyc, dc, sr);
+        if (aLo > 1e-3) layer(pack.layers[k], ph[k], g[k], rpm, aLo, out, at, n, al, cyc, dc, sr);
         cyc += n * dc;
     }
 

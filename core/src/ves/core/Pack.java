@@ -1,8 +1,9 @@
 package ves.core;
 
 /**
- * A loaded sound pack: loops recorded (or rendered) at fixed rpm, on-load (throttle) and off-load (overrun),
- * PCM16 mono at 22050 Hz, sorted by rpm. Immutable once loaded; PackVoice plays it.
+ * A loaded sound pack: loops recorded (or rendered) at fixed rpm in up to four load layers (on-load = throttle,
+ * off-load = overrun, and loads between), PCM16 mono at 22050 Hz, sorted by rpm. Immutable once loaded;
+ * PackVoice plays it.
  */
 public final class Pack {
     public static final class Loop {
@@ -30,28 +31,42 @@ public final class Pack {
      * so a pack with its energy there (resynthesized recordings) sounds louder and drives the soft clip harder.
      */
     public final double level;
-    /** on-load loops by rising rpm */
+    /**
+     * the load of each layer, rising, the first 0 (0.2.8; two-layer packs: {0, 1}). Without a load-0 layer in
+     * pack.txt the lowest layer stands in for it: layers[0] is then the same array as layers[1].
+     */
+    public final double[] loads;
+    /** the loops of each layer by rising rpm, one per loads[k] */
+    public final Loop[][] layers;
+    /** the top (on-load) layer */
     public final Loop[] on;
-    /** off-load (overrun) loops by rising rpm; the same array as on when the pack has none */
+    /** the load-0 (overrun) layer; the same array as the lowest layer above it when the pack has none */
     public final Loop[] off;
     /**
-     * each loop's final gain (PackVoice.gains, the level matching, times level), worked out here on the loader
-     * thread: PackVoice.setPack runs on the audio thread and only takes them. Not to be changed.
+     * each loop's final gain per layer (PackVoice.gains, the level matching, times level), worked out here on the
+     * loader thread: PackVoice.setPack runs on the audio thread and only takes them. Not to be changed.
      */
-    final double[] gainOn, gainOff;
+    final double[][] gains;
 
-    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, double level, Loop[] on, Loop[] off) {
+    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, double level, double[] loads, Loop[][] layers) {
         this.aligned = aligned;
         this.level = level;
         this.name = name;
         this.cylinders = cylinders;
         this.idleRpm = idleRpm;
         this.redlineRpm = redlineRpm;
-        this.on = on;
-        this.off = off;
-        gainOn = PackVoice.gains(on);
-        gainOff = off == on ? gainOn : PackVoice.gains(off);
-        for (int k = 0; k < gainOn.length; k++) gainOn[k] *= level;
-        if (gainOff != gainOn) for (int k = 0; k < gainOff.length; k++) gainOff[k] *= level;
+        this.loads = loads;
+        this.layers = layers;
+        on = layers[layers.length - 1];
+        off = layers[0];
+        gains = new double[layers.length][];
+        for (int k = 0; k < layers.length; k++) {
+            if (k > 0 && layers[k] == layers[k - 1]) {
+                gains[k] = gains[k - 1];
+                continue;
+            }
+            gains[k] = PackVoice.gains(layers[k]);
+            for (int i = 0; i < gains[k].length; i++) gains[k][i] *= level;
+        }
     }
 }
