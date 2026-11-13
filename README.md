@@ -17,12 +17,14 @@ speed, accelerator pedal and motor power, with on/off and volume controls.
   Ready (VCU), motor power and torque (MCU), speed (0.5 km/h), longitudinal acceleration and brake
   pressure. If the stream goes quiet it falls back to HMG-API's vehicle readings. Nothing is written
   to the car: no CAN, no vehicle commands.
-- **Sound.** Either the procedural synth (a 4-cylinder engine or a futuristic EV sound) or a sound
-  pack: loops at fixed rpm, on-load and overrun, crossfaded and pitch-shifted to the virtual rpm.
-  Four packs are built in (inline-4 turbo, V6, cross-plane V8, inline-6), rendered offline by
-  `tools/render`, a Java port of [DasEtwas/enginesound](https://github.com/DasEtwas/enginesound)
-  (MIT); the rendered packs are CC0. Own packs can be imported from USB into eight user slots (see
-  [Sound packs](#sound-packs)). The car has no motor-rpm signal, so the rpm is computed from speed
+- **Sound.** Sound packs: loops at fixed rpm, by load (on-load, overrun, and in between), crossfaded
+  and pitch-shifted to the virtual rpm, with optional recorded pops and shift sounds. Eight packs are
+  built in (`packs/`): VEX 4-cyl (default), VEX V10, AE86 4A-GE, AMG M156 V8, 911 GT3 992, GT-R VR38,
+  S2000 F20C and S2000 Baked. **Their sounds are by 히릿** (made with his engine physics simulator),
+  processed with `tools/resynth`, and used in this mod with his permission; they are not covered by the
+  MIT licence (see [THIRD_PARTY.md](THIRD_PARTY.md)). Own packs can be imported from USB into eight
+  user slots (see [Sound packs](#sound-packs)). The procedural synth and the CC0 packs of 0.2.0-0.2.7
+  are no longer offered; the synth only plays if no pack can be loaded at all. The car has no motor-rpm signal, so the rpm is computed from speed
   and load (smoothly, or with virtual gear shifts).
 - **Behaviour.** By default like an ICE car: whenever Ready, it idles in P, N and D (and revs with
   the pedal in P/N), plays quietly in R, and coasting plays engine braking, with optional exhaust
@@ -70,7 +72,7 @@ import stay on your car; only use recordings you may use.
 |---|---|
 | `enabled` | off (default) / on |
 | `volume` | 0–100 (default 40); since 0.2.7 every value is 6 dB louder than in 0.2.6 |
-| `sound` | `synth` (default), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
+| `sound` | `vex4` (default), `vex_v10`, `ae86`, `amg_v8`, `gt3`, `gtr`, `s2000`, `s2000_baked`, `user1`–`user8`; an empty or broken slot plays `vex4` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice` (default: sound whenever Ready) / `classic` (the `mode` below) |
 | `prompts` | under prompts and alerts: `duck` (default, 30 %) / `pause` / `voice` (experimental: also 30 % under the stock navigation's voice, taking the channel back 0.4 s into it; it may cut navigation prompts, and if a prompt seems cut vesd gives up for the rest of the drive); calls and voice recognition always pause |
@@ -109,4 +111,5 @@ never cover warnings. Use at your own risk; no warranty (see [LICENSE](LICENSE))
 
 ## License
 
-[MIT](LICENSE).
+Code: [MIT](LICENSE). The built-in sounds in `packs/` are by 히릿 and used with permission; they are
+not MIT, and using them anywhere else needs his permission ([THIRD_PARTY.md](THIRD_PARTY.md)).

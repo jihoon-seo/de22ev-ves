@@ -9,7 +9,9 @@ including rpm the recording does not contain.
 models, packs, A/B renders), never go into git: `.gitignore` covers `*.wav`, `pack.txt`, `*.vesmodel`,
 `*.segments.txt`, `*.track.txt` and `/private/`, `tests/resynth/run.sh` fails if `git ls-files` lists any of
 them, and the writers refuse any output path inside a git worktree. The tests use synthetic signals only, made
-inside the tests with known parameters.
+inside the tests with known parameters. The one exception is `packs/`: finished packs whose sound author gave
+permission (히릿, see THIRD_PARTY.md) are copied there with `tools/import_packs.py`, which refuses models,
+tracks, segments and unreferenced WAVs; recordings and models never go into git.
 
 ## Analysis
 

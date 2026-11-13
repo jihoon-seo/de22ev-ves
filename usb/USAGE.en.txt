@@ -27,7 +27,8 @@ Steps
 4. Send the VES folder (probe-... folders) from the stick. If something is wrong, set MODE.txt to
    status, insert the stick, choose Yes and send the VES_MOD_* folder too.
 
-Sound: the synth, inline-4 turbo, V6, V8, inline-6, or user slots 1-8. Behaviour by default "like an
+Sound: 8 built-in packs (VEX 4-cyl default, VEX V10, AE86 4A-GE, AMG M156 V8, 911 GT3, GT-R VR38,
+S2000 F20C, S2000 Baked; sounds by 히릿, used with permission, see THIRD_PARTY.md) or user slots 1-8. Behaviour by default "like an
 ICE car" (idles in P/N/D when Ready, engine braking when coasting, optional exhaust pops).
 Under navigation prompts and alerts the engine sound plays on at 30 % (or pauses, a setting); the
 stock navigation's voice takes the channel, so it pauses for that and is back 0.5 s later. Calls and

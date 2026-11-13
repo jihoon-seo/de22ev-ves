@@ -6,7 +6,7 @@
   "authors": [
     "local build"
   ],
-  "license": "MIT",
+  "license": "MIT (code); sounds by 히릿, used with permission (THIRD_PARTY.md)",
   "description": "Engine-like sound inside the cabin, made live from speed, accelerator pedal and motor power (read only), on the navigation mixing channel; steps aside for navigation prompts, calls and voice recognition. Off until you turn it on. Includes a guided car check (USB log). Never touches the exterior pedestrian warning sound.",
   "system": {
     "model": "DE22EV",
