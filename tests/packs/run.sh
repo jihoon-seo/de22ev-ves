@@ -3,6 +3,7 @@
 # BP-I*  tools/import_packs.py on synthetic folders (mktemp; never the private packs)
 # BP2-BP6 what git tracks under packs/ (notice, THIRD_PARTY.md bullets, exact file set, size)
 # BP1/BP5 PackStore loads every BUILT_IN slot from a vesd.jar made of packs/; packs/ folders == BUILT_IN
+# BP7    every pack replayed through the core (ves.tools.Replay): cap, full scale, clicks, NaN, limiting
 # Prints "PACKS TESTS PASSED".
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -130,13 +131,50 @@ for d in packs/*/; do
     cp "$d"pack.txt "$d"*.wav "$T/jar/packs/$s/" 2> /dev/null
 done
 "$PY" -I tools/zipdir.py "$(native "$T/jar")" "$(native "$T/mod/vesd.jar")"
-mapfile -t S < <({ find core/src/ves/core -name '*.java'; echo android/src/ves/android/PackStore.java;
+mapfile -t S < <({ find core/src/ves/core core/src/ves/tools -name '*.java'; echo android/src/ves/android/PackStore.java;
     echo tests/packs/java/ves/android/BuiltinPacks.java; } | while IFS= read -r f; do native "$f"; done)
 if "$JAVAC" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native "$T/cls")" "${S[@]}"; then
     "$JAVA" -cp "$(native "$T/cls")" ves.android.BuiltinPacks "$(native "$T/mod")" "$(native "$ROOT/packs")" || FAILED=$((FAILED + 1))
 else
     fail "BP1 compile PackStore + BuiltinPacks"
 fi
+
+# ---- BP7: every built-in replayed through the core (accel/ice_shift, city/ice_smooth, volume 100) stays inside
+# the gain cap and full scale, has no clicks or NaN, and limits no harder than when it was added (x 1.1 + 0.001)
+base_limit() { # limit_fraction measured when the pack was added (a new slot needs its own entries)
+    case $1 in
+        # 0.2.8: none of the seven reached the limiter on either run
+        vex4/accel/ice_shift|vex4/city/ice_smooth|vex_v10/accel/ice_shift|vex_v10/city/ice_smooth) echo 0 ;;
+        ae86/accel/ice_shift|ae86/city/ice_smooth|amg_v8/accel/ice_shift|amg_v8/city/ice_smooth) echo 0 ;;
+        gt3/accel/ice_shift|gt3/city/ice_smooth|gtr/accel/ice_shift|gtr/city/ice_smooth) echo 0 ;;
+        s2000/accel/ice_shift|s2000/city/ice_smooth) echo 0 ;;
+        *) echo "" ;;
+    esac
+}
+num() { echo "$1" | sed -n "s/.*\"$2\":\(-\{0,1\}[0-9.eE+-]*\).*/\1/p"; }
+for scen in accel city; do
+    "$JAVA" -cp "$(native "$T/cls")" ves.tools.Sweep "$(native "$T/$scen.csv")" $scen > /dev/null || fail "BP7 sweep $scen"
+done
+for d in packs/*/; do
+    s=$(basename "$d")
+    for run in accel/ice_shift city/ice_smooth; do
+        scen=${run%/*}; prof=${run#*/}
+        M=$("$JAVA" -cp "$(native "$T/cls")" ves.tools.Replay "$(native "$T/$scen.csv")" "$(native "$T/out.wav")" \
+            profile=$prof volume=100 mode=idle_regen pops=off prompts=pause "pack=packs/$s" | tail -n 1)
+        peak=$(num "$M" peak); cap=$(num "$M" peak_cap); delta=$(num "$M" max_delta); nan=$(num "$M" nan_blocks)
+        lim=$(num "$M" limit_fraction); base=$(base_limit "$s/$run")
+        echo "METRICS BP7 $s $run peak=$peak cap=$cap max_delta=$delta nan_blocks=$nan limit_fraction=$lim"
+        if [ -z "$peak" ] || [ -z "$cap" ] || [ -z "$delta" ] || [ -z "$nan" ] || [ -z "$lim" ]; then
+            fail "BP7 $s $run: metrics missing ($M)"
+        elif [ -z "$base" ]; then
+            fail "BP7 $s $run: no recorded limit_fraction (measured $lim)"
+        elif awk "BEGIN{exit !($peak <= $cap + 1 && $peak <= 30000 && $delta < 46300 && $nan == 0 && $lim <= $base * 1.1 + 0.001)}"; then
+            pass "BP7 $s $run inside the cap, no clicks, limit_fraction $lim (recorded $base)"
+        else
+            fail "BP7 $s $run: peak $peak cap $cap max_delta $delta nan $nan limit_fraction $lim (recorded $base)"
+        fi
+    done
+done
 
 if [ "$FAILED" = 0 ]; then
     echo "PACKS TESTS PASSED"
