@@ -29,6 +29,7 @@
         { "value": "gt3", "title": "911 GT3" },
         { "value": "gtr", "title": "GT-R VR38" },
         { "value": "s2000", "title": "S2000 F20C" },
+        { "value": "s2000_baked", "title": "S2000 Baked (팝·변속음)" },
         { "value": "user1", "title": "사용자 소리 팩 1" },
         { "value": "user2", "title": "사용자 소리 팩 2" },
         { "value": "user3", "title": "사용자 소리 팩 3" },

@@ -143,11 +143,11 @@ fi
 # the gain cap and full scale, has no clicks or NaN, and limits no harder than when it was added (x 1.1 + 0.001)
 base_limit() { # limit_fraction measured when the pack was added (a new slot needs its own entries)
     case $1 in
-        # 0.2.8: none of the seven reached the limiter on either run
+        # 0.2.8: none of the eight reached the limiter on either run
         vex4/accel/ice_shift|vex4/city/ice_smooth|vex_v10/accel/ice_shift|vex_v10/city/ice_smooth) echo 0 ;;
         ae86/accel/ice_shift|ae86/city/ice_smooth|amg_v8/accel/ice_shift|amg_v8/city/ice_smooth) echo 0 ;;
         gt3/accel/ice_shift|gt3/city/ice_smooth|gtr/accel/ice_shift|gtr/city/ice_smooth) echo 0 ;;
-        s2000/accel/ice_shift|s2000/city/ice_smooth) echo 0 ;;
+        s2000/accel/ice_shift|s2000/city/ice_smooth|s2000_baked/accel/ice_shift|s2000_baked/city/ice_smooth) echo 0 ;;
         *) echo "" ;;
     esac
 }

@@ -190,7 +190,8 @@ public final class ProbeActivity extends Activity {
         add("ui_panel", "분할 화면 설정에서 '엔진 사운드' 위젯을 고를 수 있나요?", null, null, "있음", "없음", "분할 화면 없음");
         // the built-in packs (vesd's PackStore.BUILT_IN, sounds by 히릿)
         String[][] packs = { { "vex4", "VEX 4기통" }, { "vex_v10", "VEX V10" }, { "ae86", "AE86 4A-GE" }, { "amg_v8", "AMG M156 V8" },
-                { "gt3", "911 GT3" }, { "gtr", "GT-R VR38" }, { "s2000", "S2000 F20C" } };
+                { "gt3", "911 GT3" }, { "gtr", "GT-R VR38" }, { "s2000", "S2000 F20C" },
+                { "s2000_baked", "S2000 Baked" } };
         for (String[] p : packs) {
             add("pack_" + p[0], "소리 비교: " + p[1] + ". P에서 정차한 채로 버튼을 누르면 6초 동안 공회전 - 회전 올림 - 공회전 소리가 납니다.",
                     p[1] + " 들어 보기 (6초)", "PROBE PACKS " + p[0], "좋음", "괜찮음", "별로", "안 들림");

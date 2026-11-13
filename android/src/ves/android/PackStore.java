@@ -35,7 +35,7 @@ final class PackStore {
      * the built-in slots in the app's order (Settings.SOUNDS starts with them; build.sh copies packs/&lt;slot&gt;/ for
      * each one into vesd.jar and fails when one is missing). The CC0 renders i4t, v6, v8, i6 are no longer shipped.
      */
-    static final String[] BUILT_IN = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000" };
+    static final String[] BUILT_IN = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "s2000_baked" };
     static final long MAX_COPY = 5L * 1024 * 1024; // PackLoader.MAX_SAMPLES (4 MB) + headers, pack.txt
     static int jarOpens; // for the host test: vesd.jar opened to read names
 

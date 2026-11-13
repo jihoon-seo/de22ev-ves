@@ -14,6 +14,7 @@ anywhere else needs 히릿's permission.
 - `packs/gt3/`: 911 GT3 992
 - `packs/gtr/`: GT-R VR38
 - `packs/s2000/`: S2000 F20C
+- `packs/s2000_baked/`: S2000 Baked (the physics bake itself: 3 load layers, recorded pops, bubbles and shift sounds)
 
 ## enginesound (DasEtwas)
 

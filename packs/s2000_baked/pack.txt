@@ -1,0 +1,91 @@
+# de22ev-ves built-in pack s2000_baked: sound by 히릿 (engine physics simulator), processed by ves.resynth; used with permission in this mod only, not MIT. See THIRD_PARTY.md.
+name S2000 Baked
+cylinders 4
+idle 800
+redline 6700
+level -4.9
+aligned yes
+pop_rpm 4000
+loop loop_r00_off.wav rpm=800 load=off
+loop loop_r00_partial.wav rpm=800 load=0.45
+loop loop_r00_high.wav rpm=800 load=on
+loop loop_r01_off.wav rpm=888 load=off
+loop loop_r01_partial.wav rpm=888 load=0.45
+loop loop_r01_high.wav rpm=888 load=on
+loop loop_r02_off.wav rpm=985 load=off
+loop loop_r02_partial.wav rpm=985 load=0.45
+loop loop_r02_high.wav rpm=985 load=on
+loop loop_r03_off.wav rpm=1093 load=off
+loop loop_r03_partial.wav rpm=1093 load=0.45
+loop loop_r03_high.wav rpm=1093 load=on
+loop loop_r04_off.wav rpm=1212 load=off
+loop loop_r04_partial.wav rpm=1212 load=0.45
+loop loop_r04_high.wav rpm=1212 load=on
+loop loop_r05_off.wav rpm=1345 load=off
+loop loop_r05_partial.wav rpm=1345 load=0.45
+loop loop_r05_high.wav rpm=1345 load=on
+loop loop_r06_off.wav rpm=1492 load=off
+loop loop_r06_partial.wav rpm=1492 load=0.45
+loop loop_r06_high.wav rpm=1492 load=on
+loop loop_r07_off.wav rpm=1656 load=off
+loop loop_r07_partial.wav rpm=1656 load=0.45
+loop loop_r07_high.wav rpm=1656 load=on
+loop loop_r08_off.wav rpm=1837 load=off
+loop loop_r08_partial.wav rpm=1837 load=0.45
+loop loop_r08_high.wav rpm=1837 load=on
+loop loop_r09_off.wav rpm=2038 load=off
+loop loop_r09_partial.wav rpm=2038 load=0.45
+loop loop_r09_high.wav rpm=2038 load=on
+loop loop_r10_off.wav rpm=2261 load=off
+loop loop_r10_partial.wav rpm=2261 load=0.45
+loop loop_r10_high.wav rpm=2261 load=on
+loop loop_r11_off.wav rpm=2509 load=off
+loop loop_r11_partial.wav rpm=2509 load=0.45
+loop loop_r11_high.wav rpm=2509 load=on
+loop loop_r12_off.wav rpm=2784 load=off
+loop loop_r12_partial.wav rpm=2784 load=0.45
+loop loop_r12_high.wav rpm=2784 load=on
+loop loop_r13_off.wav rpm=3088 load=off
+loop loop_r13_partial.wav rpm=3088 load=0.45
+loop loop_r13_high.wav rpm=3088 load=on
+loop loop_r14_off.wav rpm=3427 load=off
+loop loop_r14_partial.wav rpm=3427 load=0.45
+loop loop_r14_high.wav rpm=3427 load=on
+loop loop_r15_off.wav rpm=3802 load=off
+loop loop_r15_partial.wav rpm=3802 load=0.45
+loop loop_r15_high.wav rpm=3802 load=on
+loop loop_r16_off.wav rpm=4218 load=off
+loop loop_r16_partial.wav rpm=4218 load=0.45
+loop loop_r16_high.wav rpm=4218 load=on
+loop loop_r17_off.wav rpm=4680 load=off
+loop loop_r17_partial.wav rpm=4680 load=0.45
+loop loop_r17_high.wav rpm=4680 load=on
+loop loop_r18_off.wav rpm=5192 load=off
+loop loop_r18_partial.wav rpm=5192 load=0.45
+loop loop_r18_high.wav rpm=5192 load=on
+loop loop_r19_off.wav rpm=5761 load=off
+loop loop_r19_partial.wav rpm=5761 load=0.45
+loop loop_r19_high.wav rpm=5761 load=on
+loop loop_r20_off.wav rpm=6392 load=off
+loop loop_r20_partial.wav rpm=6392 load=0.45
+loop loop_r20_high.wav rpm=6392 load=on
+loop loop_r21_off.wav rpm=7092 load=off
+loop loop_r21_partial.wav rpm=7092 load=0.45
+loop loop_r21_high.wav rpm=7092 load=on
+loop loop_r22_off.wav rpm=7868 load=off
+loop loop_r22_partial.wav rpm=7868 load=0.45
+loop loop_r22_high.wav rpm=7868 load=on
+loop loop_r23_off.wav rpm=8730 load=off
+loop loop_r23_partial.wav rpm=8730 load=0.45
+loop loop_r23_high.wav rpm=8730 load=on
+event pop event_decel_pop_0.wav
+event pop event_decel_pop_1.wav
+event pop event_decel_pop_2.wav
+event pop event_decel_pop_3.wav
+event pop event_decel_pop_4.wav
+event bubble event_decel_bubble_0.wav
+event bubble event_decel_bubble_1.wav
+event bubble event_decel_bubble_2.wav
+event bubble event_decel_bubble_3.wav
+event shift_up event_shift_up.wav
+event shift_down event_shift_down.wav

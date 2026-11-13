@@ -26,10 +26,10 @@ final class Actions {
     static final String[] MODES = { "idle_regen", "stop_silent_regen", "accel_only", "drive_all" };
     static final String[] MODE_NAMES = { "정차 공회전 + 회생음", "정차 무음 + 회생음", "가속할 때만", "주행 중 항상 (회생음 없음)" };
     /** the built-in packs (vesd's PackStore.BUILT_IN; sounds by 히릿), then the user slots; vex4 is the default */
-    static final String[] SOUNDS = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "user1", "user2", "user3", "user4",
-            "user5", "user6", "user7", "user8" };
+    static final String[] SOUNDS = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "s2000_baked", "user1", "user2", "user3",
+            "user4", "user5", "user6", "user7", "user8" };
     static final String[] SOUND_NAMES = { "VEX 4기통 (기본)", "VEX V10", "AE86 4A-GE", "AMG M156 V8", "911 GT3", "GT-R VR38", "S2000 F20C",
-            "사용자 1", "사용자 2", "사용자 3", "사용자 4", "사용자 5", "사용자 6", "사용자 7", "사용자 8" };
+            "S2000 Baked (팝·변속음)", "사용자 1", "사용자 2", "사용자 3", "사용자 4", "사용자 5", "사용자 6", "사용자 7", "사용자 8" };
     /** the user sound-pack slots (vesd's PackStore.USER_SLOTS) */
     static final String[] USER_SLOTS = { "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
     static final String[] BEHAVIORS = { "ice", "classic" };

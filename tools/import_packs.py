@@ -14,7 +14,7 @@ import shutil
 import struct
 import sys
 
-# (slot, source folder under the private VES/packs, display name); s2000_baked "S2000 Baked" comes later
+# (slot, source folder under the private VES/packs, display name)
 SLOTS = [
     ('vex4', 'vex4', 'VEX 4-cyl'),
     ('vex_v10', 'vex_v10', 'VEX V10'),
@@ -23,6 +23,7 @@ SLOTS = [
     ('gt3', 'gt3', '911 GT3 992'),
     ('gtr', 'gtr', 'GT-R VR38'),
     ('s2000', 's2000', 'S2000 F20C'),
+    ('s2000_baked', 's2000_baked', 'S2000 Baked'),
 ]
 PRIVATE_HEADERS = (
     '# rendered by ves.resynth (private: never commit)',

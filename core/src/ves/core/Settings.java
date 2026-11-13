@@ -15,7 +15,7 @@ import java.util.Map;
  * response       soft|normal|sport                 default normal
  * behavior       ice|classic: ice (0.2.0 default) sounds whenever Ready (idle in P/N/D, quiet in R, engine
  *                braking when coasting); classic keeps the 0.1.x modes (P/N/R silent, mode decides)  default ice
- * sound          vex4|vex_v10|ae86|amg_v8|gt3|gtr|s2000|user1..user8: a built-in pack (sounds by 히릿, inside
+ * sound          vex4|vex_v10|ae86|amg_v8|gt3|gtr|s2000|s2000_baked|user1..user8: a built-in pack (sounds by 히릿, inside
  *                vesd.jar) or a pack imported from USB into a user slot. The synth and the CC0 packs (synth, i4t,
  *                v6, v8, i6) are no longer offered (0.2.8): those values, like garbage, give the default.
  *                The synth only plays while no pack is loaded   default vex4
@@ -36,7 +36,7 @@ public final class Settings {
     public static final String[] POPS = {"off", "soft", "strong"};
     public static final String[] PROMPTS = {"duck", "pause", "voice"};
     public static final String[] SPEED_BOOSTS = {"off", "low", "mid", "high"};
-    public static final String[] SOUNDS = {"vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
+    public static final String[] SOUNDS = {"vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000", "s2000_baked", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
     public static final String DEFAULT_SOUND = "vex4";
 
     public boolean enabled = false;
