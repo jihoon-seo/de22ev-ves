@@ -221,7 +221,8 @@ public final class Vesd implements MicomAudio.Events {
     /**
      * The navigation plays its effect sounds on our type (0x45) too. Its start: step aside and leave the
      * channel to it (no endAudio, which would cut its chime); its end, or the channel closed under our open
-     * path: step back in after the usual pause, with a fresh startAudio.
+     * path: silent for 100 ms, then a fresh startAudio on the open path (ACT_REGRAB), or closed if a voice
+     * starts in between.
      */
     public void onOwnType(boolean start, String raw) {
         long now = SystemClock.uptimeMillis();
@@ -257,8 +258,8 @@ public final class Vesd implements MicomAudio.Events {
         }
         ok |= has;
         if (ok) {
+            if (!pathOpen) opens++; // a regrab takes the channel back on the open path
             pathOpen = true;
-            opens++;
         }
         return ok;
     }
@@ -460,6 +461,19 @@ public final class Vesd implements MicomAudio.Events {
                     // refused: no sound on this channel; the policy tries again later (1, 2, 4 ... 30 s)
                     core.openResult(false, now);
                     Out.log("path: refused, retry " + core.policy().retries());
+                }
+            } else if (act == AudioPolicy.ACT_REGRAB) {
+                // the navigation's sound ended and took the channel: take it back, track and queue kept
+                if (openPath("regrab")) {
+                    core.regrabResult(true, now);
+                } else {
+                    // refused: the channel is not ours, so no endAudio; retried as after a refused OPEN
+                    releaseTrack(track);
+                    track = null;
+                    playing = false;
+                    pathOpen = false;
+                    core.regrabResult(false, now);
+                    Out.log("path: regrab refused, retry " + core.policy().retries());
                 }
             } else if (act == AudioPolicy.ACT_CLOSE && skipStartupClose && !pathOpen) {
                 skipStartupClose = false; // the core's first-tick cleanup, skipped for the stuck test

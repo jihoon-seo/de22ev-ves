@@ -17,6 +17,8 @@ package ves.core;
  *     RAMP_MS with no hold-off. Any non-duck source (call, ringing, voice recognition ...) turns the episode into
  *     a full yield. Never an OPEN while any yield is active: a startAudio could cut the prompt.</li>
  * <li>channelLost(): the channel was closed under us (MICOM preempted it): the next tick returns ACT_CLOSE.</li>
+ * <li>channelEnded() (0.2.7): someone else's AudioEnd of our type while open: silent, path kept, then ACT_REGRAB
+ *     (a fresh startAudio on the open path) unless a yield starts first; see the method.</li>
  * <li>ACT_CLOSE after SILENCE_CLOSE_MS (2000 ms) of continuous silence (wantSound false or gain ~0).</li>
  * </ul>
  * Own echo: the caller must not report the VES's own playback (its own audio-focus / stream-type / mixer
@@ -25,7 +27,7 @@ package ves.core;
  * Thread-safe (synchronized): yields arrive from binder/listener threads, tick() from the audio thread.
  */
 public final class AudioPolicy {
-    public static final int ACT_NONE = 0, ACT_OPEN = 1, ACT_CLOSE = 2;
+    public static final int ACT_NONE = 0, ACT_OPEN = 1, ACT_CLOSE = 2, ACT_REGRAB = 3;
     /** the navigation's chimes on our shared channel are short: a "shared" yield whose end is lost expires sooner */
     public static final long SHARED_EXPIRY_MS = 5000;
     // HOLDOFF 0.5 s since 0.2.2 (owner after the first drive: back sooner after a prompt; was 1.5 s)
@@ -61,6 +63,11 @@ public final class AudioPolicy {
     public synchronized void onYieldStart(String source, long nowMs, boolean duck) {
         String s = norm(source);
         expire(nowMs);
+        if (open && !"shared".equals(s) && nowMs - regrabAt < REGRAB_GUARD_MS) {
+            // a voice right after our regrab: our startAudio may be in its way, step aside fully
+            lostPending = true;
+            lostAt = nowMs;
+        }
         double from = gainAt(nowMs);
         boolean wasDuck = episode && allDuck();
         int i = find(s);
@@ -88,6 +95,55 @@ public final class AudioPolicy {
         lostPending = true;
         lostAt = nowMs; // the prompt's own start follows a few ms later: wait HOLDOFF_MS before reopening
     }
+
+    /**
+     * Someone else's AudioEnd of our type (0.2.7): the navigation's effect sound ended and took the channel with
+     * it, or MICOM clears it for a navigation voice (2-28 ms before NavigationVoiceStart, drive 2026-11-13). While
+     * open: silent at once, path and envelope kept for REGRAB_WAIT_MS; a yield in that window closes as
+     * channelLost did (hold-off from the end), else tick() returns ACT_REGRAB once. Closed, or within
+     * REGRAB_GUARD_MS after a regrab: channelLost.
+     */
+    public synchronized void channelEnded(long nowMs) {
+        if (!open || nowMs - regrabAt < REGRAB_GUARD_MS) {
+            channelLost(nowMs);
+            return;
+        }
+        if (grace) return;
+        grace = true;
+        endedAt = nowMs;
+    }
+
+    /** MICOM put our channel back (SharedChannel.RESTORE): no regrab needed, ramp back up */
+    public synchronized void channelRestored(long nowMs) {
+        if (!grace) return;
+        grace = false;
+        rampAt = nowMs;
+    }
+
+    /**
+     * The answer to ACT_REGRAB's startAudio. Refused: not open, no CLOSE (the channel is not ours), and the next
+     * OPEN waits as after a refused OPEN (openResult).
+     */
+    public synchronized void regrabResult(boolean ok, long nowMs) {
+        if (ok) {
+            refusals = 0;
+            return;
+        }
+        open = false;
+        regrabAt = Long.MIN_VALUE / 2;
+        refusals++;
+        retryAt = nowMs + Math.min(RETRY_MAX_MS, RETRY_MS << Math.min(refusals - 1, 5));
+    }
+
+    /** ACT_REGRABs returned */
+    public synchronized long regrabs() {
+        return regrabs;
+    }
+
+    public static final long REGRAB_WAIT_MS = 100, REGRAB_RAMP_MS = 50, REGRAB_GUARD_MS = 1500;
+    private boolean grace; // channelEnded while open, waiting REGRAB_WAIT_MS
+    private long endedAt, regrabs;
+    private long regrabAt = Long.MIN_VALUE / 2, rampAt = Long.MIN_VALUE / 2;
 
     /** sources that only speak (prompts, alerts, TTS) and can have the engine sound under them */
     public static boolean duckable(String s) {
@@ -145,7 +201,13 @@ public final class AudioPolicy {
     /** multiplier for the VES output: 1 normally, 0 while another source owns the channel */
     public synchronized double yieldGain(long nowMs) {
         expire(nowMs);
-        return gainAt(nowMs);
+        return gainAt(nowMs) * regrabGain(nowMs);
+    }
+
+    private double regrabGain(long now) {
+        if (grace) return 0;
+        double f = (now - rampAt) / (double) REGRAB_RAMP_MS;
+        return f >= 1 ? 1 : f <= 0 ? 0 : f;
     }
 
     public synchronized int tick(long nowMs, boolean wantSound, double currentGain) {
@@ -156,6 +218,22 @@ public final class AudioPolicy {
             return ACT_CLOSE;
         }
         expire(nowMs);
+        if (grace) {
+            if (episode) { // a voice (or another source) after the end: step aside as for a lost channel
+                grace = false;
+                lostAt = endedAt;
+                return close();
+            }
+            if (nowMs - endedAt < REGRAB_WAIT_MS) return ACT_NONE;
+            grace = false;
+            if (!wantSound) {
+                lostAt = endedAt;
+                return close();
+            }
+            regrabAt = rampAt = nowMs;
+            regrabs++;
+            return ACT_REGRAB;
+        }
         if (lostPending) {
             lostPending = false;
             if (open) return close();
@@ -246,6 +324,7 @@ public final class AudioPolicy {
 
     private int close() {
         open = false;
+        grace = false;
         closes++;
         return ACT_CLOSE;
     }

@@ -27,8 +27,8 @@ import ves.core.VesCore;
  * Settings k=v use the Settings.fromMap keys (profile=, mode=, volume=, ...); Replay defaults to enabled=true,
  * plus sr=&lt;Hz&gt; (default 22050).
  * CSV header {@code t_ms,speed,pedal,motor_kw,accel_g,gear,ready,brake[,event]}; an empty cell is no update; gear
- * is the raw code (0 P, 1 B, 2 ECO, 5 D, 6 N, 7 R) or a letter; events: yield_start:SRC, yield_end:SRC, mark
- * (several separated by ';').
+ * is the raw code (0 P, 1 B, 2 ECO, 5 D, 6 N, 7 R) or a letter; events: yield_start:SRC, yield_end:SRC, mark,
+ * own_start / own_end (a MICOM AudioStart/AudioEnd of our type: VesCore.ownTypeEvent) (several separated by ';').
  * .hscan: repeated [u64 LE t_ms][u32 LE len][len bytes] chunks fed to the framer.
  * The last stdout line is one JSON object of metrics (no spaces).
  */
@@ -38,6 +38,8 @@ public final class Replay {
         public double durationS, rms, peakCap, silentFraction, renderMs, rtf;
         public int peak, maxDelta, opens, closes, nanBlocks, maxGear, shiftCount;
         public long yieldMs, yieldClosedMs, yieldAudibleMs, packets, badPackets;
+        /** longest all-zero run after the first audible block, outside yield/quiet windows; ACT_REGRABs */
+        public long maxGapMs, regrabs;
         /** {t_ms, virtualGear} at every gear change (first entry = first block) */
         public final List<long[]> gearLog = new ArrayList<long[]>();
         /** times of "mark" events in order (Long.MAX_VALUE if absent) */
@@ -66,6 +68,8 @@ public final class Replay {
             num(b, "yield_ms", yieldMs);
             num(b, "yield_closed_ms", yieldClosedMs);
             num(b, "yield_audible_ms", yieldAudibleMs);
+            num(b, "max_gap_ms", maxGapMs);
+            num(b, "regrabs", regrabs);
             num(b, "max_gear", maxGear);
             num(b, "shifts", shiftCount);
             num(b, "packets", packets);
@@ -105,6 +109,8 @@ public final class Replay {
         long lastYieldStart = Long.MIN_VALUE, quietUntil = Long.MIN_VALUE;
         final Map<String, Boolean> active = new HashMap<String, Boolean>();
         int marks;
+        boolean heard;
+        long gapMs;
 
         Renderer(Settings s, int sr) {
             this.sr = sr;
@@ -135,6 +141,9 @@ public final class Replay {
             renderNs += System.nanoTime() - a;
             if (act == AudioPolicy.ACT_OPEN) r.opens++;
             if (act == AudioPolicy.ACT_CLOSE) r.closes++;
+            if (act == AudioPolicy.ACT_REGRAB) r.regrabs++;
+            // what vesd does: tell the shared-channel tracker about its own startAudio (own_start events)
+            if (act == AudioPolicy.ACT_OPEN || act == AudioPolicy.ACT_REGRAB) core.ownStartCalled(t);
             double g = core.lastGain();
             if (Double.isNaN(g)) r.nanBlocks++;
             double cap = Math.max(g, prevGain) * 30000;
@@ -176,6 +185,15 @@ public final class Replay {
             }
             boolean mustBeQuiet = (yieldsActive > 0 && t >= lastYieldStart + 150) || t < quietUntil;
             if (mustBeQuiet && nonZero) r.yieldAudibleMs += 10;
+            if (nonZero) {
+                heard = true;
+                if (gapMs > r.maxGapMs) r.maxGapMs = gapMs;
+                gapMs = 0;
+            } else if (yieldsActive > 0 || t < quietUntil) {
+                gapMs = 0;
+            } else if (heard) {
+                gapMs += 10;
+            }
             t += 10;
         }
 
@@ -194,6 +212,8 @@ public final class Replay {
                         yieldsActive++;
                     }
                     lastYieldStart = time;
+                } else if (e.equals("own_start") || e.equals("own_end")) {
+                    core.ownTypeEvent(e.equals("own_start"), time);
                 } else if (e.startsWith("yield_end:")) {
                     String src = e.substring(10);
                     core.onYieldEnd(src, time);

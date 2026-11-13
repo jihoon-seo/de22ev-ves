@@ -27,6 +27,7 @@ public final class Sweep {
     private int row;
     private int gear = P, ready = 1;
     private String event = "";
+    private boolean chimes;
 
     private Sweep() {
         sb.append(HEADER).append('\n');
@@ -35,6 +36,12 @@ public final class Sweep {
     public static String generate(String scenario) {
         Sweep s = new Sweep();
         String sc = scenario == null ? "city" : scenario.trim().toLowerCase(java.util.Locale.US);
+        if (sc.equals("chimes")) {
+            // city with the navigation's effect sounds ending on our channel (own_end) every 20 s, and at 30 s an
+            // own_end 20 ms before a navigation voice (drive 2026-11-13)
+            s.chimes = true;
+            sc = "city";
+        }
         if (sc.equals("accel")) {
             s.stop(1000, P, 1);
             s.stop(1500, D, 1);
@@ -160,12 +167,15 @@ public final class Sweep {
     }
 
     private void emit(double pedal, double kw, double accG, double brake) {
+        if (chimes && t > 0 && (t % 20000 == 0 || t == 30000)) event("own_end");
+        if (chimes && t == 33000) event("yield_end:navi");
         sb.append(t).append(',').append(f(v)).append(',').append(f(pedal)).append(',').append(f(Math.round(kw)))
                 .append(',').append(f(accG)).append(',');
         if (row % 2 == 0) sb.append(gear);
         sb.append(',');
         if (row % 2 == 0) sb.append(ready);
         sb.append(',').append(f(brake)).append(',').append(event).append('\n');
+        if (chimes && t == 30000) sb.append(t + 20).append(",,,,,,,,yield_start:navi\n"); // an event-only row
         event = "";
         t += 100;
         row++;

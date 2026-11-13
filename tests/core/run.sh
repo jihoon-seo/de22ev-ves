@@ -87,6 +87,18 @@ for scen in city accel cruise navi ready_off; do
     done
 done
 
+# chimes (0.2.7): the navigation's effect sounds end on our channel every 20 s; we take it back after 100 ms
+# (0.2.6 closed and reopened: ~500 ms of silence each), and still close for the voice that follows an end
+"$JAVA" -cp "$CLS" ves.tools.Sweep "$WORK/chimes.csv" chimes > /dev/null || fail "sweep chimes"
+for prof in ice_smooth ice_shift ev_future; do
+    M=$("$JAVA" -cp "$CLS" ves.tools.Replay "$WORK/chimes.csv" "$WORK/chimes-$prof.wav" profile=$prof volume=100 \
+        mode=idle_regen pops=off prompts=pause | tail -n 1) || fail "replay chimes $prof"
+    echo "METRICS chimes $prof $M"
+    assert "$(num "$M" max_gap_ms) <= 200" "chimes/$prof: gap after a chime end"
+    assert "$(num "$M" regrabs) >= 2" "chimes/$prof: channel not taken back"
+    assert "$(num "$M" yield_audible_ms) == 0" "chimes/$prof: audible during the voice"
+done
+
 # ducking (prompts=duck, the default since 0.2.2): the navigation prompt plays over the engine sound at 30 %,
 # the path stays open
 M=$("$JAVA" -cp "$CLS" ves.tools.Replay "$WORK/navi.csv" "$WORK/navi-duck.wav" profile=ice_smooth volume=100 \

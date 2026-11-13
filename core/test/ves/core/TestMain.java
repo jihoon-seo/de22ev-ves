@@ -170,7 +170,7 @@ public final class TestMain {
         double speed = 0, pedal = 0, kw = Double.NaN, acc = Double.NaN, gear = Sig.GEAR_D, ready = 1;
         boolean feedSpeed = true;
         // stats (reset by resetStats)
-        int opens, closes, lastAction;
+        int opens, closes, lastAction, regrabs;
         long firstCloseT = -1;
         double sumSq;
         long n, zeros;
@@ -199,7 +199,8 @@ public final class TestMain {
             if (t % 100 == 0) push();
             lastAction = c.renderBlock(buf, BLOCK, t);
             // what vesd does with the action: tell the shared-channel tracker about its own calls
-            if (lastAction == AudioPolicy.ACT_OPEN) c.ownStartCalled(t);
+            if (lastAction == AudioPolicy.ACT_OPEN || lastAction == AudioPolicy.ACT_REGRAB) c.ownStartCalled(t);
+            if (lastAction == AudioPolicy.ACT_REGRAB) regrabs++;
             if (lastAction == AudioPolicy.ACT_CLOSE && !c.skipEnd(t)) c.ownEndCalled(t);
             if (lastAction == AudioPolicy.ACT_OPEN) opens++;
             if (lastAction == AudioPolicy.ACT_CLOSE) {
@@ -236,7 +237,7 @@ public final class TestMain {
         }
 
         void resetStats() {
-            opens = closes = 0;
+            opens = closes = regrabs = 0;
             firstCloseT = -1;
             sumSq = 0;
             n = zeros = 0;
@@ -1764,6 +1765,7 @@ public final class TestMain {
                 check(r.zeros < r.n / 10, "and it stays on");
             }
         });
+        ChannelTests.add(l);
 
         // ---------------- V1-V3 HMG-API vehicle readings (car check 2: hmgapid answered the values with exit
         // code 1, its read timing out after 3 s because the vehicle service keeps the socket open)

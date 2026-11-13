@@ -94,8 +94,9 @@ public final class VesCore {
     /**
      * A MICOM AudioStart/AudioEnd of our own stream type. Returns SharedChannel.OURS, FOREIGN_START,
      * FOREIGN_END or RESTORE. Someone else's start makes us step aside ("shared" yield, no endAudio);
-     * someone else's end (or our channel closed under us) brings us back after the usual pause with a
-     * fresh startAudio; a restore (MICOM putting our channel back after a VUI/prompt) is ours.
+     * someone else's end (or our channel closed under us) brings us back with a fresh startAudio (0.2.7: on the
+     * open path after AudioPolicy.REGRAB_WAIT_MS, see AudioPolicy.channelEnded); a restore (MICOM putting our
+     * channel back after a VUI/prompt) is ours.
      */
     public int ownTypeEvent(boolean start, long now) {
         int who;
@@ -106,9 +107,16 @@ public final class VesCore {
             onYieldStart("shared", now);
         } else if (who == SharedChannel.FOREIGN_END) {
             policy.onYieldEnd("shared", now); // its start, if it was seen
-            policy.channelLost(now); // the channel is gone either way: close, open again when allowed
+            policy.channelEnded(now); // the channel is gone: take it back, or close if a voice follows
+        } else if (who == SharedChannel.RESTORE) {
+            policy.channelRestored(now);
         }
         return who;
+    }
+
+    /** whether the MICOM accepted the startAudio of the last ACT_REGRAB (AudioPolicy.regrabResult) */
+    public void regrabResult(boolean ok, long nowMs) {
+        policy.regrabResult(ok, nowMs);
     }
 
     /** call before startAudio (its AudioStart may arrive before the call returns) */
