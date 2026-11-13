@@ -350,7 +350,8 @@ public final class EngineModel {
 
     private static double gearRpm(int g, double v, double L) {
         double r = v * RATIO[g];
-        if (g == 1) r = Math.max(r, IDLE_RPM + 2200 * L * Math.max(0, 1 - v / 35.0));
+        // launch slip: held until first gear's own rpm catches up (0.2.6 let it decay with speed, a dip on pull-away)
+        if (g == 1) r = Math.max(r, IDLE_RPM + 2200 * L);
         r = Math.max(r, g == 1 ? IDLE_RPM : 900);
         return Math.min(r, MAX_RPM);
     }

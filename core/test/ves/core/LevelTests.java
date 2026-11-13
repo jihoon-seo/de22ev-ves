@@ -131,5 +131,41 @@ final class LevelTests {
                 check("overrun".equals(q.c.lastParams().reason), "lift-off at 10 km/h: " + q.c.lastParams().reason);
             }
         });
+
+        // ---------------- T1b: the launch slip rpm holds until first gear catches up (ICE_SHIFT)
+        l.add(new TestMain.T("M2_launch_rpm_monotonic") {
+            void run() {
+                TestMain.Rig r = new TestMain.Rig(TestMain.iceSettings(Profile.ICE_SHIFT, 70));
+                r.speed = 0;
+                r.pedal = 0;
+                r.kw = 0;
+                r.run(2000);
+                r.pedal = 40;
+                long t0 = r.t;
+                double runMax = 0, maxDrop = 0, dropAt = -1, shiftKph = -1, maxAtDrop = 0;
+                while (r.t - t0 < 8000) {
+                    double el = (r.t - t0) / 1000.0;
+                    r.speed = Math.min(40, 30 * el / 6); // 0 -> 30 km/h in 6 s, on to 40
+                    r.kw = 1750 * (30 / 3.6 / 6) * (r.speed / 3.6) / 1000 + 1;
+                    r.step();
+                    EngineParams p = r.c.lastParams();
+                    if (p.virtualGear != 1) {
+                        shiftKph = p.speedKph;
+                        break;
+                    }
+                    runMax = Math.max(runMax, p.rpm);
+                    if (runMax - p.rpm > maxDrop) {
+                        maxDrop = runMax - p.rpm;
+                        dropAt = p.speedKph;
+                        maxAtDrop = runMax;
+                    }
+                }
+                System.out.println("    launch rpm max=" + Math.round(runMax) + " drop=" + Math.round(maxDrop) + " at "
+                        + dropAt + " km/h, first upshift at " + shiftKph + " km/h");
+                check(maxDrop <= 15, "rpm falls in first gear: " + Math.round(maxAtDrop) + " -> " + Math.round(maxAtDrop - maxDrop)
+                        + " at " + dropAt + " km/h");
+                check(shiftKph >= 15 && shiftKph <= 30, "first upshift at 15-30 km/h: " + shiftKph);
+            }
+        });
     }
 }

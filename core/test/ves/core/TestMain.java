@@ -137,7 +137,8 @@ public final class TestMain {
 
     static final int SR = 22050;
     // 0.1.2 output was ICE_SMOOTH=4bdf3f9889a03759 ...; 0.2.0 faster normal response (L1) changes it on purpose
-    static final String O1_WANT = "ICE_SMOOTH=4afaa3acacd639b1 ICE_SHIFT=b73cf032a167a19f EV_FUTURE=54180ef1274a9222";
+    // 0.2.7 launch slip held in 1st (M2) changes ICE_SHIFT only (0.2.6: b73cf032a167a19f)
+    static final String O1_WANT = "ICE_SMOOTH=4afaa3acacd639b1 ICE_SHIFT=e262d54caaa95598 EV_FUTURE=54180ef1274a9222";
     static final int BLOCK = 220; // 10 ms
 
     /** the classic modes (0.1.x behaviour: P/N/R silent, mode decides stops and regen) */
