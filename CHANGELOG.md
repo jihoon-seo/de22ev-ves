@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.8
+
+- Built-in sounds by 히릿: eight packs made from his engine physics simulator are built in
+  (`packs/`, inside vesd.jar): VEX 4-cyl (the new default), VEX V10, AE86 4A-GE, AMG M156 V8,
+  911 GT3 992, GT-R VR38, S2000 F20C and S2000 Baked. They are used with his permission and are not
+  covered by the MIT licence (THIRD_PARTY.md). tools/import_packs.py copies finished packs into
+  `packs/` and refuses recordings, models, tracks and segments.
+- The procedural synth and the CC0 packs (i4t, v6, v8, i6) are no longer offered in the app, the
+  settings form or the car check, and the CC0 packs are no longer shipped. A stored synth/i4t/v6/
+  v8/i6 plays VEX 4-cyl. An empty or broken slot plays VEX 4-cyl ("user3: empty (vex4 plays)"); the
+  synth only plays if no pack loads at all.
+- Packs may have load layers between off and on (`load=0.45`, up to 4 layers) and one-shot events:
+  `event pop|bubble|shift_up|shift_down <file>.wav` with `pop_rpm`. Recorded pops (above pop_rpm)
+  and bubbles (below) replace the synthesized pops for such packs; shift sounds play at virtual gear
+  changes (profile "shifting"). Limits: 96 loops, 2 M samples; USB import up to 5 MB.
+- tools/resynth: `bake` converts a physics bake (manifest.json + loops at 44.1 kHz) into an aligned
+  pack at 22050 Hz with a level line; `csvtrack` makes a track and segments from a driving log.
+
 ## 0.2.7
 
 From the drive with 0.2.6 (2026-11-13):
