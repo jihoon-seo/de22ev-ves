@@ -6,9 +6,8 @@ An [HMG-API](https://github.com/VysseCodes/HMG-API) mod that adds a **virtual en
 the cabin** of a 1st-gen Kia Niro EV (Gen5W head unit): the sound is synthesized live from vehicle
 speed, accelerator pedal and motor power, with on/off and volume controls.
 
-> **Test version 0.2.9, for one car and firmware:** `DE22EV.KOR.0000.V039.001.260902` (onebin
-> `de22ev_kr`). It ships with a guided car check whose results decide the audio route for 1.0.
-> Unofficial; see [Disclaimer](#disclaimer).
+> **Test version 0.2.10, for one car and firmware:** `DE22EV.KOR.0000.V039.001.260902` (onebin
+> `de22ev_kr`). Unofficial; see [Disclaimer](#disclaimer).
 
 ## How it works
 
@@ -20,8 +19,8 @@ speed, accelerator pedal and motor power, with on/off and volume controls.
 - **Sound.** Sound packs: loops at fixed rpm, by load (on-load, overrun, and in between), crossfaded
   and pitch-shifted to the virtual rpm, with optional recorded pops and shift sounds. Eight packs are
   built in (`packs/`): VEX 4-cyl (default), VEX V10, AE86 4A-GE, AMG M156 V8, 911 GT3 992, GT-R VR38,
-  S2000 F20C and S2000 Baked. **Their sounds are by 히릿** (made with his engine physics simulator),
-  processed with `tools/resynth`, and used in this mod with his permission; they are not covered by the
+  S2000 F20C and S2000 Baked. **Their sounds are by 히릿** (made with their engine physics simulator),
+  processed with `tools/resynth`, and used in this mod with their permission; they are not covered by the
   MIT licence (see [THIRD_PARTY.md](THIRD_PARTY.md)). Own packs can be imported from USB into eight
   user slots (see [Sound packs](#sound-packs)). The procedural synth and the CC0 packs of 0.2.0-0.2.7
   are no longer offered; the synth only plays if no pack can be loaded at all. The car has no motor-rpm signal, so the rpm is computed from speed
@@ -75,7 +74,7 @@ import stay on your car; only use recordings you may use.
 | `sound` | `vex4` (default), `vex_v10`, `ae86`, `amg_v8`, `gt3`, `gtr`, `s2000`, `s2000_baked`, `user1`–`user8`; an empty or broken slot plays `vex4` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice` (default: sound whenever Ready) / `classic` (the `mode` below) |
-| `prompts` | under prompts and alerts: `duck` (default, 30 %) / `pause` / `voice` (experimental: also 30 % under the stock navigation's voice, taking the channel back 0.4 s into it; it may cut navigation prompts, and if a prompt seems cut vesd gives up for the rest of the drive); calls and voice recognition always pause |
+| `prompts` | under navigation chimes and alerts: `duck` (default, 30 %) / `pause`. The stock navigation's voice takes the channel, so it pauses either way (the 0.2.7-0.2.9 `voice` experiment cut prompts and is gone; a stored `voice` reads as `duck`); calls and voice recognition always pause |
 | `pops` | exhaust pops on lift-off: `off`, `soft` (default), `strong` |
 | `mode` | with `classic`: `idle_regen` (quiet idle at a stop + regen sound), `stop_silent_regen`, `accel_only`, `drive_all` |
 | `idle_level` | idle loudness, 10–60 % of the driving sound |
@@ -112,4 +111,4 @@ never cover warnings. Use at your own risk; no warranty (see [LICENSE](LICENSE))
 ## License
 
 Code: [MIT](LICENSE). The built-in sounds in `packs/` are by 히릿 and used with permission; they are
-not MIT, and using them anywhere else needs his permission ([THIRD_PARTY.md](THIRD_PARTY.md)).
+not MIT, and using them anywhere else needs their permission ([THIRD_PARTY.md](THIRD_PARTY.md)).

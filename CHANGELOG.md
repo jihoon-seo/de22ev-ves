@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.10
+
+From the drive with 0.2.9 (2026-11-13) and its launch trace:
+
+- Fix: pulling away in the ICE (virtual shift) profile, the rpm stayed flat from standstill to about
+  14 km/h (trace: 1992 rpm from 0 to 13 km/h at 49 % pedal), so the pitch did not rise. The first-gear
+  slip rpm now climbs with speed (about 80 rpm per km/h) until first gear takes over: 1545 to 2531 rpm
+  from 1 to 13 km/h at the same pedal. Coasting down into first is unchanged.
+- Fix: the USB kit left `MODE.txt` empty after an install instead of switching it to `status`: the
+  car's shell has no `printf`. It writes the file with `echo` now.
+- The "안내 음성 중에도 작게 (실험)" (`prompts=voice`) experiment is gone: on the car, taking the channel
+  back 0.4 s into a navigation voice ended that voice 2-3 ms later, so it cut prompts. A stored `voice`
+  reads as `duck`. The stock navigation's voice takes our channel, so the sound pauses for it with
+  either remaining choice; they are now named "효과음엔 작게 (음성 안내는 멈춤)" and "항상 멈춤".
+- App: the 0.1.x "예전 방식" (behaviour and its mode), "고속 줄임" (overlapping "고속 보강") and the car
+  check left the screen. The first three stay in the mod's settings on the HMG-API Mods tab.
+
 ## 0.2.9
 
 From the first drive with 0.2.8 (2026-11-14: S2000 Baked seemed to drop in pitch within a second of
@@ -15,9 +32,9 @@ pulling away):
 
 ## 0.2.8
 
-- Built-in sounds by 히릿: eight packs made from his engine physics simulator are built in
+- Built-in sounds by 히릿: eight packs made from their engine physics simulator are built in
   (`packs/`, inside vesd.jar): VEX 4-cyl (the new default), VEX V10, AE86 4A-GE, AMG M156 V8,
-  911 GT3 992, GT-R VR38, S2000 F20C and S2000 Baked. They are used with his permission and are not
+  911 GT3 992, GT-R VR38, S2000 F20C and S2000 Baked. They are used with their permission and are not
   covered by the MIT licence (THIRD_PARTY.md). tools/import_packs.py copies finished packs into
   `packs/` and refuses recordings, models, tracks and segments.
 - The procedural synth and the CC0 packs (i4t, v6, v8, i6) are no longer offered in the app, the
