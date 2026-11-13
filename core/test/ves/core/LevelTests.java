@@ -186,5 +186,80 @@ final class LevelTests {
                 near(after, before / 2, 0.01, "halved PCM plays at half level with the load-time gains");
             }
         });
+
+        // ---------------- T4a: an upward makeup stage before the soft clip
+        l.add(new TestMain.T("OS1_makeup_bounded") {
+            void run() {
+                // makeup 1 is the 0.2.6 stage, bit for bit
+                OutputStage a = new OutputStage(SR), b = new OutputStage(SR);
+                java.util.Random rnd = new java.util.Random(7);
+                for (int i = 0; i < 20000; i++) {
+                    double x = 1.5 * Math.sin(2 * Math.PI * 140 * i / SR) + 0.8 * rnd.nextGaussian();
+                    double ya = a.process(x), yb = b.process(x, 1);
+                    check(Double.doubleToLongBits(ya) == Double.doubleToLongBits(yb), "process(x, 1) != process(x) at " + i);
+                }
+                Synth sa = new Synth(SR, Profile.ICE_SMOOTH, 3), sb = new Synth(SR, Profile.ICE_SMOOTH, 3);
+                EngineParams p = new EngineParams();
+                p.rpm = 2500;
+                p.load = 0.6;
+                short[] oa = new short[TestMain.BLOCK], ob = new short[TestMain.BLOCK];
+                for (int k = 0; k < 100; k++) {
+                    sa.render(oa, 0, oa.length, p, 0.5);
+                    sb.render(ob, 0, ob.length, p, 0.5, 1);
+                    check(java.util.Arrays.equals(oa, ob), "Synth.render(.., 1) != render(..) in block " + k);
+                }
+                // the 600 Hz gain from the input to the soft clip (small signal: the clip is linear there)
+                OutputStage cal = new OutputStage(SR);
+                double pk = 0;
+                for (int i = 0; i < SR; i++) {
+                    double y = cal.process(0.001 * Math.sin(2 * Math.PI * 600 * i / SR));
+                    if (i > SR / 2) pk = Math.max(pk, Math.abs(y));
+                }
+                double gain600 = pk / 0.001;
+                // peak 0.5 into the clip: x2 makes 1.0, still nearly linear there (at 0.8 the soft clip itself
+                // takes the lift down to +3.6 dB)
+                double[] m1 = sine(gain600, 0.5, 1, 1), m2 = sine(gain600, 0.5, 2, 2);
+                double dbUp = db(m2[0] / m1[0]);
+                System.out.println("    600 Hz peak 0.5: rms m=1 " + m1[0] + " m=2 " + m2[0] + " (+" + dbUp + " dB), max " + m2[1]);
+                check(dbUp >= 4, "makeup 2 lifts a quiet sine by >= 4 dB: " + dbUp);
+                check(m2[1] <= 1 && m1[1] <= 1, "output within +-1: " + m2[1]);
+                double[] q1 = sine(gain600, 0.8, 1, 1), q2 = sine(gain600, 0.8, 2, 2);
+                System.out.println("    600 Hz peak 0.8: +" + db(q2[0] / q1[0]) + " dB, max " + q2[1]);
+                check(db(q2[0] / q1[0]) >= 3.5 && q2[1] <= 1, "makeup 2 at peak 0.8: " + db(q2[0] / q1[0]));
+                // a signal over TPK gets no makeup: no more clamping than without
+                double[] h1 = sine(gain600, 4, 1, 1), h2 = sine(gain600, 4, 2, 2);
+                check(h1[2] > 0, "the loud sine reaches the clamp");
+                check(h2[2] <= h1[2], "makeup adds clamping to a loud signal: " + h2[2] + " > " + h1[2]);
+                near(h2[0], h1[0], 1e-9, "a loud signal is not lifted");
+                // makeup stepping 1 -> 3 inside one block: no bigger sample steps than steady makeup 3
+                double[] steady = sine(gain600, 0.8, 3, 3);
+                double[] step = sine(gain600, 0.8, 1, 3);
+                System.out.println("    max delta steady m=3 " + steady[3] + ", stepping 1->3 " + step[3]);
+                check(step[3] <= 1.1 * steady[3], "makeup step clicks: " + step[3] + " vs steady " + steady[3]);
+                check(step[1] <= 1, "stepping output within +-1");
+            }
+
+            /**
+             * a 600 Hz sine whose peak into the soft clip is peakIn, 1 s at makeup m0 (stepping to m1 over the
+             * first 10 ms block at 0.5 s): {rms and max |y| of the last 0.4 s, clamped samples, max sample delta}
+             */
+            double[] sine(double gain600, double peakIn, double m0, double m1) {
+                OutputStage st = new OutputStage(SR);
+                double ss = 0, mx = 0, md = 0, prev = 0;
+                int n = 0, half = SR / 2, blk = TestMain.BLOCK;
+                for (int i = 0; i < SR; i++) {
+                    double m = i < half ? m0 : i >= half + blk ? m1 : m0 + (m1 - m0) * (i - half + 1) / (double) blk;
+                    double y = st.process(peakIn / gain600 * Math.sin(2 * Math.PI * 600 * i / SR), m);
+                    if (i > SR / 4) md = Math.max(md, Math.abs(y - prev));
+                    prev = y;
+                    if (i >= SR - (int) (0.4 * SR)) {
+                        ss += y * y;
+                        n++;
+                    }
+                    if (i > SR / 4) mx = Math.max(mx, Math.abs(y));
+                }
+                return new double[]{Math.sqrt(ss / n), mx, st.clamped(), md};
+            }
+        });
     }
 }

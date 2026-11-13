@@ -29,7 +29,7 @@ public final class PackVoice {
     private final int sr;
     private double cyc; // engine cycles since start (aligned packs)
     private boolean havePrev;
-    private double pRpm = 800, pLoad, pRegen, pGain;
+    private double pRpm = 800, pLoad, pRegen, pGain, pMk = 1;
 
     public PackVoice(int sampleRate) {
         sr = sampleRate > 0 ? sampleRate : 22050;
@@ -81,7 +81,13 @@ public final class PackVoice {
     private final float[] seg = new float[SEG];
 
     public void render(short[] out, int off, int frames, EngineParams p, double gain) {
+        render(out, off, frames, p, gain, 1);
+    }
+
+    /** makeup (&gt;= 1): OutputStage.process's upward gain, interpolated across the block like gain */
+    public void render(short[] out, int off, int frames, EngineParams p, double gain, double makeup) {
         if (out == null || frames <= 0 || off < 0 || off > out.length - frames) return;
+        double mT = makeup > 1 && fin(makeup) ? Math.min(makeup, 16) : 1;
         double rpmT = p != null && fin(p.rpm) ? clamp(p.rpm, 300, 12000) : pRpm;
         double loadT = p != null && fin(p.load) ? clamp(p.load, 0, 1) : 0;
         double regenT = p != null && fin(p.regen) ? clamp(p.regen, 0, 1) : 0;
@@ -99,6 +105,7 @@ public final class PackVoice {
             pLoad = loadT;
             pRegen = regenT;
             pGain = gT;
+            pMk = mT;
             return;
         }
         for (int pos = 0; pos < frames; pos += SEG) {
@@ -108,8 +115,9 @@ public final class PackVoice {
             for (int i = 0; i < n; i++) {
                 double x = seg[i];
                 if (pops != null) x += pops.next();
-                double s = stage.process(x);
-                double g = pGain + (gT - pGain) * ((pos + i + 1) / (double) frames);
+                double fi = (pos + i + 1) / (double) frames;
+                double s = stage.process(x, pMk + (mT - pMk) * fi);
+                double g = pGain + (gT - pGain) * fi;
                 out[off + pos + i] = (short) (int) (s * g * FS);
             }
         }
@@ -118,6 +126,7 @@ public final class PackVoice {
         pLoad = loadT;
         pRegen = regenT;
         pGain = gT;
+        pMk = mT;
     }
 
     private void mix(float[] out, int at, int n, double rpm, double load, double regen) {

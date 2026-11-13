@@ -18,6 +18,10 @@ public final class OutputStage {
     private final double presLoC, presHiC;
     private double presLo, presHi;
     private long clamped;
+    /** makeup: the peak it lifts quiet sound towards (into the soft clip: about 0.98 out), and its time constants */
+    static final double TPK = 2.0, PEAK_REL_S = 0.2, MG_DOWN_S = 0.001, MG_UP_S = 0.1;
+    private final double peakRel, mgDown, mgUp;
+    private double peak, mg = 1;
 
     public OutputStage(int sampleRate) {
         int sr = sampleRate > 0 ? sampleRate : 22050;
@@ -31,10 +35,23 @@ public final class OutputStage {
         ha2 = (1 - al) / a0;
         presLoC = 1 - Math.exp(-2 * Math.PI * PRES_LO_HZ / sr);
         presHiC = 1 - Math.exp(-2 * Math.PI * Math.min(PRES_HI_HZ, 0.4 * sr) / sr);
+        peakRel = Math.exp(-1.0 / (PEAK_REL_S * sr));
+        mgDown = 1 - Math.exp(-1.0 / (MG_DOWN_S * sr));
+        mgUp = 1 - Math.exp(-1.0 / (MG_UP_S * sr));
     }
 
     /** one sample of the voice mix (about +-1) to the soft-clipped output in [-1, 1] */
     public double process(double x) {
+        return process(x, 1);
+    }
+
+    /**
+     * process() with up to makeup x of upward gain after the drive: a peak follower on |y| (instant attack, 200 ms
+     * release) sets the gain to TPK / peak, at least 1 and at most makeup, applied through a 1 ms (down) / 100 ms
+     * (up) smoother, so quiet sound is lifted towards TPK while loud sound (peaks at or above TPK) is left as it
+     * is: still |result| &lt;= 1, and no more hard limiting on loud sound. makeup 1: exactly process(x).
+     */
+    public double process(double x, double makeup) {
         double y = hb0 * x + hb1 * hx1 + hb2 * hx2 - ha1 * hy1 - ha2 * hy2;
         hx2 = hx1;
         hx1 = x;
@@ -43,6 +60,15 @@ public final class OutputStage {
         presLo += (y - presLo) * presLoC;
         presHi += (y - presHi) * presHiC;
         y = (y + PRES_K * (presHi - presLo)) * DRIVE;
+        double ay = Math.abs(y);
+        peak = ay > peak ? ay : peak * peakRel;
+        double tg = 1;
+        if (makeup > 1) {
+            tg = peak > TPK / makeup ? TPK / peak : makeup;
+            if (tg < 1) tg = 1;
+        }
+        mg += (tg - mg) * (tg < mg ? mgDown : mgUp);
+        y *= mg;
         if (y > 3) {
             y = 3;
             clamped++;
@@ -65,5 +91,6 @@ public final class OutputStage {
         if (Math.abs(hy2) < 1e-20) hy2 = 0;
         if (Math.abs(presLo) < 1e-20) presLo = 0;
         if (Math.abs(presHi) < 1e-20) presHi = 0;
+        if (peak < 1e-20) peak = 0;
     }
 }

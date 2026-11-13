@@ -78,7 +78,7 @@ public final class Synth {
     private double xfade = 1, xStep;
 
     private boolean havePrev;
-    private double pRpm = 800, pLoad, pRegen, pGain;
+    private double pRpm = 800, pLoad, pRegen, pGain, pMk = 1;
 
     private int rng;
     // ICE state
@@ -131,7 +131,13 @@ public final class Synth {
     }
 
     public void render(short[] out, int off, int frames, EngineParams p, double gain) {
+        render(out, off, frames, p, gain, 1);
+    }
+
+    /** makeup (&gt;= 1): OutputStage.process's upward gain, interpolated across the block like gain */
+    public void render(short[] out, int off, int frames, EngineParams p, double gain, double makeup) {
         if (out == null || frames <= 0 || off < 0 || off > out.length - frames) return;
+        double mT = makeup > 1 && fin(makeup) ? Math.min(makeup, 16) : 1;
         double rpmT = p != null && fin(p.rpm) ? clamp(p.rpm, 300, 12000) : pRpm;
         double loadT = p != null && fin(p.load) ? clamp(p.load, 0, 1) : 0;
         double regenT = p != null && fin(p.regen) ? clamp(p.regen, 0, 1) : 0;
@@ -148,6 +154,7 @@ public final class Synth {
             pRpm = rpmT;
             pLoad = loadT;
             pRegen = regenT;
+            pMk = mT;
             xfade = 1;
             return;
         }
@@ -160,6 +167,7 @@ public final class Synth {
             double l0 = lerp(pLoad, loadT, f0), l1 = lerp(pLoad, loadT, f1);
             double g0 = lerp(pRegen, regenT, f0), g1 = lerp(pRegen, regenT, f1);
             double a0 = lerp(pGain, gT, f0), a1 = lerp(pGain, gT, f1);
+            double m0 = lerp(pMk, mT, f0), m1 = lerp(pMk, mT, f1);
             boolean fading = xfade < 1;
             boolean needIce = curIce || fading, needEv = !curIce || fading;
             if (needIce) ice(bufA, n, r0, r1, l0, l1, g0, g1);
@@ -178,7 +186,7 @@ public final class Synth {
                     }
                 }
                 if (pops != null) x += pops.next();
-                double s = stage.process(x);
+                double s = stage.process(x, m0 + (m1 - m0) * ((i + 1) * invN));
                 double g = a0 + (a1 - a0) * ((i + 1) * invN);
                 out[off + pos + i] = (short) (int) (s * g * FS);
             }
@@ -190,6 +198,7 @@ public final class Synth {
         pLoad = loadT;
         pRegen = regenT;
         pGain = gT;
+        pMk = mT;
     }
 
     // ------------------------------------------------------------------ voices
