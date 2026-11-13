@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.7
+
+From the drive with 0.2.6 (2026-11-13):
+
+- Fix: the sound cut out for about 0.75 s roughly every two minutes with no navigation voice. The
+  navigation plays its effect sounds on our MICOM type (0x45), and when one ends MICOM closes the
+  channel; vesd dropped its track, waited 500 ms and faded back in. It now keeps the track and the
+  level, waits 100 ms for a voice prompt and, if none comes, takes the channel back (about 0.1 s).
+- Fix: pulling away from standstill, the level and (with "shifting") the pitch dipped before
+  rising with the speed. The drive level now holds with the pedal down, and first gear holds the
+  launch rpm until the road speed catches up. The upshift at about 20 km/h stays.
+- Fix: switching sound packs stalled the audio thread (the loop levels were worked out from all
+  samples there); they are now worked out when the pack loads.
+- Louder: the whole volume range is 6 dB louder. Above full scale the extra goes through an upward
+  makeup stage before the soft clip, so it adds no new hard clipping; a full-pedal pull, already at
+  full scale, gains little.
+- New setting speed_boost ("고속에서 키우기", off / low / mid / high = 0 / 3 / 6 / 9 dB, default
+  high): the level rises from 40 to 110 km/h against wind and tyre noise.
+- New experimental choice for prompts, "voice" ("안내 음성 중에도 작게 (실험)", off by default): MICOM
+  takes our channel at every navigation voice prompt; with this choice vesd takes it back 400 ms
+  into the prompt and plays at 30 % until it ends. It may cut prompts; if MICOM refuses, ends it
+  again, or a prompt ends right after vesd took the channel, vesd gives up for the rest of the drive
+  (logged as "policy: voice regrab given up").
+- Replay reports rms_dbfs, rms_mark_dbfs, limit_fraction, max_gap_ms and regrabs; Sweep has launch,
+  highway and chimes runs.
+- tools/resynth: noise=<dB> (-40..0) sets the level of the rendered noise; a pack that fails a check
+  no longer leaves a half-written folder.
+
 ## 0.2.6
 
 - Eight user slots for sound packs (user1 to user8, was 3). The app's sound button opens a list of
