@@ -20,7 +20,8 @@ import ves.core.PackLoader;
 /**
  * Where vesd finds sound packs, and the import of the owner's packs from USB.
  * <ul>
- * <li>built-in slots (i4t, v6, v8, i6): entries packs/&lt;slot&gt;/ inside the mod's vesd.jar. HMG-API makes
+ * <li>built-in slots (BUILT_IN): entries packs/&lt;slot&gt;/ inside the mod's vesd.jar, copied by build.sh from
+ * the repository's packs/&lt;slot&gt;/ (sounds by 히릿, used with permission; see THIRD_PARTY.md). HMG-API makes
  * the mod's folder root-only and only the service's own jar readable to its user (system), so a loose
  * packs/ folder never loaded on the car (0.2.0-0.2.4: "v8: empty", the synth played);</li>
  * <li>user slots (user1..8): the service's own data folder, packs/&lt;slot&gt;/ (HMGAPI_DATA), filled by
@@ -30,7 +31,11 @@ import ves.core.PackLoader;
  * temporary folder, validates the copy again, and only then replaces the slot. Nothing else is written.
  */
 final class PackStore {
-    static final String[] BUILT_IN = { "i4t", "v6", "v8", "i6" };
+    /**
+     * the built-in slots in the app's order (Settings.SOUNDS starts with them; build.sh copies packs/&lt;slot&gt;/ for
+     * each one into vesd.jar and fails when one is missing). The CC0 renders i4t, v6, v8, i6 are no longer shipped.
+     */
+    static final String[] BUILT_IN = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000" };
     static final long MAX_COPY = 3L * 1024 * 1024;
     static int jarOpens; // for the host test: vesd.jar opened to read names
 

@@ -33,13 +33,19 @@ echo "$out" | grep -qi "error" && fail "install output has errors" "$out" || pas
 M="$T/root/data/hmgapi/mods/$ID"
 # the built-in packs travel inside vesd.jar: the service (user system) can read only its own jar
 J=$(mktemp -d); unzip -q -o "$ZIP" vesd.jar -d "$J" 2>/dev/null
-n=$(unzip -l "$J/vesd.jar" 2>/dev/null | grep -cE " packs/(i4t|v6|v8|i6)/pack\.txt$")
-[ "$n" = 4 ] && pass "vesd.jar holds the 4 built-in packs" || fail "packs in vesd.jar" "found $n pack.txt"
+# exactly one pack.txt per PackStore.BUILT_IN slot (히릿's packs); the CC0 renders (i4t, v6, v8, i6) are gone
+mapfile -t B < <(grep -E 'static final String\[\] BUILT_IN = ' "$ROOT/android/src/ves/android/PackStore.java" | grep -oE '"[a-z0-9_]+"' | tr -d '"')
+want=$(printf 'packs/%s/pack.txt\n' "${B[@]}" | sort | tr '\n' ' ')
+have=$(unzip -Z1 "$J/vesd.jar" 2>/dev/null | grep -E '^packs/[^/]+/pack\.txt$' | sort | tr '\n' ' ')
+[ "${#B[@]}" -gt 0 ] && [ "$have" = "$want" ] && pass "vesd.jar holds one pack.txt per built-in slot (${B[*]})" || fail "packs in vesd.jar" "want '$want', found '$have'"
+n=$(unzip -Z1 "$J/vesd.jar" 2>/dev/null | grep -cE '^packs/(i4t|v6|v8|i6)/')
+[ "$n" = 0 ] && pass "vesd.jar holds no CC0 pack (i4t, v6, v8, i6)" || fail "CC0 packs in vesd.jar" "$n entries"
 unzip -l "$ZIP" | grep -q " packs/" && fail "no loose packs/" "the package still has a packs/ folder" || pass "no loose packs/ folder"
 rm -rf "$J"
 for f in mod.json settings.json vesd.jar app/EngineSound.apk tile.png THIRD_PARTY.md; do
     [ -f "$M/$f" ] && pass "installed $f" || fail "installed $f" "missing"
 done
+grep -q "히릿" "$M/THIRD_PARTY.md" 2>/dev/null && pass "installed THIRD_PARTY.md names 히릿 (built-in sounds)" || fail "THIRD_PARTY.md" "no 히릿 notice"
 # what the install published for hmgapid (the engine writes these when the mod list changes)
 S="$T/root/data/hmgapi/state"
 grep -qx "$ID vesd system android yes jar vesd.jar ves.android.Vesd" "$S/services.txt"     && pass "service: vesd, user system, starts with Android, restarts, jar" || fail "service" "$(cat "$S/services.txt")"

@@ -1,6 +1,8 @@
 #!/bin/bash
 # Built-in sound packs (packs/<slot>/: sounds by 히릿, processed by ves.resynth; see THIRD_PARTY.md):
 # BP-I*  tools/import_packs.py on synthetic folders (mktemp; never the private packs)
+# BP2-BP6 what git tracks under packs/ (notice, THIRD_PARTY.md bullets, exact file set, size)
+# BP1/BP5 PackStore loads every BUILT_IN slot from a vesd.jar made of packs/; packs/ folders == BUILT_IN
 # Prints "PACKS TESTS PASSED".
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -113,6 +115,27 @@ if command -v git > /dev/null && git rev-parse --is-inside-work-tree > /dev/null
     [ "$total" -gt 0 ] && [ "$total" -le $((18 * 1024 * 1024)) ] && pass "BP6 packs/ total $total bytes <= 18 MB" || fail "BP6 packs/ total $total bytes (want 1..18 MB)"
 else
     echo "SKIP BP2-BP6: not a git checkout"
+fi
+
+# ---- BP1/BP5: packs/ zipped like build.sh does (packs/<slot>/ inside vesd.jar), loaded by vesd's PackStore
+JDK_BIN="${JDK_BIN:-${JAVA_HOME:+$JAVA_HOME/bin}}"
+if [ -n "$JDK_BIN" ] && { [ -x "$JDK_BIN/javac" ] || [ -x "$JDK_BIN/javac.exe" ]; }; then
+    JAVAC="$JDK_BIN/javac"; JAVA="$JDK_BIN/java"
+else
+    JAVAC=javac; JAVA=java
+fi
+mkdir -p "$T/cls" "$T/jar/packs" "$T/mod"
+for d in packs/*/; do
+    s=$(basename "$d"); mkdir -p "$T/jar/packs/$s"
+    cp "$d"pack.txt "$d"*.wav "$T/jar/packs/$s/" 2> /dev/null
+done
+"$PY" -I tools/zipdir.py "$(native "$T/jar")" "$(native "$T/mod/vesd.jar")"
+mapfile -t S < <({ find core/src/ves/core -name '*.java'; echo android/src/ves/android/PackStore.java;
+    echo tests/packs/java/ves/android/BuiltinPacks.java; } | while IFS= read -r f; do native "$f"; done)
+if "$JAVAC" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native "$T/cls")" "${S[@]}"; then
+    "$JAVA" -cp "$(native "$T/cls")" ves.android.BuiltinPacks "$(native "$T/mod")" "$(native "$ROOT/packs")" || FAILED=$((FAILED + 1))
+else
+    fail "BP1 compile PackStore + BuiltinPacks"
 fi
 
 if [ "$FAILED" = 0 ]; then

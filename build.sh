@@ -51,14 +51,15 @@ mapfile -t S < <(srcs core/src/ves/core android/src android/stubs)
     -d "$(native build/classes)" "${S[@]}"
 mapfile -t C < <(find build/classes/ves -name '*.class' | sort | while IFS= read -r f; do native "$f"; done)
 "${D8[@]}" --lib "$(native "$ANDROID_JAR")" --output "$(native build/vesd)" "${C[@]}"
-# the built-in sound packs (packs/<slot>/: pack.txt + loops), rendered from tools/render/engines (CC0), go
-# inside vesd.jar: HMG-API leaves only the service's own jar readable to its user (system)
-mkdir -p build/render-classes
-mapfile -t R < <(srcs tools/render/src)
-"${JAVA_BIN}javac" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native build/render-classes)" "${R[@]}"
-for e in i4t v6 v8 i6; do
-    "${JAVA_BIN}java" -cp "$(native build/render-classes)" ves.render.Grid "$(native tools/render/engines/$e.txt)" \
-        "$(native build/vesd/packs/$e)" > /dev/null
+# the built-in sound packs (packs/<slot>/: pack.txt + loops; sounds by 히릿, used with permission, see
+# THIRD_PARTY.md) go inside vesd.jar: HMG-API leaves only the service's own jar readable to its user (system).
+# The slots are PackStore.BUILT_IN; a missing one fails the build.
+mapfile -t BUILT_IN < <(grep -E 'static final String\[\] BUILT_IN = ' android/src/ves/android/PackStore.java | grep -oE '"[a-z0-9_]+"' | tr -d '"')
+[ "${#BUILT_IN[@]}" -gt 0 ] || { echo "no BUILT_IN slots in android/src/ves/android/PackStore.java" >&2; exit 1; }
+for b in "${BUILT_IN[@]}"; do
+    [ -f "packs/$b/pack.txt" ] || { echo "packs/$b/pack.txt missing (PackStore.BUILT_IN lists $b)" >&2; exit 1; }
+    mkdir -p "build/vesd/packs/$b"
+    cp "packs/$b/pack.txt" "packs/$b/"*.wav "build/vesd/packs/$b/"
 done
 "$PY" tools/zipdir.py build/vesd build/mod/vesd.jar
 

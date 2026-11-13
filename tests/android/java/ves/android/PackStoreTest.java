@@ -31,7 +31,7 @@ public final class PackStoreTest {
 
         check(PackStore.usbPacks(sticks).contains("mycar") && !PackStore.usbPacks(sticks).contains("notapack"), "lists pack folders on the stick");
         try {
-            st.load("v8");
+            st.load("vex4");
             check(false, "missing built-in refused");
         } catch (PackError e) {
             check(e.getMessage().contains("empty"), "missing built-in: " + e.getMessage());
@@ -46,7 +46,7 @@ public final class PackStoreTest {
         } catch (PackError e) {
             check("my car".equals(st.load("user1").name), "a refused import leaves the slot as it was (" + e.getMessage() + ")");
         }
-        for (String[] bad : new String[][] {{"../mycar", "user2"}, {"mycar", "v8"}, {"mycar", "../user1"}, {"nope", "user2"}}) {
+        for (String[] bad : new String[][] {{"../mycar", "user2"}, {"mycar", "vex4"}, {"mycar", "../user1"}, {"nope", "user2"}}) {
             try {
                 st.importPack(sticks, bad[0], bad[1]);
                 check(false, "refused " + bad[0] + " -> " + bad[1]);
@@ -81,19 +81,19 @@ public final class PackStoreTest {
         // built-ins live inside vesd.jar (0.2.5): HMG-API makes the mod's folder root-only and only the
         // service's own jar readable, so a loose packs/ folder never loaded on the car (vesd runs as system)
         File mod2 = new File(root, "mod2");
-        writePack(new File(root, "src/v8"), "Cross V8", 1);
-        writePack(new File(root, "src/i6"), "Inline 6", 1);
+        writePack(new File(root, "src/vex4"), "VEX 4-cyl", 1);
+        writePack(new File(root, "src/gt3"), "911 GT3 992", 1);
         jar(new File(mod2, "vesd.jar"), new File(root, "src"), "packs/", "bad/pack.txt");
         PackStore j = new PackStore(mod2, data);
         check(!new File(mod2, "packs").exists(), "no loose packs folder in the mod");
         try {
-            check("Cross V8".equals(j.load("v8").name), "built-in v8 loads from vesd.jar");
-            check("Inline 6".equals(j.load("i6").name), "built-in i6 loads from vesd.jar");
+            check("VEX 4-cyl".equals(j.load("vex4").name), "built-in vex4 loads from vesd.jar");
+            check("911 GT3 992".equals(j.load("gt3").name), "built-in gt3 loads from vesd.jar");
         } catch (PackError e) {
             check(false, "built-in from vesd.jar: " + e.getMessage());
         }
         try {
-            j.load("v6");
+            j.load("ae86");
             check(false, "a built-in missing from the jar is refused");
         } catch (PackError e) {
             check(e.getMessage().contains("empty"), "a built-in missing from the jar: " + e.getMessage());
@@ -101,17 +101,17 @@ public final class PackStoreTest {
         int before = PackStore.jarOpens;
         for (int i = 0; i < 5; i++) j.list();
         String l = j.list();
-        check(l.contains("v8 Cross V8") && l.contains("i6 Inline 6") && l.contains("v6 -") && l.contains("user1 my car"),
+        check(l.contains("vex4 VEX 4-cyl") && l.contains("gt3 911 GT3 992") && l.contains("ae86 -") && l.contains("user1 my car"),
                 "list: built-ins from the jar, user slots from data: " + l.replace('\n', ';'));
         check(PackStore.jarOpens - before <= 1, "list reads the jar's names once: " + (PackStore.jarOpens - before) + " opens");
         PackStore none = new PackStore(new File(root, "nomod"), data);
         try {
-            none.load("v8");
+            none.load("vex4");
             check(false, "no vesd.jar: refused");
         } catch (PackError e) {
             check(true, "no vesd.jar: " + e.getMessage());
         }
-        check(none.list().contains("v8 -"), "no vesd.jar: list still answers");
+        check(none.list().contains("vex4 -"), "no vesd.jar: list still answers");
         System.out.println(failed == 0 ? "packstore: all checks passed" : "packstore: " + failed + " check(s) failed");
         System.exit(failed == 0 ? 0 : 1);
     }
