@@ -23,6 +23,9 @@ import java.util.TreeMap;
  * loop v8_0800_on.wav rpm=800 load=on [start=0] [end=17640]
  * loop v8_0800_off.wav rpm=800 load=off
  * loop v8_0800_mid.wav rpm=800 load=0.45   (a load layer between off (0) and on (1), up to 3 decimals)
+ * event pop pop_0.wav  (optional one-shot sounds: pop, bubble, shift_up, shift_down; 0.02..2 s, at most 16 of a
+ *                       kind and 32 in all, counted in the samples; see PackVoice)
+ * pop_rpm 4000         (optional: pops at or above, bubbles below; 4000 without one)
  * </pre>
  * Rules: WAV PCM 16-bit mono 22050 Hz; file names [a-z0-9_-]+.wav (no folders); at most 4 load layers (on = 1,
  * off = 0); the top one (above 0) holds at least 3 loops covering at most 1200 rpm at the low end and at least
@@ -40,6 +43,7 @@ public final class PackLoader {
     public static final int RATE = 22050;
     public static final int MAX_LOOPS = 96, MAX_SAMPLES = 2_000_000;
     static final int MIN_LOOP = RATE / 5, MAX_LOOP = RATE * 2, MAX_LOADS = 4;
+    static final int MIN_EVENT = RATE / 50, MAX_EVENTS_PER_KIND = 16, MAX_EVENTS = 32;
     static final int MAX_WAV_BYTES = MAX_LOOP * 2 + 64 * 1024, MAX_TXT_BYTES = 16 * 1024;
 
     private PackLoader() {}
@@ -63,7 +67,9 @@ public final class PackLoader {
         boolean aligned = false;
         double level = 1;
         TreeMap<Integer, List<Pack.Loop>> byLoad = new TreeMap<Integer, List<Pack.Loop>>(); // load in thousandths
-        int lineNo = 0, total = 0, loops = 0;
+        int lineNo = 0, total = 0, loops = 0, popRpm = 4000, eventCount = 0;
+        List<List<short[]>> events = new ArrayList<List<short[]>>();
+        for (int i = 0; i < Pack.EVENT_KINDS.length; i++) events.add(new ArrayList<short[]>());
         for (String raw : text.split("\n")) {
             lineNo++;
             String l = raw.trim();
@@ -105,6 +111,18 @@ public final class PackLoader {
                     byLoad.put(load, layer = new ArrayList<Pack.Loop>());
                 }
                 layer.add(new Pack.Loop(rpm, Arrays.copyOfRange(pcm, start, end)));
+            } else if (k.equals("pop_rpm")) popRpm = num(f, 1, 300, 12000, lineNo);
+            else if (k.equals("event")) {
+                int kind = f.length == 3 ? Arrays.asList(Pack.EVENT_KINDS).indexOf(f[1]) : -1;
+                if (kind < 0) throw new PackError("line " + lineNo + ": event pop|bubble|shift_up|shift_down <file>.wav");
+                if (!f[2].matches("[a-z0-9_-]{1,60}\\.wav")) throw new PackError("line " + lineNo + ": bad file name");
+                if (events.get(kind).size() >= MAX_EVENTS_PER_KIND) throw new PackError("more than " + MAX_EVENTS_PER_KIND + " " + f[1] + " events");
+                if (eventCount++ >= MAX_EVENTS) throw new PackError("more than " + MAX_EVENTS + " events");
+                short[] pcm = Wav.mono16(src.read(f[2], MAX_WAV_BYTES), RATE, f[2]);
+                if (pcm.length < MIN_EVENT || pcm.length > MAX_LOOP) throw new PackError(f[2] + ": event must be 0.02 to 2 s");
+                total += pcm.length;
+                if (total > MAX_SAMPLES) throw new PackError("pack larger than " + MAX_SAMPLES + " samples");
+                events.get(kind).add(pcm);
             } else throw new PackError("line " + lineNo + ": unknown key " + k);
         }
         if (name == null || name.length() == 0 || name.length() > 40) throw new PackError("needs a name (1-40 characters)");
@@ -124,7 +142,9 @@ public final class PackLoader {
         if (a[0].rpm > 1200 || a[a.length - 1].rpm < 4000) throw new PackError("on-load loops must reach from <=1200 to >=4000 rpm");
         for (int k = base; k < layers.length - 1; k++)
             if (layers[k].length == 1) throw new PackError("needs 0 or at least 2 loops at load " + loads[k]);
-        return new Pack(name, cyl, idle, redline, aligned, level, loads, layers);
+        short[][][] ev = new short[events.size()][][];
+        for (int k = 0; k < ev.length; k++) ev[k] = events.get(k).toArray(new short[0][]);
+        return new Pack(name, cyl, idle, redline, aligned, level, loads, layers, ev, popRpm);
     }
 
     private static Pack.Loop[] sorted(List<Pack.Loop> l) {

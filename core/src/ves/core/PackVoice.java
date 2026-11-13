@@ -10,6 +10,10 @@ package ves.core;
  * Aligned packs (Pack.aligned: rendered, every loop starting at the same crank angle) are played on one
  * shared engine-cycle phase, so neighbouring loops sum in phase: linear crossfades, no comb-filter dips.
  * The pack's level trim (Pack.level) scales every loop after the level matching.
+ * Events (0.2.8): a pack with pop or bubble sounds plays one of them at each burst of the pops episodes
+ * (Pops.trigger, instead of the synthesized Pops.next): a pop at or above Pack.popRpm, a bubble below (the one
+ * family a pack has at every rpm), at Pack.eventGain x strength / 0.9; shift() plays a shift sound. Up to
+ * VOICES at once (the oldest gives way), mixed before the output stage, so they share its cap.
  * Allocation-free after setPack; one thread.
  */
 public final class PackVoice {
@@ -30,6 +34,16 @@ public final class PackVoice {
     private double cyc; // engine cycles since start (aligned packs)
     private boolean havePrev;
     private double pRpm = 800, pLoad, pRegen, pGain, pMk = 1;
+    // event voices
+    static final int VOICES = 4;
+    private final short[][] evPcm = new short[VOICES][];
+    private final int[] evPos = new int[VOICES];
+    private final double[] evAmp = new double[VOICES];
+    private final int[] evStarted = new int[Pack.EVENT_KINDS.length];
+    private int evActive, evRng = 0x51F7;
+    private boolean popEvents; // the pack has pop or bubble sounds
+    /** tests: when set (at least a block long), render() leaves its mix before the output stage here */
+    float[] tap;
 
     public PackVoice(int sampleRate) {
         sr = sampleRate > 0 ? sampleRate : 22050;
@@ -42,6 +56,8 @@ public final class PackVoice {
         for (int k = 0; k < ph.length; k++) ph[k] = new double[p.layers[k].length];
         // the gains come with the pack (worked out on the loader thread): this runs on the audio thread
         g = p == null ? new double[0][] : p.gains;
+        clearEvents();
+        popEvents = p != null && p.events[Pack.POP].length + p.events[Pack.BUBBLE].length > 0;
     }
 
     static double[] gains(Pack.Loop[] L) {
@@ -58,6 +74,56 @@ public final class PackVoice {
 
     public Pack pack() {
         return pack;
+    }
+
+    /** a virtual gear change: plays one of the pack's shift sounds (none while silent or without them) */
+    public void shift(boolean up) {
+        int kind = up ? Pack.SHIFT_UP : Pack.SHIFT_DOWN;
+        if (pack == null || pGain == 0 || pack.events[kind].length == 0) return;
+        startEvent(kind, pack.eventGain[kind]);
+    }
+
+    /** events of the kind (Pack.POP ...) started since this voice was made */
+    public int eventsStarted(int kind) {
+        return kind >= 0 && kind < evStarted.length ? evStarted[kind] : 0;
+    }
+
+    /** one of the pack's sounds of this kind (chosen at random) at amp, in a free voice or the oldest one's */
+    private void startEvent(int kind, double amp) {
+        short[][] e = pack.events[kind];
+        evRng ^= evRng << 13;
+        evRng ^= evRng >>> 17;
+        evRng ^= evRng << 5;
+        int v = 0;
+        for (int i = 1; i < VOICES; i++) {
+            if (evPcm[v] == null) break;
+            if (evPcm[i] == null || evPos[i] > evPos[v]) v = i;
+        }
+        if (evPcm[v] == null) evActive++;
+        evPcm[v] = e[(evRng >>> 1) % e.length];
+        evPos[v] = 0;
+        evAmp[v] = amp / 32768.0;
+        evStarted[kind]++;
+    }
+
+    /** the event voices' next sample */
+    private double events() {
+        double y = 0;
+        for (int v = 0; v < VOICES; v++) {
+            short[] s = evPcm[v];
+            if (s == null) continue;
+            y += s[evPos[v]] * evAmp[v];
+            if (++evPos[v] >= s.length) {
+                evPcm[v] = null;
+                evActive--;
+            }
+        }
+        return y;
+    }
+
+    private void clearEvents() {
+        for (int v = 0; v < VOICES; v++) evPcm[v] = null;
+        evActive = 0;
     }
 
     public void setPops(Pops p) {
@@ -100,6 +166,7 @@ public final class PackVoice {
         }
         if (pack == null || gT == 0 && pGain == 0) {
             for (int i = 0; i < frames; i++) out[off + i] = 0;
+            clearEvents();
             pRpm = rpmT;
             pLoad = loadT;
             pRegen = regenT;
@@ -109,11 +176,23 @@ public final class PackVoice {
         }
         for (int pos = 0; pos < frames; pos += SEG) {
             int n = Math.min(SEG, frames - pos);
-            double f = (pos + n * 0.5) / frames;
-            mix(seg, 0, n, lerp(pRpm, rpmT, f), lerp(pLoad, loadT, f), lerp(pRegen, regenT, f));
+            double f = (pos + n * 0.5) / frames, rpm = lerp(pRpm, rpmT, f);
+            mix(seg, 0, n, rpm, lerp(pLoad, loadT, f), lerp(pRegen, regenT, f));
             for (int i = 0; i < n; i++) {
                 double x = seg[i];
-                if (pops != null) x += pops.next();
+                if (pops != null) {
+                    if (!popEvents) x += pops.next();
+                    else {
+                        double st = pops.trigger();
+                        if (st > 0) {
+                            boolean pop = pack.events[Pack.BUBBLE].length == 0 || pack.events[Pack.POP].length > 0 && rpm >= pack.popRpm;
+                            int kind = pop ? Pack.POP : Pack.BUBBLE;
+                            startEvent(kind, pack.eventGain[kind] * st / 0.9);
+                        }
+                    }
+                }
+                if (evActive > 0) x += events();
+                if (tap != null) tap[pos + i] = (float) x;
                 double fi = (pos + i + 1) / (double) frames;
                 double s = stage.process(x, pMk + (mT - pMk) * fi);
                 double g = pGain + (gT - pGain) * fi;

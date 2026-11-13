@@ -47,8 +47,27 @@ public final class Pack {
      * loader thread: PackVoice.setPack runs on the audio thread and only takes them. Not to be changed.
      */
     final double[][] gains;
+    /** event kinds: indices into events, as pack.txt names them (EVENT_KINDS) */
+    public static final int POP = 0, BUBBLE = 1, SHIFT_UP = 2, SHIFT_DOWN = 3;
+    public static final String[] EVENT_KINDS = {"pop", "bubble", "shift_up", "shift_down"};
+    /** one-shot sounds per kind (0.2.8, pack.txt "event <kind> <file>"); no array is null */
+    public final short[][][] events;
+    /** pops play at or above this rpm, bubbles below (pack.txt "pop_rpm", 4000 without one) */
+    public final int popRpm;
+    /**
+     * the playback gain per kind, worked out on the loader thread: pops and bubbles share one, the loudest of them
+     * peaking at 0.9 x level (as the synth's strongest pop; bubbles keep their level below pops), the shift sounds
+     * another, the louder peaking at 0.6 x level
+     */
+    final double[] eventGain = new double[EVENT_KINDS.length];
 
-    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, double level, double[] loads, Loop[][] layers) {
+    Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, double level, double[] loads, Loop[][] layers,
+         short[][][] events, int popRpm) {
+        this.events = events;
+        this.popRpm = popRpm;
+        double pb = Math.max(peak(events[POP]), peak(events[BUBBLE])), sh = Math.max(peak(events[SHIFT_UP]), peak(events[SHIFT_DOWN]));
+        eventGain[POP] = eventGain[BUBBLE] = pb > 0 ? level * 0.9 / pb : 0;
+        eventGain[SHIFT_UP] = eventGain[SHIFT_DOWN] = sh > 0 ? level * 0.6 / sh : 0;
         this.aligned = aligned;
         this.level = level;
         this.name = name;
@@ -68,5 +87,12 @@ public final class Pack {
             gains[k] = PackVoice.gains(layers[k]);
             for (int i = 0; i < gains[k].length; i++) gains[k][i] *= level;
         }
+    }
+
+    /** the largest |sample| of the sounds, full scale 1 */
+    private static double peak(short[][] x) {
+        int p = 0;
+        for (short[] s : x) for (short v : s) p = Math.max(p, Math.abs(v));
+        return p / 32768.0;
     }
 }

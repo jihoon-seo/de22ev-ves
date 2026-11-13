@@ -4,7 +4,8 @@ package ves.core;
  * Exhaust pops and crackles on lift-off (overrun), N-style: when the load drops by more than 0.35 within
  * 300 ms at more than 2500 rpm and 20 km/h, an episode of 3..8 bursts follows within 1.2 s; episodes are at
  * least 4 s apart. A burst is band-passed noise (about 400-1800 Hz, 8-30 ms decay) over a 180 Hz damped thump.
- * Levels: 0 off, 1 soft, 2 strong. next() returns a sample for the voice mix (before OutputStage). Seeded,
+ * Levels: 0 off, 1 soft, 2 strong. next() returns a sample for the voice mix (before OutputStage); trigger()
+ * only tells when a burst starts and how strong (PackVoice plays a pack's own pop sounds then). Seeded,
  * allocation-free, one thread.
  */
 public final class Pops {
@@ -77,21 +78,7 @@ public final class Pops {
 
     /** one sample of pops (0 when quiet) */
     public double next() {
-        if (inEpisode && burstsLeft > 0 && now >= nextBurst) {
-            burstsLeft--;
-            bursts++;
-            lastBurst = now;
-            double strength = (level == 2 ? 0.9 : 0.5) * (0.6 + 0.4 * rand(1000) / 1000.0);
-            amp = strength;
-            decay = Math.exp(-1.0 / ((0.008 + 0.022 * rand(1000) / 1000.0) * sr));
-            thumpAmp = strength * 0.6;
-            thumpDecay = Math.exp(-1.0 / (0.04 * sr));
-            thumpPh = 0;
-            // the rest of the episode: closer together at first, then sparser
-            int left = Math.max(1, burstsLeft);
-            long span = Math.max(30, (episodeStart + EPISODE_MS - 60 - now) / (left + 1));
-            nextBurst = now + 30 + rand((int) Math.min(400, span));
-        }
+        if (inEpisode && burstsLeft > 0 && now >= nextBurst) burst();
         if (amp < 1e-4 && thumpAmp < 1e-4) {
             amp = thumpAmp = 0;
             return 0;
@@ -105,6 +92,35 @@ public final class Pops {
         amp *= decay;
         thumpAmp *= thumpDecay;
         return y;
+    }
+
+    /**
+     * instead of next(), for a voice that plays its own pop sounds: advances the burst schedule as next() does and
+     * returns the strength of a burst starting on this sample (0.3..0.9), else 0
+     */
+    public double trigger() {
+        if (!(inEpisode && burstsLeft > 0 && now >= nextBurst)) return 0;
+        double s = burst();
+        amp = thumpAmp = 0; // nothing synthesized
+        return s;
+    }
+
+    /** starts a burst: its strength, decay and the time of the next one */
+    private double burst() {
+        burstsLeft--;
+        bursts++;
+        lastBurst = now;
+        double strength = (level == 2 ? 0.9 : 0.5) * (0.6 + 0.4 * rand(1000) / 1000.0);
+        amp = strength;
+        decay = Math.exp(-1.0 / ((0.008 + 0.022 * rand(1000) / 1000.0) * sr));
+        thumpAmp = strength * 0.6;
+        thumpDecay = Math.exp(-1.0 / (0.04 * sr));
+        thumpPh = 0;
+        // the rest of the episode: closer together at first, then sparser
+        int left = Math.max(1, burstsLeft);
+        long span = Math.max(30, (episodeStart + EPISODE_MS - 60 - now) / (left + 1));
+        nextBurst = now + 30 + rand((int) Math.min(400, span));
+        return strength;
     }
 
     private int rand(int n) {

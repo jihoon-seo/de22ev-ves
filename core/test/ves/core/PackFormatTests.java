@@ -167,6 +167,84 @@ final class PackFormatTests {
         return PackLoader.load(s);
     }
 
+    /** a decaying cosine: its peak (a share of full scale) on sample 0 */
+    static short[] burst(int n, double peak, double hz) {
+        short[] x = new short[n];
+        for (int i = 0; i < n; i++) x[i] = (short) Math.round(peak * 32767 * Math.cos(2 * Math.PI * hz * i / SR) * Math.exp(-i / (0.004 * SR)));
+        return x;
+    }
+
+    /** adds "event kind[i] e<i>.wav" lines and files (peak peaks[i], lens[i] samples) to a pack */
+    static TestMain.MapSource withEvents(TestMain.MapSource s, String[] kinds, double[] peaks, int[] lens) {
+        StringBuilder t = new StringBuilder(new String(s.files.get("pack.txt")));
+        for (int i = 0; i < kinds.length; i++) {
+            String f = "e" + i + ".wav";
+            s.files.put(f, TestMain.wavPcm(burst(lens[i], peaks[i], 700 + 50 * i)));
+            t.append("event ").append(kinds[i]).append(' ').append(f).append('\n');
+        }
+        s.files.put("pack.txt", t.toString().getBytes());
+        return s;
+    }
+
+    /** the three-layer pack with 2 pops, 2 bubbles and one sound per shift direction */
+    static TestMain.MapSource eventPack(String extra) {
+        return withEvents(threeLayers(extra), new String[] {"pop", "pop", "bubble", "bubble", "shift_up", "shift_down"},
+                new double[] {0.9, 0.7, 0.5, 0.4, 0.35, 0.3}, new int[] {2205, 1500, 3000, 2600, 4000, 5000});
+    }
+
+    /** the same loops, silent (level-matching gain 0): render()'s mix holds only the events */
+    static TestMain.MapSource silentLoops(String extra) {
+        return layered(new String[] {"off", "on"}, new int[] {4, 4}, new int[] {8, 20}, new double[] {0, 0}, extra);
+    }
+
+    /** render() through lift-offs (1 s full load, 5 s off, at 70 km/h) at a constant rpm, Pops 0x9095 strong */
+    static final class Drive {
+        final PackVoice v = new PackVoice(SR);
+        final Pops pops = new Pops(SR, 0x9095), twin = new Pops(SR, 0x9095);
+        /** the pre-stage mix of every sample */
+        float[] tap;
+        /** {sample index, strength} of every burst, from a twin Pops pulled in step */
+        final List<double[]> starts = new java.util.ArrayList<double[]>();
+
+        Drive(Pack p, double rpm, int blocks) {
+            v.setPack(p);
+            pops.setLevel(2);
+            twin.setLevel(2);
+            v.setPops(pops);
+            v.tap = new float[BLOCK];
+            tap = new float[blocks * BLOCK];
+            EngineParams ep = new EngineParams();
+            short[] out = new short[BLOCK];
+            long t = 0;
+            for (int b = 0; b < blocks; b++) {
+                ep.rpm = rpm;
+                ep.load = b % 600 < 100 ? 0.9 : 0;
+                ep.speedKph = 70;
+                pops.update(rpm, ep.load, 70, t);
+                twin.update(rpm, ep.load, 70, t);
+                v.render(out, 0, BLOCK, ep, 0.7);
+                System.arraycopy(v.tap, 0, tap, b * BLOCK, BLOCK);
+                for (int i = 0; i < BLOCK; i++) {
+                    double s = twin.trigger();
+                    if (s > 0) starts.add(new double[] {b * BLOCK + i, s});
+                }
+                t += 10;
+            }
+        }
+
+        /** peak |mix| over n samples from each burst, divided by its strength */
+        double[] peaksPerStrength(int n) {
+            double[] r = new double[starts.size()];
+            for (int k = 0; k < r.length; k++) {
+                int at = (int) starts.get(k)[0];
+                double pk = 0;
+                for (int i = at; i < Math.min(tap.length, at + n); i++) pk = Math.max(pk, Math.abs(tap[i]));
+                r[k] = pk / starts.get(k)[1];
+            }
+            return r;
+        }
+    }
+
     static String hex(byte[] d, int n) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < n; i++) b.append(String.format("%02x", d[i] & 0xff));
@@ -359,6 +437,155 @@ final class PackFormatTests {
                 System.out.println("    load ramp: level spread " + Math.round(db * 100) / 100.0 + " dB, max step " + maxD);
                 check(db < 1.0, "ramp level spread " + db + " dB");
                 check(maxD <= 1.3 * slope, "ramp max step " + maxD + " vs " + slope);
+            }
+        });
+
+        // EV1 one-shot events: "event pop|bubble|shift_up|shift_down <file>.wav", "pop_rpm <n>"
+        l.add(new TestMain.T("EV1_events_parse") {
+            void run() throws Exception {
+                Pack p = loadOk(eventPack("pop_rpm 4500\n"));
+                check(p.events[Pack.POP].length == 2 && p.events[Pack.BUBBLE].length == 2 && p.events[Pack.SHIFT_UP].length == 1
+                        && p.events[Pack.SHIFT_DOWN].length == 1, "events per kind");
+                check(p.events[Pack.POP][0].length == 2205 && p.events[Pack.SHIFT_DOWN][0].length == 5000, "event samples");
+                check(p.popRpm == 4500, "pop_rpm " + p.popRpm);
+                check(loadOk(eventPack(null)).popRpm == 4000, "pop_rpm defaults to 4000");
+                check(loadOk(threeLayers(null)).events[Pack.POP].length == 0, "no events: empty");
+                // event gains on the loader thread: pops and bubbles share a peak of 0.9 x level, shifts 0.6 x level
+                Pack q = loadOk(eventPack("level -6\n"));
+                double lv = Math.pow(10, -6 / 20.0);
+                near(q.eventGain[Pack.POP] * peak(q.events[Pack.POP][0]) / 32768, 0.9 * lv, 1e-9, "loudest pop at 0.9 x level");
+                check(q.eventGain[Pack.BUBBLE] == q.eventGain[Pack.POP], "bubbles keep their level below pops");
+                near(q.eventGain[Pack.SHIFT_UP] * peak(q.events[Pack.SHIFT_UP][0]) / 32768, 0.6 * lv, 1e-9, "loudest shift at 0.6 x level");
+                check(q.eventGain[Pack.SHIFT_DOWN] == q.eventGain[Pack.SHIFT_UP], "one gain for both shifts");
+                // refused
+                String[][] bad = {{"crackle"}, {"pop", "440"}, {"pop", "44101"}, {"pop17"}, {"many33"}, {"badname"}, {"rate"}, {"noname"}};
+                for (String[] b : bad) {
+                    TestMain.MapSource s = threeLayers(null);
+                    String k = b[0];
+                    if (k.equals("crackle") || k.equals("pop") && b.length > 1)
+                        withEvents(s, new String[] {k}, new double[] {0.5}, new int[] {b.length > 1 ? Integer.parseInt(b[1]) : 2205});
+                    else if (k.equals("pop17")) {
+                        String[] ks = new String[17];
+                        java.util.Arrays.fill(ks, "pop");
+                        double[] pk = new double[17];
+                        java.util.Arrays.fill(pk, 0.5);
+                        withEvents(s, ks, pk, fill(17, 1000));
+                    } else if (k.equals("many33")) {
+                        String[] ks = new String[33];
+                        for (int i = 0; i < 33; i++) ks[i] = i < 16 ? "pop" : i < 32 ? "bubble" : "shift_up";
+                        double[] pk = new double[33];
+                        java.util.Arrays.fill(pk, 0.5);
+                        withEvents(s, ks, pk, fill(33, 1000));
+                    } else if (k.equals("badname")) {
+                        s.files.put("pack.txt", (new String(s.files.get("pack.txt")) + "event pop ../e.wav\n").getBytes());
+                    } else if (k.equals("rate")) {
+                        s.files.put("e.wav", TestMain.wav(44100, 1, 16, 4000, 500));
+                        s.files.put("pack.txt", (new String(s.files.get("pack.txt")) + "event pop e.wav\n").getBytes());
+                    } else {
+                        s.files.put("pack.txt", (new String(s.files.get("pack.txt")) + "event pop\n").getBytes());
+                    }
+                    check(refusal(s) != null, java.util.Arrays.toString(b) + " accepted");
+                }
+                check(refusal(withEvents(threeLayers(null), new String[] {"pop"}, new double[] {0.5}, new int[] {441})) == null, "0.02 s loads");
+                check(refusal(threeLayers("pop_rpm x\n")) != null, "pop_rpm x accepted");
+                // events count in MAX_SAMPLES: 45 x 44100 + 15000 loop samples, then a 500 / 501-sample pop
+                int[] on = fill(46, 44100);
+                on[45] = 15000;
+                check(refusal(withEvents(sized(on, new int[0]), new String[] {"pop"}, new double[] {0.5}, new int[] {500})) == null, "2,000,000 samples load");
+                check(refusal(withEvents(sized(on, new int[0]), new String[] {"pop"}, new double[] {0.5}, new int[] {501})) != null, "events counted");
+            }
+        });
+
+        // EV2-EV4 the pops episodes fire the pack's sampled pops (at or above pop_rpm) or bubbles (below)
+        l.add(new TestMain.T("EV2_event_per_burst") {
+            void run() throws Exception {
+                Drive d = new Drive(loadOk(eventPack(null)), 4500, 1800);
+                int ev = d.v.eventsStarted(Pack.POP) + d.v.eventsStarted(Pack.BUBBLE);
+                System.out.println("    bursts " + d.pops.bursts() + ", events " + ev);
+                check(d.pops.bursts() >= 6, "three lift-offs pop: " + d.pops.bursts());
+                check(ev == d.pops.bursts(), "one event per burst: " + ev + " vs " + d.pops.bursts());
+                check(d.starts.size() == d.pops.bursts(), "trigger() follows next()'s schedule: " + d.starts.size());
+            }
+        });
+        l.add(new TestMain.T("EV3_pops_above_pop_rpm_bubbles_below") {
+            void run() throws Exception {
+                Pack p = loadOk(eventPack(null));
+                Drive hi = new Drive(p, 4500, 600), lo = new Drive(p, 3000, 600);
+                check(hi.v.eventsStarted(Pack.POP) > 0 && hi.v.eventsStarted(Pack.BUBBLE) == 0, "4500 rpm: pops only "
+                        + hi.v.eventsStarted(Pack.POP) + "/" + hi.v.eventsStarted(Pack.BUBBLE));
+                check(lo.v.eventsStarted(Pack.BUBBLE) > 0 && lo.v.eventsStarted(Pack.POP) == 0, "3000 rpm: bubbles only "
+                        + lo.v.eventsStarted(Pack.POP) + "/" + lo.v.eventsStarted(Pack.BUBBLE));
+                Pack bub = loadOk(withEvents(threeLayers(null), new String[] {"bubble"}, new double[] {0.5}, new int[] {2000}));
+                Drive b = new Drive(bub, 4500, 600);
+                check(b.v.eventsStarted(Pack.BUBBLE) == b.pops.bursts() && b.pops.bursts() > 0, "bubbles only: bubbles at 4500 rpm");
+                Pack pop = loadOk(withEvents(threeLayers(null), new String[] {"pop"}, new double[] {0.5}, new int[] {2000}));
+                Drive q = new Drive(pop, 3000, 600);
+                check(q.v.eventsStarted(Pack.POP) == q.pops.bursts() && q.pops.bursts() > 0, "pops only: pops at 3000 rpm");
+            }
+        });
+        l.add(new TestMain.T("EV4_event_level") {
+            void run() throws Exception {
+                // one pop (peak 0.8) and one bubble (0.3), 25 ms: bursts at least 30 ms apart never overlap
+                Pack p = loadOk(withEvents(silentLoops("level -6\n"), new String[] {"pop", "bubble"}, new double[] {0.8, 0.3}, new int[] {551, 551}));
+                double lv = Math.pow(10, -6 / 20.0);
+                Drive hi = new Drive(p, 4500, 1200), lo = new Drive(p, 3000, 1200);
+                double[] a = hi.peaksPerStrength(551), b = lo.peaksPerStrength(551);
+                check(a.length >= 3 && b.length >= 3, "bursts " + a.length + " " + b.length);
+                for (double x : a) near(x, lv, 0.02 * lv, "pop peak = 0.9 x s/0.9 x level");
+                for (double x : b) near(20 * Math.log10(x / a[0]), 20 * Math.log10(0.3 / 0.8), 0.1, "bubble / pop ratio (dB)");
+            }
+        });
+        l.add(new TestMain.T("EV5_event_pops_inside_cap") {
+            void run() throws Exception {
+                Pack loud = loadOk(withEvents(threeLayers(null), new String[] {"pop", "pop", "bubble"}, new double[] {1.0, 1.0, 1.0},
+                        new int[] {4000, 3000, 3000}));
+                Settings st = TestMain.iceSettings(Profile.ICE_SHIFT, 100);
+                st.pops = "strong";
+                st.sound = "user1";
+                TestMain.Rig r = new TestMain.Rig(st);
+                r.c.setPack(loud);
+                for (int k = 0; k < 6; k++) {
+                    r.speed = 70;
+                    r.pedal = 100;
+                    r.kw = 80;
+                    r.run(2500);
+                    r.pedal = 0;
+                    r.kw = -10;
+                    r.run(2500);
+                }
+                check(r.c.voice().startsWith("pack:"), "the pack played: " + r.c.voice());
+                check(r.c.pops().episodes() >= 2, "pops happened: " + r.c.pops().episodes());
+                check(r.capViolations == 0 && r.peak <= 30000, "bounds: violations " + r.capViolations + " peak " + r.peak);
+            }
+        });
+        l.add(new TestMain.T("K4b_event_pack_fuzz") {
+            void run() throws Exception {
+                java.util.Random rnd = new java.util.Random(11);
+                final java.util.Map<String, byte[]> good = eventPack("pop_rpm 4200\n").files;
+                java.util.List<String> names = new java.util.ArrayList<String>(new java.util.TreeSet<String>(good.keySet()));
+                int ok = 0;
+                for (int i = 0; i < 1500; i++) {
+                    java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+                    String victim = rnd.nextInt(3) == 0 ? "pack.txt" : names.get(rnd.nextInt(names.size()));
+                    for (java.util.Map.Entry<String, byte[]> e : good.entrySet()) {
+                        byte[] b = e.getValue().clone();
+                        if (e.getKey().equals(victim)) {
+                            int flips = 1 + rnd.nextInt(6);
+                            int span = victim.equals("pack.txt") ? b.length : Math.min(b.length, 80);
+                            for (int k = 0; k < flips && b.length > 0; k++) b[rnd.nextInt(span)] = (byte) rnd.nextInt(256);
+                            if (rnd.nextInt(10) == 0) b = java.util.Arrays.copyOf(b, rnd.nextInt(b.length + 1));
+                        }
+                        m.put(e.getKey(), b);
+                    }
+                    try {
+                        PackLoader.load(new TestMain.MapSource(m));
+                        ok++;
+                    } catch (PackError expected) {
+                    } catch (RuntimeException e) {
+                        check(false, "fuzz " + i + " threw " + e);
+                    }
+                }
+                System.out.println("    event fuzz: " + ok + " of 1500 mutated packs still valid");
             }
         });
     }
