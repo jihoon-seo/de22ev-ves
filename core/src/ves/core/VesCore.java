@@ -147,6 +147,9 @@ public final class VesCore {
         }
     }
 
+    private boolean prevShifting; // the last block's EngineParams.shifting and virtualGear
+    private int prevGear;
+
     public int renderBlock(short[] out, int frames, long nowMs) {
         if (out == null) return ACT_NONE;
         if (frames > out.length) frames = out.length;
@@ -159,6 +162,10 @@ public final class VesCore {
         }
         lastNow = nowMs;
         model.update(signals, s, nowMs, params);
+        // a virtual gear change (only ice_shift shifts; none on the standstill reset to 1st): the pack's shift sound
+        if (params.shifting && !prevShifting && usingPack) packVoice.shift(params.virtualGear > prevGear);
+        prevShifting = params.shifting;
+        prevGear = params.virtualGear;
         pops.setLevel(Pops.level(s.pops));
         pops.update(params.rpm, params.load, params.speedKph, nowMs);
         boolean enabled = s.enabled && s.volume > 0;
@@ -208,6 +215,11 @@ public final class VesCore {
         lastGain = g;
         lastMakeup = mk;
         return action;
+    }
+
+    /** tests: the pack voice */
+    PackVoice packVoice() {
+        return packVoice;
     }
 
     private static final int ACT_NONE = AudioPolicy.ACT_NONE;

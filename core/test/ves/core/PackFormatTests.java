@@ -245,6 +245,70 @@ final class PackFormatTests {
         }
     }
 
+    /** a VesCore playing pack p (pops off) whose virtual gear changes are counted per block */
+    static final class ShiftRig {
+        final TestMain.Rig r;
+        int up, down, resets, resetEvents;
+        boolean prevShifting;
+        int prevGear;
+        final java.security.MessageDigest out;
+
+        ShiftRig(Profile prof, Pack p) throws Exception {
+            Settings st = TestMain.iceSettings(prof, 60);
+            st.pops = "off";
+            st.sound = "user1";
+            r = new TestMain.Rig(st);
+            r.c.setPack(p);
+            out = java.security.MessageDigest.getInstance("SHA-256");
+        }
+
+        int events(int kind) {
+            return r.c.packVoice().eventsStarted(kind);
+        }
+
+        void step() {
+            int before = events(Pack.SHIFT_UP) + events(Pack.SHIFT_DOWN);
+            r.step();
+            for (short v : r.buf) out.update(new byte[] {(byte) v, (byte) (v >> 8)});
+            EngineParams o = r.c.lastParams();
+            if (o.shifting && !prevShifting) {
+                if (o.virtualGear > prevGear) up++;
+                else down++;
+            } else if (o.virtualGear < prevGear) {
+                resets++; // a gear change without a shift (standstill)
+                resetEvents += events(Pack.SHIFT_UP) + events(Pack.SHIFT_DOWN) - before;
+            }
+            prevShifting = o.shifting;
+            prevGear = o.virtualGear;
+        }
+
+        /** pull away at 50 % pedal to 100 km/h (25 s), coast down to 10 km/h (20 s), then stop within 0.3 s */
+        ShiftRig drive() {
+            r.pedal = 50;
+            r.kw = 40;
+            for (int i = 0; i < 2500; i++) {
+                r.speed = Math.min(100, i * 0.04);
+                step();
+            }
+            r.pedal = 0;
+            r.kw = -20;
+            for (int i = 0; i < 2000; i++) {
+                r.speed = 100 - 90 * i / 2000.0;
+                step();
+            }
+            r.speed = 40;
+            r.pedal = 30;
+            r.kw = 20;
+            for (int i = 0; i < 1000; i++) step();
+            r.pedal = 0;
+            for (int i = 0; i < 300; i++) {
+                r.speed = Math.max(0, 40 - i * 4);
+                step();
+            }
+            return this;
+        }
+    }
+
     static String hex(byte[] d, int n) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < n; i++) b.append(String.format("%02x", d[i] & 0xff));
@@ -586,6 +650,79 @@ final class PackFormatTests {
                     }
                 }
                 System.out.println("    event fuzz: " + ok + " of 1500 mutated packs still valid");
+            }
+        });
+
+        // SH1-SH4 the pack's shift sounds on ice_shift's virtual gear changes (rising edge of EngineParams.shifting)
+        l.add(new TestMain.T("SH1_shift_sounds_on_gear_changes") {
+            void run() throws Exception {
+                ShiftRig s = new ShiftRig(Profile.ICE_SHIFT, loadOk(eventPack(null))).drive();
+                System.out.println("    shifts up " + s.up + " down " + s.down + " resets " + s.resets + "; events up "
+                        + s.events(Pack.SHIFT_UP) + " down " + s.events(Pack.SHIFT_DOWN));
+                check(s.up >= 3, "through 4 gears: " + s.up + " upshifts");
+                check(s.events(Pack.SHIFT_UP) == s.up, "one shift_up per upshift: " + s.events(Pack.SHIFT_UP) + " vs " + s.up);
+                check(s.down > 0 && s.events(Pack.SHIFT_DOWN) == s.down, "shift_down on the way down: " + s.events(Pack.SHIFT_DOWN) + " vs " + s.down);
+            }
+        });
+        l.add(new TestMain.T("SH2_no_shift_sounds_ice_smooth") {
+            void run() throws Exception {
+                ShiftRig s = new ShiftRig(Profile.ICE_SMOOTH, loadOk(eventPack(null))).drive();
+                check(s.events(Pack.SHIFT_UP) + s.events(Pack.SHIFT_DOWN) == 0, "ice_smooth never shifts: " + s.events(Pack.SHIFT_UP));
+            }
+        });
+        l.add(new TestMain.T("SH3_standstill_reset_silent") {
+            void run() throws Exception {
+                ShiftRig s = new ShiftRig(Profile.ICE_SHIFT, loadOk(eventPack(null))).drive();
+                check(s.resets > 0, "the stop reset the gear to 1st without a shift: " + s.resets);
+                check(s.resetEvents == 0, "no shift sound on the reset: " + s.resetEvents);
+            }
+        });
+        l.add(new TestMain.T("SH4_pack_without_shift_sounds_unchanged") {
+            void run() throws Exception {
+                Pack withPops = loadOk(withEvents(threeLayers(null), new String[] {"pop", "bubble"}, new double[] {0.8, 0.4}, new int[] {2000, 2000}));
+                ShiftRig a = new ShiftRig(Profile.ICE_SHIFT, withPops).drive(), b = new ShiftRig(Profile.ICE_SHIFT, loadOk(threeLayers(null))).drive();
+                check(a.up > 0, "the drive shifts");
+                check(java.util.Arrays.equals(a.out.digest(), b.out.digest()), "output differs from the pack without event lines");
+            }
+        });
+        // G5 cost (as G_pack_voice) for a 3-layer pack playing pops and shift sounds
+        l.add(new TestMain.T("G5b_event_pack_cost") {
+            void run() throws Exception {
+                Pack pk = loadOk(eventPack(null));
+                PackVoice pv = new PackVoice(SR);
+                pv.setPack(pk);
+                Pops pops = new Pops(SR, 3);
+                pops.setLevel(2);
+                pv.setPops(pops);
+                Synth sy = new Synth(SR, Profile.ICE_SMOOTH, 1);
+                EngineParams ep = new EngineParams();
+                short[] out = new short[220];
+                for (int i = 0; i < 3000; i++) { // warm both up (JIT) before timing
+                    drive(pv, pops, ep, i, out);
+                    sy.render(out, 0, 220, ep, 0.5);
+                }
+                long t0 = System.nanoTime();
+                for (int i = 0; i < 6000; i++) drive(pv, pops, ep, i, out);
+                long tp = System.nanoTime() - t0;
+                t0 = System.nanoTime();
+                for (int i = 0; i < 6000; i++) {
+                    ep.rpm = 1000 + 4000 * Math.abs(Math.sin(i / 500.0));
+                    sy.render(out, 0, 220, ep, 0.5);
+                }
+                long ts = System.nanoTime() - t0;
+                System.out.println("    60 s render: event pack " + tp / 1000000 + " ms (" + pv.eventsStarted(Pack.POP) + " pops, "
+                        + pv.eventsStarted(Pack.SHIFT_UP) + " shifts), synth " + ts / 1000000 + " ms");
+                check(pv.eventsStarted(Pack.POP) + pv.eventsStarted(Pack.BUBBLE) > 0 && pv.eventsStarted(Pack.SHIFT_UP) > 0, "events played");
+                check(tp <= ts * 1.5 + 20000000L, "G5 pack " + tp / 1000000 + " ms vs synth " + ts / 1000000 + " ms");
+            }
+
+            void drive(PackVoice pv, Pops pops, EngineParams ep, int i, short[] out) {
+                ep.rpm = 1000 + 4000 * Math.abs(Math.sin(i / 500.0));
+                ep.load = i % 500 < 100 ? 0.9 : 0.5 + 0.4 * Math.sin(i / 37.0);
+                ep.speedKph = 70;
+                pops.update(ep.rpm, ep.load, 70, i * 10L);
+                if (i % 150 == 0) pv.shift(i % 300 == 0);
+                pv.render(out, 0, 220, ep, 0.5);
             }
         });
     }

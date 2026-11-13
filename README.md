@@ -56,7 +56,8 @@ loop r2000_off.wav rpm=2000 load=off
 At least 3 on-load loops reaching from at most 1200 to at least 4000 rpm; off-load (overrun) loops
 are optional, and so are up to two layers in between (`load=0.45`: 0 = off, 1 = on, at least 2 loops
 each). Optional one-shot sounds: `event pop|bubble|shift_up|shift_down <file>.wav` (0.02–2 s, up to 16 of a
-kind) play at the pops setting's bursts (pops from `pop_rpm`, default 4000, bubbles below). Loops are 0.2–2 s, at most 96 of them and 2,000,000 samples (4 MB); file names
+kind) play at the pops setting's bursts (pops from `pop_rpm`, default 4000, bubbles below) and on the
+virtual gear changes of `ice_shift`. Loops are 0.2–2 s, at most 96 of them and 2,000,000 samples (4 MB); file names
 `[a-z0-9_-].wav`. Each loop is brought to the same level; an optional `level -4.5` line (dB,
 -24 to 12) turns the whole pack down or up, for packs that sound louder or clip on the car's
 speaker. Put the folder under `VES/packs/` on the USB stick and use "USB에서 소리 팩
