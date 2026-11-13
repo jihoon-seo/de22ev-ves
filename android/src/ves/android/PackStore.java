@@ -36,7 +36,7 @@ final class PackStore {
      * each one into vesd.jar and fails when one is missing). The CC0 renders i4t, v6, v8, i6 are no longer shipped.
      */
     static final String[] BUILT_IN = { "vex4", "vex_v10", "ae86", "amg_v8", "gt3", "gtr", "s2000" };
-    static final long MAX_COPY = 3L * 1024 * 1024;
+    static final long MAX_COPY = 5L * 1024 * 1024; // PackLoader.MAX_SAMPLES (4 MB) + headers, pack.txt
     static int jarOpens; // for the host test: vesd.jar opened to read names
 
     private final File modDir, dataDir;
@@ -235,7 +235,7 @@ final class PackStore {
             total += f.length();
             if (total > MAX_COPY) {
                 deleteTree(tmp);
-                throw new PackError("pack folder larger than 3 MB");
+                throw new PackError("pack folder larger than 5 MB");
             }
             copy(f, new File(tmp, n));
         }

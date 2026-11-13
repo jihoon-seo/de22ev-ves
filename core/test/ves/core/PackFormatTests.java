@@ -51,6 +51,37 @@ final class PackFormatTests {
                 PackLoader.load(TestMain.testPack("noff")), PackLoader.load(marked("level -6"))};
     }
 
+    /** on-load sine loops of the given lengths (rpm 800 + 100 k), then off-load ones */
+    static TestMain.MapSource sized(int[] onLen, int[] offLen) {
+        java.util.Map<String, byte[]> m = new java.util.HashMap<String, byte[]>();
+        StringBuilder t = new StringBuilder("name big\ncylinders 4\nidle 800\nredline 6500\n");
+        for (int layer = 0; layer < 2; layer++) {
+            int[] len = layer == 0 ? onLen : offLen;
+            for (int k = 0; k < len.length; k++) {
+                String f = "b" + layer + "_" + k + ".wav";
+                m.put(f, TestMain.wav(22050, 1, 16, len[k], 110 + k));
+                t.append("loop ").append(f).append(" rpm=").append(800 + 100 * k).append(" load=").append(layer == 0 ? "on" : "off").append('\n');
+            }
+        }
+        m.put("pack.txt", t.toString().getBytes());
+        return new TestMain.MapSource(m);
+    }
+
+    static int[] fill(int n, int v) {
+        int[] a = new int[n];
+        java.util.Arrays.fill(a, v);
+        return a;
+    }
+
+    static String refusal(TestMain.MapSource s) {
+        try {
+            PackLoader.load(s);
+            return null;
+        } catch (PackError e) {
+            return e.getMessage();
+        }
+    }
+
     static String hex(byte[] d, int n) {
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < n; i++) b.append(String.format("%02x", d[i] & 0xff));
@@ -135,6 +166,27 @@ final class PackFormatTests {
                 for (int i = 0; i < ps.length; i++) got.append(i == 0 ? "" : " ").append(pinPops(ps[i]));
                 System.out.println("    PK0b " + got);
                 check(got.toString().equals(join(PK0B_WANT)), "output changed: " + got + " vs " + join(PK0B_WANT));
+            }
+        });
+
+        // K6 0.2.8 limits: a physics bake has 24 rpm x 3 loads = 72 loops of about 1 s (about 1.6M samples)
+        l.add(new TestMain.T("K6_pack_limits_72_loops") {
+            void run() throws Exception {
+                String r = refusal(sized(fill(36, 22050), fill(36, 22050)));
+                check(r == null, "72 loops, 1.59M samples refused: " + r);
+                r = refusal(sized(fill(49, 4410), fill(48, 4410)));
+                check(r != null && r.indexOf("96") >= 0, "97 loops: " + r);
+                check(refusal(sized(fill(48, 4410), fill(48, 4410))) == null, "96 loops load");
+                // 45 x 44100 + 15500 = 2,000,000 samples exactly; one more is too many
+                int[] on = fill(46, 44100), off = {};
+                on[45] = 15500;
+                r = refusal(sized(on, off));
+                check(r == null, "exactly MAX_SAMPLES refused: " + r);
+                on[45] = 15501;
+                r = refusal(sized(on, off));
+                check(r != null && r.indexOf("samples") >= 0, "one sample over MAX_SAMPLES: " + r);
+                check(PackLoader.MAX_LOOPS == 96 && PackLoader.MAX_SAMPLES == 2000000, "limits " + PackLoader.MAX_LOOPS + " " + PackLoader.MAX_SAMPLES);
+                check(refusal(TestMain.testPack("oversize")) != null, "K2 oversize still refused");
             }
         });
     }

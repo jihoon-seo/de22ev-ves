@@ -63,7 +63,7 @@ lowest measured rpm, so idle keeps the measured balance of orders and noise.
 5400, 6000, 6615 and 7350 rpm, 42 loops. Every loop holds K whole engine cycles from crank phase 0:
 N * rpm = K * 2646000 exactly (2646000 = 120 * 22050), K a multiple of 4 (even, so half orders close too, and
 whole periods of the crank wobble), 0.9 s to about 1.4 s; the whole pack is about 0.94M samples (PackLoader
-allows 1.25M) and 1.9 MB (PackStore takes up to 3 MB). The
+allows 2M) and 1.9 MB (PackStore takes up to 5 MB). The
 synthesis is additive in the loop-length DFT at 22050 Hz: order n on bin K n, so a loop is exactly periodic
 and wraps without a seam. Orders below 40 Hz are dropped, nothing goes above 8.5 kHz (the top loop plays up
 to 1.22x faster at 9000 rpm). Every order has the same phase in every loop and both layers (the measured one

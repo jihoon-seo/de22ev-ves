@@ -23,8 +23,9 @@ import java.util.List;
  * </pre>
  * Rules: WAV PCM 16-bit mono 22050 Hz; file names [a-z0-9_-]+.wav (no folders); at least 3 on-load loops
  * covering at most 1200 rpm at the low end and at least 4000 at the high end; off-load loops optional (the
- * on-load ones stand in), at least 2 when present; each loop 0.2..2 s; at most 64 loops and 2.5 MB of
- * samples; loop points inside the file. Duplicate rpm per layer: the later line wins.
+ * on-load ones stand in), at least 2 when present; each loop 0.2..2 s; at most 96 loops and 2,000,000
+ * samples (4 MB; a physics bake: 24 rpm x 3 loads of about 1 s); loop points inside the file. Duplicate rpm
+ * per layer: the later line wins.
  */
 public final class PackLoader {
     public interface Source {
@@ -33,7 +34,7 @@ public final class PackLoader {
     }
 
     public static final int RATE = 22050;
-    public static final int MAX_LOOPS = 64, MAX_SAMPLES = 2_500_000 / 2;
+    public static final int MAX_LOOPS = 96, MAX_SAMPLES = 2_000_000;
     static final int MIN_LOOP = RATE / 5, MAX_LOOP = RATE * 2;
     static final int MAX_WAV_BYTES = MAX_LOOP * 2 + 64 * 1024, MAX_TXT_BYTES = 16 * 1024;
 
@@ -93,7 +94,7 @@ public final class PackLoader {
                 int n = end - start;
                 if (n < MIN_LOOP || n > MAX_LOOP) throw new PackError(f[1] + ": loop must be 0.2 to 2 s");
                 total += n;
-                if (total > MAX_SAMPLES) throw new PackError("pack larger than 2.5 MB of samples");
+                if (total > MAX_SAMPLES) throw new PackError("pack larger than " + MAX_SAMPLES + " samples");
                 (load.equals("on") ? on : off).add(new Pack.Loop(rpm, Arrays.copyOfRange(pcm, start, end)));
             } else throw new PackError("line " + lineNo + ": unknown key " + k);
         }
