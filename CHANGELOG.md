@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.9
+
+From the first drive with 0.2.8 (2026-11-14: S2000 Baked seemed to drop in pitch within a second of
+pulling away):
+
+- Fix: S2000 Baked's loaded layers are darker than its idle (off) layer, and pulling away switched to
+  them within 0.1 s while the rpm was still rising: the sound's centroid fell from 273 to 238 Hz,
+  heard as the pitch dropping. Packs with three or more load layers now move up through them over
+  about 0.4 s (and back down in 0.08 s), so the rpm rises first and the loaded sound follows. Packs
+  with two layers (all the others) are unchanged.
+- vesd's log now has a launch trace: pressing the pedal while standing in a drive gear logs speed,
+  pedal, motor kW, rpm, load, layer, gain and virtual gear every 100 ms for 3 s ("launch +...ms").
+
 ## 0.2.8
 
 - Built-in sounds by 히릿: eight packs made from his engine physics simulator are built in
