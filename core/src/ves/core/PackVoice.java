@@ -66,6 +66,11 @@ public final class PackVoice {
         pops = p;
     }
 
+    /** samples the output stage sent into its hard limit so far */
+    public long clamped() {
+        return stage.clamped();
+    }
+
     /** the voice mix before the output stage (about +-1), for tests and tools; parameters held for the call */
     public void renderRaw(float[] out, int frames, double rpm, double load, double regen) {
         for (int pos = 0; pos < frames; pos += SEG) {

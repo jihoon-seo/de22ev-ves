@@ -40,6 +40,12 @@ public final class Replay {
         public long yieldMs, yieldClosedMs, yieldAudibleMs, packets, badPackets;
         /** longest all-zero run after the first audible block, outside yield/quiet windows; ACT_REGRABs */
         public long maxGapMs, regrabs;
+        /**
+         * rms in dBFS; the same between the first two marks (from the first mark to the end with one, the whole
+         * run without); samples sent into the output stage's hard limit, and their share of all samples
+         */
+        public double rmsDbfs, rmsMarkDbfs, limitFraction;
+        public long clamped;
         /** {t_ms, virtualGear} at every gear change (first entry = first block) */
         public final List<long[]> gearLog = new ArrayList<long[]>();
         /** times of "mark" events in order (Long.MAX_VALUE if absent) */
@@ -75,6 +81,9 @@ public final class Replay {
             num(b, "packets", packets);
             num(b, "bad_packets", badPackets);
             num(b, "render_ms", renderMs);
+            num(b, "rms_dbfs", rmsDbfs);
+            num(b, "rms_mark_dbfs", rmsMarkDbfs);
+            num(b, "limit_fraction", limitFraction);
             b.append("\"rtf\":").append(fmt(rtf)).append('}');
             return b.toString();
         }
@@ -111,6 +120,8 @@ public final class Replay {
         int marks;
         boolean heard;
         long gapMs;
+        double markSumSq;
+        long markN;
 
         Renderer(Settings s, int sr) {
             this.sr = sr;
@@ -150,6 +161,7 @@ public final class Replay {
             if (cap > r.peakCap) r.peakCap = cap;
             prevGain = g;
             boolean nonZero = false;
+            double blockSq = 0;
             for (int i = 0; i < frames; i++) {
                 short v = buf[i];
                 int av = Math.abs(v);
@@ -157,6 +169,7 @@ public final class Replay {
                 if (v == 0) zeros++;
                 else nonZero = true;
                 sumSq += (double) v * v;
+                blockSq += (double) v * v;
                 if (havePrev) {
                     int d = Math.abs(v - prev);
                     if (d > r.maxDelta) r.maxDelta = d;
@@ -165,6 +178,11 @@ public final class Replay {
                 havePrev = true;
             }
             n += frames;
+            // between the first two marks (a mark at time t counts from the block starting at t)
+            if ((marks == 0 || t >= r.markMs[0]) && (marks < 2 || t < r.markMs[1])) {
+                markSumSq += blockSq;
+                markN += frames;
+            }
             if (pcmN + frames > pcm.length) {
                 short[] np = new short[pcm.length * 2];
                 System.arraycopy(pcm, 0, np, 0, pcmN);
@@ -204,6 +222,7 @@ public final class Replay {
                 if (e.length() == 0) continue;
                 if (e.equals("mark")) {
                     if (marks < r.markMs.length) r.markMs[marks++] = time;
+                    if (marks == 1) markSumSq = markN = 0; // rms_mark: from the first mark on
                 } else if (e.startsWith("yield_start:")) {
                     String src = e.substring(12);
                     core.onYieldStart(src, time);
@@ -230,6 +249,10 @@ public final class Replay {
             r.durationS = n / (double) sr;
             r.rms = n == 0 ? 0 : Math.sqrt(sumSq / n) / 32768.0;
             r.silentFraction = n == 0 ? 1 : zeros / (double) n;
+            r.rmsDbfs = dbfs(r.rms);
+            r.rmsMarkDbfs = dbfs(markN == 0 ? 0 : Math.sqrt(markSumSq / markN) / 32768.0);
+            r.clamped = core.clampedSamples();
+            r.limitFraction = n == 0 ? 0 : r.clamped / (double) n;
             r.renderMs = renderNs / 1e6;
             r.rtf = renderNs == 0 ? 0 : r.durationS / (renderNs / 1e9);
             r.packets = core.framer().packets();
@@ -447,6 +470,11 @@ public final class Replay {
     private static void le32(byte[] h, int at, int v) {
         le16(h, at, v);
         le16(h, at + 2, v >> 16);
+    }
+
+    /** 20 log10(rms), at least -120 (silence) */
+    static double dbfs(double rms) {
+        return rms > 1e-6 ? 20 * Math.log10(rms) : -120;
     }
 
     static String fmt(double v) {

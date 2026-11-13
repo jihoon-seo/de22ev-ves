@@ -17,6 +17,7 @@ public final class OutputStage {
     private double hx1, hx2, hy1, hy2;
     private final double presLoC, presHiC;
     private double presLo, presHi;
+    private long clamped;
 
     public OutputStage(int sampleRate) {
         int sr = sampleRate > 0 ? sampleRate : 22050;
@@ -42,10 +43,20 @@ public final class OutputStage {
         presLo += (y - presLo) * presLoC;
         presHi += (y - presHi) * presHiC;
         y = (y + PRES_K * (presHi - presLo)) * DRIVE;
-        if (y > 3) y = 3;
-        else if (y < -3) y = -3;
+        if (y > 3) {
+            y = 3;
+            clamped++;
+        } else if (y < -3) {
+            y = -3;
+            clamped++;
+        }
         double y2 = y * y;
         return y * (27 + y2) / (27 + 9 * y2);
+    }
+
+    /** samples that reached the hard limit (|y| &gt; 3 into the soft clip) since construction */
+    public long clamped() {
+        return clamped;
     }
 
     /** flush denormals / tiny states (call once per block) */

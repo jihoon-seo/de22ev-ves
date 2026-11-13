@@ -48,7 +48,7 @@ assert() { # assert <awk-expr> <msg>
     awk "BEGIN{exit !($1)}" || fail "$2 ($1)"
 }
 
-for scen in city accel cruise navi ready_off; do
+for scen in city accel cruise navi ready_off launch highway; do
     "$JAVA" -cp "$CLS" ves.tools.Sweep "$WORK/$scen.csv" "$scen" > /dev/null || fail "sweep $scen"
     for prof in ice_smooth ice_shift ev_future; do
         M=$("$JAVA" -cp "$CLS" ves.tools.Replay "$WORK/$scen.csv" "$WORK/$scen-$prof.wav" \

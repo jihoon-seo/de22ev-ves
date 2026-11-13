@@ -8,13 +8,13 @@ import java.util.Random;
 
 /**
  * Synthetic drive traces for Replay.
- * <pre>java ves.tools.Sweep &lt;out.csv&gt; [city|accel|cruise|navi|ready_off|showcase]   (default city)</pre>
+ * <pre>java ves.tools.Sweep &lt;out.csv&gt; [city|accel|cruise|navi|ready_off|launch|highway|showcase]   (default city)</pre>
  * Rows every 100 ms: speed, pedal, motor_kw, accel_g, brake on every row; gear and ready every 200 ms (empty cell
  * = no update, like the real CAN cadence). Events: "mark" (scenario phase markers used by tests),
  * "yield_start:navi" / "yield_end:navi". Simple longitudinal physics for a 1750 kg EV.
  */
 public final class Sweep {
-    public static final String[] SCENARIOS = {"city", "accel", "cruise", "navi", "ready_off"};
+    public static final String[] SCENARIOS = {"city", "accel", "cruise", "navi", "ready_off", "launch", "highway"};
     public static final String HEADER = "t_ms,speed,pedal,motor_kw,accel_g,gear,ready,brake,event";
 
     static final double MASS = 1750;
@@ -42,7 +42,28 @@ public final class Sweep {
             s.chimes = true;
             sc = "city";
         }
-        if (sc.equals("accel")) {
+        if (sc.equals("launch")) {
+            // pulling away: 2 s standing in D, then pedal 40 % with the speed rising linearly to 30 km/h in 6 s
+            s.stop(500, P, 1);
+            s.stop(2000, D, 1);
+            s.event("mark");
+            s.ramp(40, 30, 6000);
+            s.event("mark");
+            s.cruise(2000, 15, 0);
+            s.decel(0.12, 20000);
+            s.stop(1000, D, 1);
+        } else if (sc.equals("highway")) {
+            // steady 110 km/h at 15 % pedal
+            s.stop(500, P, 1);
+            s.stop(1000, D, 1);
+            s.accel(70, 110, 40000);
+            s.cruise(3000, 15, 0.5);
+            s.event("mark");
+            s.cruise(20000, 15, 0.5);
+            s.event("mark");
+            s.decel(0.1, 40000);
+            s.stop(1000, D, 1);
+        } else if (sc.equals("accel")) {
             s.stop(1000, P, 1);
             s.stop(1500, D, 1);
             s.event("mark");
@@ -102,7 +123,7 @@ public final class Sweep {
 
     public static void main(String[] args) throws IOException {
         if (args.length < 1) {
-            System.err.println("usage: java ves.tools.Sweep <out.csv> [city|accel|cruise|navi|ready_off|showcase]");
+            System.err.println("usage: java ves.tools.Sweep <out.csv> [city|accel|cruise|navi|ready_off|launch|highway|showcase]");
             System.exit(2);
         }
         String sc = args.length > 1 ? args[1] : "city";
@@ -141,6 +162,19 @@ public final class Sweep {
             v = Math.max(0, v + a * 0.1 * 3.6);
             emit(pedal, kw, a / 9.81, 0);
         }
+    }
+
+    /** fixed pedal, speed rising linearly from now to untilKph over ms; kW follows the force needed */
+    private void ramp(double pedal, double untilKph, long ms) {
+        gear = D;
+        double v0 = v, a = (untilKph - v0) / 3.6 / (ms / 1000.0); // m/s^2
+        long t0 = t;
+        for (long e = t + ms; t < e; ) {
+            v = v0 + (untilKph - v0) * (t - t0) / (double) ms;
+            double kw = Math.min(150, MASS * (a + drag(v)) * (v / 3.6) / 1000 + 1);
+            emit(pedal, kw, a / 9.81, 0);
+        }
+        v = untilKph;
     }
 
     private void cruise(long ms, double pedalBase, double noise) {

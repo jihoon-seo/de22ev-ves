@@ -240,6 +240,11 @@ public final class VesCore {
         return lastGain;
     }
 
+    /** samples the voices' output stages sent into the hard limit so far (both voices while they cross-fade) */
+    public long clampedSamples() {
+        return synth.clamped() + packVoice.clamped();
+    }
+
     public int lastAction() {
         return lastAction;
     }

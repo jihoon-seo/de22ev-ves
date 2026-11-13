@@ -125,6 +125,11 @@ public final class Synth {
         return profile;
     }
 
+    /** samples the output stage sent into its hard limit so far */
+    public long clamped() {
+        return stage.clamped();
+    }
+
     public void render(short[] out, int off, int frames, EngineParams p, double gain) {
         if (out == null || frames <= 0 || off < 0 || off > out.length - frames) return;
         double rpmT = p != null && fin(p.rpm) ? clamp(p.rpm, 300, 12000) : pRpm;

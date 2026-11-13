@@ -2818,6 +2818,7 @@ public final class TestMain {
             }
         });
 
+        LevelTests.add(l); // 0.2.7: loudness, launch, makeup, volume curve, speed boost
         return l;
     }
 }
