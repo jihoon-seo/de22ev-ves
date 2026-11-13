@@ -697,9 +697,9 @@ public final class ResynthTest {
             }
         });
 
-        l.add(new T("RS-L1 the pack's level line puts its mean speaker-stage level at PackRenderer.TARGET_DB (+-0.3 dB)") {
+        l.add(new T("RS-L1 the pack's level line puts its mean speaker-stage level at PackRenderer.TARGET_DB (+-0.3 dB), noise on, off, -12 dB") {
             void run() throws Exception {
-                for (boolean noise : new boolean[] { true, false }) {
+                for (String noise : new String[] { "on", "off", "-12" }) {
                     File d = fixturePack(noise);
                     String txt = new String(readAll(new File(d, "pack.txt")), "UTF-8");
                     java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^level (-?[0-9]+\\.[0-9])$").matcher(txt);
@@ -725,6 +725,7 @@ public final class ResynthTest {
                         }
                     }
                     double mean = sum / n;
+                    note("noise " + noise + ": level " + m.group(1) + " dB, mean stage level " + f3(mean) + " dB");
                     check(Math.abs(mean - PackRenderer.TARGET_DB) <= 0.3, "noise " + noise + ": mean stage level " + mean
                             + " dB, target " + PackRenderer.TARGET_DB + ", level " + m.group(1));
                 }
@@ -864,6 +865,157 @@ public final class ResynthTest {
                     rmrf(a);
                     rmrf(b);
                 }
+            }
+        });
+
+        l.add(new T("RS-N1 render noise=-12: noise-only bins 12 +-0.5 dB under noise=on, order bins within 0.1 dB (peak normalisation undone)") {
+            void run() throws Exception {
+                File root = tmpDir("n1");
+                try {
+                    File model = new File(root, "m.vesmodel");
+                    fixtureModel().write(model, "synthetic fixture");
+                    File on = new File(root, "on"), q = new File(root, "q");
+                    check(Main.run(new String[] {"render", model.getPath(), on.getPath(), "name=Fixture", "noise=on"}) == 0, "noise=on render");
+                    check(Main.run(new String[] {"render", model.getPath(), q.getPath(), "name=Fixture", "noise=-12"}) == 0, "noise=-12 render");
+                    ves.core.Pack pa = loadPack(on), pb = loadPack(q);
+                    double lo = 999, hi = -999, worstOrder = 0;
+                    int orders = 0;
+                    for (int layer = 0; layer < 2; layer++)
+                        for (int i = 0; i < PackRenderer.GRID.length; i++) {
+                            ves.core.Pack.Loop a = (layer == 0 ? pa.on : pa.off)[i], b = (layer == 0 ? pb.on : pb.off)[i];
+                            int n = a.pcm.length;
+                            check(b.pcm.length == n, a.rpm + " rpm: lengths differ");
+                            // order n on bin K n, half orders on K n + K / 2, the skirt every K / WOBBLE bins
+                            // beside the orders: every other bin holds noise only
+                            int k = (int) ((long) n * a.rpm / PackRenderer.CYCLE), side = k / PackRenderer.WOBBLE;
+                            double[] sa = power(a.pcm), sb = power(b.pcm);
+                            int top = k;
+                            for (int bin = k; bin < n / 2; bin += k) if (sa[bin] > sa[top]) top = bin;
+                            // each loop is normalised to its own peak: the strongest order's ratio is the gain ratio
+                            double ref = sb[top] / sa[top], na = 0, nb = 0;
+                            for (int bin = 1; bin < n / 2 && bin * (double) PackRenderer.SR / n <= PackRenderer.CAP; bin++) {
+                                if (bin % side != 0) {
+                                    na += sa[bin];
+                                    nb += sb[bin];
+                                } else if (bin % k == 0 && sa[bin] > sa[top] * 1e-4) {
+                                    worstOrder = Math.max(worstOrder, Math.abs(10 * Math.log10(sb[bin] / sa[bin] / ref)));
+                                    orders++;
+                                }
+                            }
+                            double d = 10 * Math.log10(nb / na / ref);
+                            lo = Math.min(lo, d);
+                            hi = Math.max(hi, d);
+                        }
+                    note("noise-only bins " + f3(lo) + " .. " + f3(hi) + " dB re noise=on; " + orders + " order bins, worst " + f3(worstOrder) + " dB");
+                    near(lo, -12, 0.5, "quietest loop's noise re noise=on");
+                    near(hi, -12, 0.5, "loudest loop's noise re noise=on");
+                    check(worstOrder <= 0.1, "order bins differ by " + worstOrder + " dB");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-N2 render noise=0 is byte-identical to noise=on") {
+            void run() throws Exception {
+                File root = tmpDir("n2");
+                try {
+                    File model = new File(root, "m.vesmodel");
+                    fixtureModel().write(model, "synthetic fixture");
+                    File a = new File(root, "on"), b = new File(root, "zero");
+                    check(Main.run(new String[] {"render", model.getPath(), a.getPath(), "name=Fixture", "noise=on"}) == 0, "noise=on render");
+                    check(Main.run(new String[] {"render", model.getPath(), b.getPath(), "name=Fixture", "noise=0"}) == 0, "noise=0 render");
+                    File[] fa = a.listFiles();
+                    check(fa.length == 43 && b.list().length == 43, "files " + fa.length + " / " + b.list().length);
+                    for (File f : fa) check(java.util.Arrays.equals(readAll(f), readAll(new File(b, f.getName()))), f.getName() + " differs");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-N3 render noise=+3, x, -50, -12d: exit 1 with the usage, nothing written") {
+            void run() throws Exception {
+                File root = tmpDir("n3");
+                try {
+                    File model = new File(root, "m.vesmodel");
+                    fixtureModel().write(model, "synthetic fixture");
+                    for (String v : new String[] {"+3", "x", "-50", "-12d", "", "-40.5"}) {
+                        File out = new File(root, "pack");
+                        String[] err = new String[1];
+                        int rc = runCapturing(new String[] {"render", model.getPath(), out.getPath(), "name=Fixture", "noise=" + v}, err);
+                        check(rc == 1, "noise=" + v + ": exit " + rc);
+                        check(err[0].contains("usage:") && err[0].contains("noise="), "noise=" + v + ": stderr " + err[0]);
+                        check(!out.exists(), "noise=" + v + ": wrote " + out);
+                    }
+                    for (String v : new String[] {"-40", "-12.5"}) {
+                        File out = new File(root, "ok" + v);
+                        check(Main.run(new String[] {"render", model.getPath(), out.getPath(), "name=Fixture", "noise=" + v}) == 0, "noise=" + v);
+                    }
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-N4 a loop refused for its crest factor: exit 1 with the reason, the folder's earlier pack untouched") {
+            void run() throws Exception {
+                File root = tmpDir("n4");
+                try {
+                    // flat orders all in phase (a pulse train), no skirt: crest factor sqrt(2 x 1270) at 800 rpm
+                    Model m = fixtureModel();
+                    for (Model.Layer ly : new Model.Layer[] {m.on, m.off}) {
+                        ly.h = new double[0];
+                        ly.tailB = 0;
+                        ly.tailRes = new double[] {0, 0, 0, 0};
+                        java.util.Arrays.fill(ly.coh, 0);
+                    }
+                    m.phase = new double[1300];
+                    m.phaseR = new double[1300];
+                    java.util.Arrays.fill(m.phaseR, 1);
+                    File model = new File(root, "pulse.vesmodel"), good = new File(root, "m.vesmodel");
+                    m.write(model, "synthetic pulse train");
+                    fixtureModel().write(good, "synthetic fixture");
+                    File fresh = new File(root, "fresh"), used = new File(root, "used");
+                    check(Main.run(new String[] {"render", good.getPath(), used.getPath(), "name=Fixture"}) == 0, "earlier pack");
+                    java.util.Map<String, byte[]> before = new java.util.TreeMap<String, byte[]>();
+                    for (File f : used.listFiles()) before.put(f.getName(), readAll(f));
+                    for (File out : new File[] {fresh, used}) {
+                        String[] err = new String[1];
+                        int rc = runCapturing(new String[] {"render", model.getPath(), out.getPath(), "name=Pulse", "noise=off"}, err);
+                        check(rc == 1, out.getName() + ": exit " + rc);
+                        check(err[0].startsWith("error: ") && err[0].contains("crest factor"), out.getName() + ": stderr " + err[0]);
+                        note(err[0].trim());
+                    }
+                    check(!fresh.exists() || fresh.list().length == 0, "half-written pack: " + java.util.Arrays.toString(fresh.list()));
+                    check(used.list().length == before.size(), "the earlier pack lost files: " + java.util.Arrays.toString(used.list()));
+                    for (java.util.Map.Entry<String, byte[]> e : before.entrySet())
+                        check(java.util.Arrays.equals(e.getValue(), readAll(new File(used, e.getKey()))), e.getKey() + " changed");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-N5 ab track's resynthesis at noise -12 dB: the noise 12 dB down, noise 0 dB unchanged") {
+            void run() {
+                Model m = fixtureModel();
+                Track tr = trueTrack(launch());
+                int n = 2 * SR;
+                double[] ref = TrackSynth.render(m, null, tr, null, n, SR, 99);
+                double[] y0 = TrackSynth.render(m, null, tr, null, n, SR, 99, 0);
+                double[] y12 = TrackSynth.render(m, null, tr, null, n, SR, 99, -12);
+                double[] yOff = TrackSynth.render(m, null, tr, null, n, SR, 99, Double.NEGATIVE_INFINITY);
+                check(java.util.Arrays.equals(ref, y0), "noise 0 dB differs from the default");
+                double e0 = 0, e12 = 0;
+                for (int i = 0; i < n; i++) {
+                    e0 += (y0[i] - yOff[i]) * (y0[i] - yOff[i]);
+                    e12 += (y12[i] - yOff[i]) * (y12[i] - yOff[i]);
+                }
+                check(e0 > 0, "no noise at 0 dB");
+                double d = 10 * Math.log10(e12 / e0);
+                note("noise at -12: " + f3(d) + " dB");
+                near(d, -12, 0.01, "noise level");
             }
         });
 
@@ -1109,17 +1261,23 @@ public final class ResynthTest {
         return l;
     }
 
-    static final java.util.Map<Boolean, File> PACKS = new java.util.HashMap<Boolean, File>();
+    static final java.util.Map<String, File> PACKS = new java.util.HashMap<String, File>();
 
     /** the fixture model rendered once per run (with or without noise), in a temp folder */
     static File fixturePack(boolean noise) throws Exception {
+        return fixturePack(noise ? "on" : "off");
+    }
+
+    /** the same with noise on, off or at a level in dB (as render's noise= takes it) */
+    static File fixturePack(String noise) throws Exception {
         File d = PACKS.get(noise);
         if (d != null) return d;
         File root = tmpDir("pack" + noise);
         root.deleteOnExit();
         d = new File(root, "fixture");
         PackRenderer.Options o = new PackRenderer.Options();
-        o.noise = noise;
+        o.noise = !noise.equals("off");
+        if (!noise.equals("on") && !noise.equals("off")) o.noiseDb = Double.parseDouble(noise);
         PackRenderer.write(d, "Fixture (resynth)", fixtureModel(), null, o);
         PACKS.put(noise, d);
         return d;
@@ -1162,6 +1320,29 @@ public final class ResynthTest {
             r[1][o] = Math.atan2(im[k * o], re[k * o]);
         }
         return r;
+    }
+
+    /** power per DFT bin of a loop (full scale 1) */
+    static double[] power(short[] pcm) {
+        int n = pcm.length;
+        double[] re = new double[n], im = new double[n];
+        for (int i = 0; i < n; i++) re[i] = pcm[i] / 32768.0;
+        Fft.dft(re, im, false);
+        for (int i = 0; i < n; i++) re[i] = re[i] * re[i] + im[i] * im[i];
+        return re;
+    }
+
+    /** Main.run with its stderr caught into err[0] */
+    static int runCapturing(String[] args, String[] err) throws IOException {
+        java.io.PrintStream old = System.err;
+        ByteArrayOutputStream b = new ByteArrayOutputStream();
+        System.setErr(new java.io.PrintStream(b, true, "UTF-8"));
+        try {
+            return Main.run(args);
+        } finally {
+            System.setErr(old);
+            err[0] = new String(b.toByteArray(), "UTF-8");
+        }
     }
 
     /** PackVoice's level-matching gain of one loop */

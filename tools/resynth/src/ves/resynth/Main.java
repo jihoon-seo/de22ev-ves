@@ -20,10 +20,11 @@ public final class Main {
             + "  track    <in.wav> <out.track.txt> [cyl=N]\n"
             + "  segments <in.wav> <in.track.txt> <out.segments.txt>\n"
             + "  fit      <in.wav> <in.track.txt> <in.segments.txt> <out.vesmodel> [cyl=N] [seed=N] [model=auto|m1|m0]\n"
-            + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off] [seed=N]\n"
+            + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off|<dB>] [seed=N]\n"
             + "  ab bands <a.wav> <b.wav>\n"
-            + "  ab track <in.wav> <in.track.txt> <in.segments.txt> <in.vesmodel> <out-dir> <name> [off=<other.vesmodel>]\n"
-            + "  demo     <pack-dir> <out-dir> <name> [track=<in.track.txt> segments=<in.segments.txt>]\n";
+            + "  ab track <in.wav> <in.track.txt> <in.segments.txt> <in.vesmodel> <out-dir> <name> [off=<other.vesmodel>] [noise=on|off|<dB>]\n"
+            + "  demo     <pack-dir> <out-dir> <name> [track=<in.track.txt> segments=<in.segments.txt>]\n"
+            + "  noise=<dB>: the model's noise at -40..0 dB (e.g. -12); on = 0\n";
 
     public static int run(String[] args) {
         try {
@@ -74,6 +75,18 @@ public final class Main {
         File p = f.getAbsoluteFile().getParentFile();
         if (p != null && !p.isDirectory() && !p.mkdirs()) throw new IOException("cannot make " + p);
         return f;
+    }
+
+    /** noise=on|off|<dB>: the noise's level re the model in dB, -40..0 (on = 0, off = negative infinity) */
+    static double noiseDb(String[] a) {
+        String v = opt(a, "noise", "on");
+        if (v.equals("on")) return 0;
+        if (v.equals("off")) return Double.NEGATIVE_INFINITY;
+        if (v.matches("-?[0-9]{1,3}(\\.[0-9]{1,3})?")) {
+            double d = Double.parseDouble(v);
+            if (d >= -40 && d <= 0) return d;
+        }
+        throw new IllegalArgumentException(a[0] + ": noise=" + v + ": on, off or a level in dB from -40 to 0");
     }
 
     static String f2(double v) {
@@ -184,6 +197,7 @@ public final class Main {
         }
         if (!a[1].equals("track")) throw new IllegalArgumentException("ab: bands or track");
         need(a, 8);
+        double noise = noiseDb(a);
         File dir = new File(a[6]);
         GitGuard.check(dir);
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
@@ -195,7 +209,7 @@ public final class Main {
         Model m = Model.read(new File(a[5]));
         String offPath = opt(a, "off", null);
         Model off = offPath == null ? null : Model.read(new File(offPath));
-        double[] y = TrackSynth.render(m, off, t, sg, x.length, PackRenderer.SR, m.seed);
+        double[] y = TrackSynth.render(m, off, t, sg, x.length, PackRenderer.SR, m.seed, noise);
         WavIO.write(new File(dir, name + "_orig22k.wav"), x, PackRenderer.SR);
         WavIO.write(new File(dir, name + "_resynth_track.wav"), y, PackRenderer.SR);
         double on = ThirdOctave.distance(x, y, PackRenderer.SR, frames(sg, Segments.ON, x.length));
@@ -285,13 +299,15 @@ public final class Main {
         need(a, 3);
         File dir = new File(a[2]);
         GitGuard.check(dir);
+        double noise = noiseDb(a);
         Model m = Model.read(new File(a[1]));
         String offPath = opt(a, "off", null);
         Model off = offPath == null ? null : Model.read(new File(offPath));
         String seed = opt(a, "seed", null);
         if (seed != null) m.seed = Long.parseLong(seed);
         PackRenderer.Options o = new PackRenderer.Options();
-        o.noise = !"off".equals(opt(a, "noise", "on"));
+        o.noise = noise > Double.NEGATIVE_INFINITY;
+        if (o.noise) o.noiseDb = noise;
         String name = opt(a, "name", null);
         if (name == null) throw new IllegalArgumentException("render: name=<pack name> missing");
         PackRenderer.write(dir, name, m, off, o);

@@ -68,11 +68,15 @@ synthesis is additive in the loop-length DFT at 22050 Hz: order n on bin K n, so
 and wraps without a seam. Orders below 40 Hz are dropped, nothing goes above 8.5 kHz (the top loop plays up
 to 1.22x faster at 9000 rpm). Every order has the same phase in every loop and both layers (the measured one
 where it is coherent, R >= 0.5, else seeded random), so PackVoice's linear crossfade between neighbours adds
-in phase. Noise is shaped per 1/3-octave band in the same DFT. The crank-wobble skirt is true phase
+in phase. Noise is shaped per 1/3-octave band in the same DFT, at the model's level or `noise=<dB>` below it
+(the fitted noise dominates above about 1 kHz, right where the car's speaker stage lifts 400-2500 Hz by 11 dB,
+and hisses; -12 dB is the chosen level for the car). The crank-wobble skirt is true phase
 modulation by one 4-cycle wobble shared by all orders, loops and layers (Bessel sidebands, index from the
 band's measured skirt power), so envelopes stay flat, also through PackVoice's crossfade. Each loop peaks at
--1 dBFS. The render is seeded and uses StrictMath: two renders are byte-identical. The
-pack folder holds only `pack.txt` and the loops.
+-1 dBFS; a loop with a crest factor above 33.5 dB (RMS under 0.0188 at that peak) is refused, and the whole
+pack is rendered and measured in memory before anything is written, so a refused render leaves the folder as
+it was. The render is seeded and uses StrictMath: two renders are byte-identical. The pack folder holds only
+`pack.txt` and the loops.
 
 PackVoice brings every loop to the same raw RMS, but the car's speaker stage (`ves.core.OutputStage`) lifts
 400-2500 Hz by 11 dB before a soft clip, and recordings can carry much more there than the built-in packs
@@ -101,9 +105,9 @@ Build and run (Git Bash; relative paths, the repo path has spaces):
 | `track <in.wav> <out.track.txt> [cyl=N]` | cycle-frequency track (any rate in, analysed at 22.05 kHz); prints the segments and comb decisions |
 | `segments <in.wav> <track> <out.segments.txt>` | proposes on/off/excluded segments; review and edit the sidecar |
 | `fit <in.wav> <track> <segments> <out.vesmodel> [cyl=N] [seed=N] [model=auto\|m1\|m0]` | fits on and off layers; prints the in-range RMSE and the low-end holdout of M1 and M0 (fit on the upper 60 % of log-rpm, scored below); with `auto`, M0 takes over below the measured rpm where it holds out better |
-| `render <model> <pack-dir> name=<name> [off=<model>] [noise=off] [seed=N]` | writes pack.txt and the 42 loops; `off=` takes the off-load layer from another model |
+| `render <model> <pack-dir> name=<name> [off=<model>] [noise=on\|off\|<dB>] [seed=N]` | writes pack.txt and the 42 loops; `off=` takes the off-load layer from another model; `noise=<dB>` (-40..0, e.g. `-12` or `-12.5`) sets the noise that far below the model, `on` = 0 (byte-identical), `off` none; the level line is measured after, so the trim follows |
 | `ab bands <a.wav> <b.wav>` | mean 1/3-octave distance |
-| `ab track <in.wav> <track> <segments> <model> <out-dir> <name> [off=<model>]` | writes `<name>_orig22k.wav` and `<name>_resynth_track.wav`, prints the on-load and off-load distances |
+| `ab track <in.wav> <track> <segments> <model> <out-dir> <name> [off=<model>] [noise=on\|off\|<dB>]` | writes `<name>_orig22k.wav` and `<name>_resynth_track.wav`, prints the on-load and off-load distances; `noise=` as for render |
 | `demo <pack-dir> <out-dir> <name> [track=<track> segments=<segments>]` | through PackVoice (with its output stage): `<name>_demo_sweep.wav` (800-7000-800 rpm on load, the same off load, 3 s at 800) and, with a track, `<name>_demo_track.wav` along it |
 
 Every writer refuses a path inside a git worktree (exit 2). Keep the private data in a folder of its own,
@@ -119,5 +123,7 @@ against M0 at 800 rpm, masked orders stay silent, a holdout below the fitted rpm
 pack: exact lengths and limits, PackLoader accepts it, seamless wraps, equal phases, PackVoice at a midpoint
 rpm, nothing above the cap, byte-identical renders, levels against a built-in pack, a 800-7350 rpm sweep),
 RS-F6/F7 (M0 below the measured rpm, the noise balance), RS-R10 (a strong skirt keeps the level steady
-through a sweep), RS-P1/P1b (every writer refuses a folder inside a git worktree, exit 2), RS-A1/A2 (the 1/3-octave distance; the
+through a sweep), RS-L1 (the level line, noise on, off and -12 dB), RS-N1..N5 (`noise=-12`: noise-only bins
+12 dB down, orders unchanged; `noise=0` byte-identical to `on`; bad levels exit 1; a crest-factor refusal
+leaves the folder as it was; `ab track` at -12 dB), RS-P1/P1b (every writer refuses a folder inside a git worktree, exit 2), RS-A1/A2 (the 1/3-octave distance; the
 fixture model driven along its own track).

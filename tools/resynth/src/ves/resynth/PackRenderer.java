@@ -13,7 +13,7 @@ import java.util.Random;
  * goes above 8.5 kHz (PackVoice plays the top loop up to 1.22x faster). Phases per order are the same in every
  * loop and both layers (measured where coherent, else seeded random), so PackVoice's linear crossfade sums
  * neighbours in phase. Noise is shaped per 1/3-octave band in the same DFT (periodic in the loop) with random
- * phases, plus the crank-wobble skirt beside each order: the Bessel sidebands of one phase wobble shared by all
+ * phases, {@link Options#noiseDb} below the model, plus the crank-wobble skirt beside each order: the Bessel sidebands of one phase wobble shared by all
  * orders, loops and layers, so envelopes stay flat, also through a crossfade. Each loop peaks at -1 dBFS
  * (PackVoice brings every loop to the same RMS anyway). Seeded and StrictMath-based: two renders are byte-identical.
  */
@@ -37,6 +37,8 @@ public final class PackRenderer {
 
     public static final class Options {
         public boolean noise = true, skirt = true;
+        /** the noise's level re the model (dB, 0 = as fitted); only with noise on */
+        public double noiseDb = 0;
         public String prefix = "rs";
         public int idle = 800;
     }
@@ -116,13 +118,13 @@ public final class PackRenderer {
             if (!Double.isNaN(d)) add(re, im, k * o2 + k / 2, Math.pow(10, d / 20) * n / 2, phHalf[o2]);
         }
         if (o.noise) {
-            double df = SR / (double) n;
+            double df = SR / (double) n, g = Math.pow(10, o.noiseDb / 20); // exactly 1 at 0 dB
             for (int b = 1; b < n / 2; b++) {
                 double f = b * df;
                 if (f > CAP) break;
                 if (b % k == 0) continue;
                 double psd = Math.pow(10, l.noise(clampBand(f), rpm) / 10);
-                add(re, im, b, n * Math.sqrt(psd * df / 2), 2 * Math.PI * noise.nextDouble());
+                add(re, im, b, n * Math.sqrt(psd * df / 2) * g, 2 * Math.PI * noise.nextDouble());
             }
         }
         Fft.dft(re, im, true);
@@ -166,18 +168,17 @@ public final class PackRenderer {
 
     /**
      * writes pack.txt and the loops into dir (refused inside a git worktree; any earlier loops and pack.txt there
-     * are replaced, other files make it fail). The off layer comes from offModel when given, else from m.
+     * are replaced, other files make it fail). The off layer comes from offModel when given, else from m. The whole
+     * pack is rendered and measured in memory first, so a refused loop leaves dir as it was.
      */
     public static void write(File dir, String name, Model m, Model offModel, Options o) throws IOException {
         GitGuard.check(dir);
         if (name == null || name.trim().length() == 0 || name.length() > 40) throw new IOException("pack name must be 1-40 characters");
-        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
         String pat = "pack\\.txt|" + o.prefix + "_[0-9]{4}_(on|off)\\.wav";
         File[] old = dir.listFiles();
-        if (old != null) {
+        if (old != null)
             for (File f : old) if (!f.getName().matches(pat)) throw new IOException(dir + " holds other files (" + f.getName() + ")");
-            for (File f : old) if (!f.delete()) throw new IOException("cannot replace " + f);
-        }
+        final java.util.Map<String, byte[]> files = new java.util.LinkedHashMap<String, byte[]>();
         Model.Layer off = offModel != null && offModel.off != null ? offModel.off : m.off;
         StringBuilder txt = new StringBuilder();
         txt.append("# rendered by ves.resynth (private: never commit)\n");
@@ -192,25 +193,36 @@ public final class PackRenderer {
             String ln = layer == 0 ? "on" : "off";
             for (int rpm : GRID) {
                 String f = String.format(java.util.Locale.ROOT, "%s_%04d_%s.wav", o.prefix, rpm, ln);
-                WavIO.write16(new File(dir, f), loop(m, l, rpm, layer, o), SR);
+                files.put(f, WavIO.encode(loop(m, l, rpm, layer, o), SR));
                 txt.append("loop ").append(f).append(" rpm=").append(rpm).append(" load=").append(ln).append('\n');
             }
         }
-        Files.writeText(new File(dir, "pack.txt"), txt.toString());
+        files.put("pack.txt", txt.toString().getBytes("UTF-8"));
         // the level trim needs the loops as PackVoice plays them: measure the untrimmed pack, then add the line
-        double db = stageLevelDb(load(dir));
+        double db = stageLevelDb(load(files));
         double trim = Math.max(-24, Math.min(12, Math.round((TARGET_DB - db) * 10) / 10.0));
         txt.insert(txt.indexOf("aligned yes\n"), String.format(java.util.Locale.ROOT, "level %.1f\n", trim));
-        Files.writeText(new File(dir, "pack.txt"), txt.toString());
+        files.put("pack.txt", txt.toString().getBytes("UTF-8"));
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
+        if (old != null) for (File f : old) if (!f.delete()) throw new IOException("cannot replace " + f);
+        for (java.util.Map.Entry<String, byte[]> e : files.entrySet()) {
+            java.io.OutputStream out = new java.io.FileOutputStream(new File(dir, e.getKey()));
+            try {
+                out.write(e.getValue());
+            } finally {
+                out.close();
+            }
+        }
     }
 
-    static ves.core.Pack load(final File dir) throws IOException {
+    static ves.core.Pack load(final java.util.Map<String, byte[]> files) throws IOException {
         try {
             return ves.core.PackLoader.load(new ves.core.PackLoader.Source() {
                 public byte[] read(String name, int maxBytes) throws IOException {
-                    File f = new File(dir, name);
-                    if (f.length() > maxBytes) throw new IOException(name + " too large");
-                    return java.nio.file.Files.readAllBytes(f.toPath());
+                    byte[] b = files.get(name);
+                    if (b == null) throw new IOException(name + " missing");
+                    if (b.length > maxBytes) throw new IOException(name + " too large");
+                    return b;
                 }
             });
         } catch (ves.core.PackError e) {

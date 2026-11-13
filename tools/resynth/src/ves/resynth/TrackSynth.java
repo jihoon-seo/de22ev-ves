@@ -24,6 +24,11 @@ public final class TrackSynth {
     }
 
     public static double[] render(Model m, Model offModel, Track tr, Segments sg, int samples, int sr, long seed) {
+        return render(m, offModel, tr, sg, samples, sr, seed, 0);
+    }
+
+    /** noiseDb: the noise's level re the model (0 = as fitted, negative infinity = none) */
+    public static double[] render(Model m, Model offModel, Track tr, Segments sg, int samples, int sr, long seed, double noiseDb) {
         double[] y = new double[samples];
         int nMax = (int) Math.ceil(PackRenderer.CAP / 3.0);
         double[] ph = PackRenderer.randomPhases(m.seed, nMax + 2);
@@ -53,7 +58,8 @@ public final class TrackSynth {
             a0 = a1;
             a1 = t;
         }
-        addNoise(y, m, offModel, tr, sg, sr, seed);
+        double g = Math.pow(10, noiseDb / 20); // exactly 1 at 0 dB, 0 at negative infinity
+        if (g > 0) addNoise(y, m, offModel, tr, sg, sr, seed, g);
         return y;
     }
 
@@ -72,7 +78,7 @@ public final class TrackSynth {
         }
     }
 
-    static void addNoise(double[] y, Model m, Model offModel, Track tr, Segments sg, int sr, long seed) {
+    static void addNoise(double[] y, Model m, Model offModel, Track tr, Segments sg, int sr, long seed, double gain) {
         Random r = new Random(seed);
         int hop = NOISE / 2;
         double[] w = new double[NOISE];
@@ -91,7 +97,7 @@ public final class TrackSynth {
                 int band = Orders.band(f);
                 if (band < 0) band = f < Orders.bandCentre(0) ? 0 : Orders.BANDS - 1;
                 double psd = Math.pow(10, l.noise(band, rpm) / 10);
-                double sd = Math.sqrt(NOISE * (double) NOISE * psd * df / 4);
+                double sd = Math.sqrt(NOISE * (double) NOISE * psd * df / 4) * gain;
                 re[b] = sd * r.nextGaussian();
                 im[b] = sd * r.nextGaussian();
                 re[NOISE - b] = re[b];
