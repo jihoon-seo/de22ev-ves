@@ -1,5 +1,20 @@
 # Third-party notices
 
+## Engine sounds by 히릿 (packs/)
+
+The built-in engine sounds in `packs/` (and inside the mod's `vesd.jar`) are sounds by 히릿 (engine physics
+simulator), processed by `ves.resynth` (`tools/import_packs.py` copies them in). They are used with 히릿's
+permission in this mod only. They are not covered by the MIT licence of this repository; reusing them
+anywhere else needs 히릿's permission.
+
+- `packs/vex4/`: VEX 4-cyl
+- `packs/vex_v10/`: VEX V10
+- `packs/ae86/`: AE86 4A-GE
+- `packs/amg_v8/`: AMG M156 V8
+- `packs/gt3/`: 911 GT3 992
+- `packs/gtr/`: GT-R VR38
+- `packs/s2000/`: S2000 F20C
+
 ## enginesound (DasEtwas)
 
 - Project: https://github.com/DasEtwas/enginesound
@@ -20,7 +35,8 @@ checks are new code in the same files and are MIT too):
   `v8.txt` (from `example1.esc`), `i6.txt` (from `example2.esc` and `example5.esc`)
 
 Rendered engine-sound packs made with `tools/render` are dedicated to the public domain under
-CC0 1.0. The code above stays under the MIT terms below.
+CC0 1.0. The code above stays under the MIT terms below. The mod no longer ships these packs (i4t, v6,
+v8, i6): its built-in sounds are 히릿's packs above; `tools/render` stays for the tests and comparisons.
 
 ```
 MIT License

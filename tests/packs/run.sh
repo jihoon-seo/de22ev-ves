@@ -83,6 +83,38 @@ else
     fail "BP-I3 rc=$rc dest='$(ls -A "$T/i3/dest" | tr '\n' ' ')' out: $(cat "$T/imp.out")"
 fi
 
+# ---- BP2-BP6: what git tracks under packs/ (processed packs only, each with its notice)
+if command -v git > /dev/null && git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    git ls-files packs/ | sort > "$T/tracked.txt"
+    mapfile -t PT < <(grep -E '^packs/[^/]+/pack\.txt$' "$T/tracked.txt")
+    [ "${#PT[@]}" -gt 0 ] || fail "BP2 no tracked packs/*/pack.txt"
+    bad2=""; bad3=""; echo packs/README.md > "$T/want.txt"
+    for p in "${PT[@]}"; do
+        slot=$(basename "$(dirname "$p")")
+        l1=$(sed -n 1p "$p" | tr -d '\r')
+        case $l1 in "# de22ev-ves built-in pack $slot:"*) ;; *) bad2="$bad2 $slot(line1)" ;; esac
+        case $l1 in *히릿*THIRD_PARTY.md*) ;; *) bad2="$bad2 $slot(notice)" ;; esac
+        grep -q "never commit" "$p" && bad2="$bad2 $slot(private header)"
+        grep -qF -- "- \`packs/$slot/\`" THIRD_PARTY.md || bad3="$bad3 $slot"
+        echo "$p" >> "$T/want.txt"
+        grep -v '^[[:space:]]*#' "$p" | tr -s ' \t\r' '\n\n\n' | grep -E '^[a-z0-9_-]+\.wav$' | sort -u | sed "s|^|packs/$slot/|" >> "$T/want.txt"
+    done
+    if [ "${#PT[@]}" -gt 0 ]; then
+        [ -z "$bad2" ] && pass "BP2 every packs/*/pack.txt carries the built-in notice (히릿, THIRD_PARTY.md)" || fail "BP2 notice:$bad2"
+        [ -z "$bad3" ] && pass "BP3 every packs/<slot>/ has its THIRD_PARTY.md bullet" || fail "BP3 no THIRD_PARTY.md bullet for:$bad3"
+    fi
+    sort -u "$T/want.txt" -o "$T/want.txt"
+    if diff "$T/want.txt" "$T/tracked.txt" > "$T/bp4.diff"; then
+        pass "BP4 git tracks packs/README.md, each pack.txt and exactly the files it references"
+    else
+        fail "BP4 tracked files under packs/ differ (< wanted, > tracked): $(head -20 "$T/bp4.diff" | tr '\n' ' ')"
+    fi
+    total=0; while IFS= read -r f; do total=$((total + $(wc -c < "$f"))); done < "$T/tracked.txt"
+    [ "$total" -gt 0 ] && [ "$total" -le $((18 * 1024 * 1024)) ] && pass "BP6 packs/ total $total bytes <= 18 MB" || fail "BP6 packs/ total $total bytes (want 1..18 MB)"
+else
+    echo "SKIP BP2-BP6: not a git checkout"
+fi
+
 if [ "$FAILED" = 0 ]; then
     echo "PACKS TESTS PASSED"
     exit 0

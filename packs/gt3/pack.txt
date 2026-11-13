@@ -1,0 +1,49 @@
+# de22ev-ves built-in pack gt3: sound by 히릿 (engine physics simulator), processed by ves.resynth; used with permission in this mod only, not MIT. See THIRD_PARTY.md.
+name 911 GT3 992
+cylinders 6
+idle 800
+redline 7350
+level -6.0
+aligned yes
+loop rs_0800_on.wav rpm=800 load=on
+loop rs_0900_on.wav rpm=900 load=on
+loop rs_1000_on.wav rpm=1000 load=on
+loop rs_1125_on.wav rpm=1125 load=on
+loop rs_1260_on.wav rpm=1260 load=on
+loop rs_1400_on.wav rpm=1400 load=on
+loop rs_1575_on.wav rpm=1575 load=on
+loop rs_1764_on.wav rpm=1764 load=on
+loop rs_2000_on.wav rpm=2000 load=on
+loop rs_2250_on.wav rpm=2250 load=on
+loop rs_2520_on.wav rpm=2520 load=on
+loop rs_2800_on.wav rpm=2800 load=on
+loop rs_3150_on.wav rpm=3150 load=on
+loop rs_3500_on.wav rpm=3500 load=on
+loop rs_3920_on.wav rpm=3920 load=on
+loop rs_4410_on.wav rpm=4410 load=on
+loop rs_4900_on.wav rpm=4900 load=on
+loop rs_5400_on.wav rpm=5400 load=on
+loop rs_6000_on.wav rpm=6000 load=on
+loop rs_6615_on.wav rpm=6615 load=on
+loop rs_7350_on.wav rpm=7350 load=on
+loop rs_0800_off.wav rpm=800 load=off
+loop rs_0900_off.wav rpm=900 load=off
+loop rs_1000_off.wav rpm=1000 load=off
+loop rs_1125_off.wav rpm=1125 load=off
+loop rs_1260_off.wav rpm=1260 load=off
+loop rs_1400_off.wav rpm=1400 load=off
+loop rs_1575_off.wav rpm=1575 load=off
+loop rs_1764_off.wav rpm=1764 load=off
+loop rs_2000_off.wav rpm=2000 load=off
+loop rs_2250_off.wav rpm=2250 load=off
+loop rs_2520_off.wav rpm=2520 load=off
+loop rs_2800_off.wav rpm=2800 load=off
+loop rs_3150_off.wav rpm=3150 load=off
+loop rs_3500_off.wav rpm=3500 load=off
+loop rs_3920_off.wav rpm=3920 load=off
+loop rs_4410_off.wav rpm=4410 load=off
+loop rs_4900_off.wav rpm=4900 load=off
+loop rs_5400_off.wav rpm=5400 load=off
+loop rs_6000_off.wav rpm=6000 load=off
+loop rs_6615_off.wav rpm=6615 load=off
+loop rs_7350_off.wav rpm=7350 load=off

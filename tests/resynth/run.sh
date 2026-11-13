@@ -29,11 +29,13 @@ FAILED=0
 pass() { echo "PASS $*"; }
 fail() { echo "FAIL $*"; FAILED=$((FAILED + 1)); }
 
-# RS-P2: nothing derived from private recordings is tracked (audio, pack manifests, models, tracks, segments)
+# RS-P2: nothing derived from private recordings is tracked (audio, pack manifests, models, tracks, segments),
+# except the built-in packs/<slot>/ (pack.txt + loops: 히릿's processed packs, checked by tests/packs)
 if command -v git > /dev/null && git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
-    BAD=$(git ls-files | grep -E '\.wav$|(^|/)pack\.txt$|\.vesmodel$|\.segments\.txt$|\.track\.txt$|^private/')
+    BAD=$(git ls-files | grep -vE '^packs/[a-z0-9_]+/(pack\.txt|[a-z0-9_-]+\.wav)$' \
+        | grep -E '\.wav$|(^|/)pack\.txt$|\.vesmodel$|\.segments\.txt$|\.track\.txt$|^private/')
     if [ -z "$BAD" ]; then
-        pass "RS-P2 git ls-files lists no wav, pack.txt, vesmodel, track or segments files"
+        pass "RS-P2 git ls-files lists no wav, pack.txt, vesmodel, track or segments files (outside packs/<slot>/)"
     else
         fail "RS-P2 tracked derived data: $BAD"
     fi
