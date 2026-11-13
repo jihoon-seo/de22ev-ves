@@ -261,5 +261,35 @@ final class LevelTests {
                 return new double[]{Math.sqrt(ss / n), mx, st.clamped(), md};
             }
         });
+
+        // ---------------- T4b: the whole volume curve 6 dB louder
+        l.add(new TestMain.T("VC1_volume_louder") {
+            void run() throws Exception {
+                // 0.2.6 output RMS (dc7a1b8, this rig, Vc1Probe): synth / sine pack at volume 70 and 100
+                double[][] old = {{70, 2299.054655386545, 3942.9569864026175}, {100, 3925.8571823947705, 6732.804557036954}};
+                for (double[] o : old) {
+                    for (int pack = 0; pack < 2; pack++) {
+                        Settings s = TestMain.iceSettings(Profile.ICE_SMOOTH, (int) o[0]);
+                        if (pack == 1) s.sound = "user1";
+                        TestMain.Rig r = new TestMain.Rig(s);
+                        if (pack == 1) r.c.setPack(PackLoader.load(TestMain.sinePack(false, false)));
+                        r.speed = 35;
+                        r.pedal = 5;
+                        r.run(3000);
+                        r.resetStats();
+                        r.run(3000);
+                        double up = db(r.rms() / o[1 + pack]);
+                        String what = (pack == 1 ? "pack" : "synth") + " volume " + (int) o[0];
+                        System.out.println("    " + what + ": rms " + Math.round(r.rms()) + " (+" + up + " dB over 0.2.6), peak "
+                                + r.peak + ", mk=" + r.c.lastMakeup());
+                        check(up >= 4, what + " not 4 dB louder than 0.2.6: " + up);
+                        TestMain.eq(r.capViolations, 0, what + " above the gain cap");
+                        check(r.peak <= 30000, what + " above full scale: " + r.peak);
+                    }
+                }
+                // the status line carries the makeup
+                check(new VesCore(SR).status().contains(" mk="), "status has mk=");
+            }
+        });
     }
 }

@@ -48,6 +48,14 @@ assert() { # assert <awk-expr> <msg>
     awk "BEGIN{exit !($1)}" || fail "$2 ($1)"
 }
 
+base_limit() { # 0.2.6's limit_fraction at volume 100 (the share does not depend on the volume there)
+    case $1 in
+        accel/ice_smooth) echo 0.002264 ;; accel/ice_shift) echo 0.001371 ;; accel/ev_future) echo 0.000941 ;;
+        highway/ice_smooth) echo 0.000003 ;; highway/ice_shift) echo 0.000001 ;;
+        *) echo 0 ;;
+    esac
+}
+
 for scen in city accel cruise navi ready_off launch highway; do
     "$JAVA" -cp "$CLS" ves.tools.Sweep "$WORK/$scen.csv" "$scen" > /dev/null || fail "sweep $scen"
     for prof in ice_smooth ice_shift ev_future; do
@@ -64,6 +72,9 @@ for scen in city accel cruise navi ready_off launch highway; do
         # than 1.1x that + 300 is a click
         assert "$delta < 46300" "$scen/$prof sample-to-sample jump"
         assert "$nan == 0" "$scen/$prof NaN gain"
+        # 0.2.7's louder volume curve (makeup above full scale) must not limit harder than 0.2.6 did
+        lim=$(num "$M" limit_fraction); base=$(base_limit "$scen/$prof")
+        assert "$lim <= ($base * 1.1 > $base + 0.001 ? $base * 1.1 : $base + 0.001)" "$scen/$prof limit_fraction $lim over 0.2.6's $base"
         [ -s "$WORK/$scen-$prof.wav" ] || fail "no wav for $scen $prof"
         case $scen in
             ready_off)

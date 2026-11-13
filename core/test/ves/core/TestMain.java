@@ -137,8 +137,9 @@ public final class TestMain {
 
     static final int SR = 22050;
     // 0.1.2 output was ICE_SMOOTH=4bdf3f9889a03759 ...; 0.2.0 faster normal response (L1) changes it on purpose
-    // 0.2.7 launch slip held in 1st (M2) changes ICE_SHIFT only (0.2.6: b73cf032a167a19f)
-    static final String O1_WANT = "ICE_SMOOTH=4afaa3acacd639b1 ICE_SHIFT=e262d54caaa95598 EV_FUTURE=54180ef1274a9222";
+    // 0.2.7 launch slip held in 1st (M2) changed ICE_SHIFT only (0.2.6: b73cf032a167a19f -> e262d54caaa95598); the
+    // +6 dB volume curve (S5, VC1) changes all three (0.2.6: ICE_SMOOTH=4afaa3acacd639b1 EV_FUTURE=54180ef1274a9222)
+    static final String O1_WANT = "ICE_SMOOTH=41530d7a3f993c94 ICE_SHIFT=0d9a6b3857c4099c EV_FUTURE=4f69dc23df282e10";
     static final int BLOCK = 220; // 10 ms
 
     /** the classic modes (0.1.x behaviour: P/N/R silent, mode decides stops and regen) */
@@ -2718,16 +2719,18 @@ public final class TestMain {
         // ---------------- S5 volume and envelope
         l.add(new T("S5_volume_envelope") {
             void run() {
-                near(GainEnvelope.volumeToLinear(100), 1.0, 0, "100 => full scale");
+                // 0.2.7: the whole curve 6 dB louder (0.2.6: (v/100)^1.5, 100 => 1.0)
+                double up6 = Math.pow(10, 6 / 20.0);
+                near(GainEnvelope.volumeToLinear(100), up6, 1e-9, "100 => +6 dB over full scale");
                 near(GainEnvelope.volumeToLinear(0), 0, 0, "0 => 0");
-                near(GainEnvelope.volumeToLinear(50), Math.pow(0.5, 1.5), 1e-12, "1.5 power law");
                 double prev = -1;
                 for (int v = 0; v <= 100; v++) {
                     double g = GainEnvelope.volumeToLinear(v);
+                    near(g, Math.pow(v / 100.0, 1.5) * up6, 1e-12, "1.5 power law +6 dB at " + v);
                     check(g > prev, "monotonic at " + v);
                     prev = g;
                 }
-                near(GainEnvelope.volumeToLinear(150), 1.0, 0, "clamp high");
+                near(GainEnvelope.volumeToLinear(150), up6, 1e-9, "clamp high");
                 near(GainEnvelope.volumeToLinear(-3), 0, 0, "clamp low");
                 GainEnvelope e = new GainEnvelope(SR);
                 int blocks = 0;

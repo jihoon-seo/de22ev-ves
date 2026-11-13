@@ -32,7 +32,7 @@ public final class VesCore {
     static final int XFADE_MS = 80;
     private volatile Settings settings = new Settings();
     private Profile current;
-    private double lastGain;
+    private double lastGain, lastMakeup = 1;
     private volatile long lastNow;
     private int lastAction;
 
@@ -166,12 +166,16 @@ public final class VesCore {
         boolean want = enabled && (target > 0 || env.value() > 0);
         int action = policy.tick(nowMs, want, lastGain);
         lastAction = action;
-        double g;
+        double g, mk = 1;
         if (!policy.isOpen()) {
             env.reset();
             g = 0;
         } else {
-            g = env.next(target, frames) * policy.yieldGain(nowMs);
+            // up to 1 the gain scales the output; above 1 it is the output stage's upward makeup (quiet sound
+            // lifted, peaks still inside the gain cap)
+            double t = env.next(target, frames) * policy.yieldGain(nowMs);
+            g = Math.min(1, t);
+            mk = Math.max(1, t);
         }
         boolean usePack = pack != null && !"synth".equals(s.sound);
         if (usePack && packVoice.pack() != pack) packVoice.setPack(pack);
@@ -183,16 +187,16 @@ public final class VesCore {
         if (usePack) {
             synth.setPops(null);
             packVoice.setPops(pops);
-            packVoice.render(out, 0, frames, params, g);
+            packVoice.render(out, 0, frames, params, g, mk);
         } else {
             packVoice.setPops(null);
             synth.setPops(pops);
-            synth.render(out, 0, frames, params, g);
+            synth.render(out, 0, frames, params, g, mk);
         }
         if (xfadeLeft > 0 && frames <= xbuf.length) {
             // the other voice fades out under the new one (a convex mix: still inside the gain cap)
-            if (usePack) sy.render(xbuf, 0, frames, params, g);
-            else packVoice.render(xbuf, 0, frames, params, g);
+            if (usePack) sy.render(xbuf, 0, frames, params, g, mk);
+            else packVoice.render(xbuf, 0, frames, params, g, mk);
             int total = XFADE_MS * sampleRate / 1000;
             for (int i = 0; i < frames; i++) {
                 double wOld = Math.max(0, xfadeLeft - i) / (double) total;
@@ -201,6 +205,7 @@ public final class VesCore {
             xfadeLeft = Math.max(0, xfadeLeft - frames);
         }
         lastGain = g;
+        lastMakeup = mk;
         return action;
     }
 
@@ -240,6 +245,11 @@ public final class VesCore {
         return lastGain;
     }
 
+    /** the upward makeup the last block asked of the output stage (1: none) */
+    public double lastMakeup() {
+        return lastMakeup;
+    }
+
     /** samples the voices' output stages sent into the hard limit so far (both voices while they cross-fade) */
     public long clampedSamples() {
         return synth.clamped() + packVoice.clamped();
@@ -261,6 +271,7 @@ public final class VesCore {
         b.append(" rpm=").append(Math.round(p.rpm));
         b.append(" load=").append(EngineParams.r2(p.load));
         b.append(" gain=").append(EngineParams.r2(lastGain));
+        b.append(" mk=").append(EngineParams.r2(lastMakeup));
         b.append(" open=").append(policy.isOpen() ? 1 : 0);
         b.append(" yield=").append(policy.yielding(lastNow) ? 1 : 0);
         String src = policy.activeSources(lastNow);
