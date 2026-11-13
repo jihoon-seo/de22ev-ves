@@ -147,6 +147,44 @@ public final class VesCore {
         }
     }
 
+    /** the launch-trace rows collected since the last call, one per line ("" when none); vesd logs them */
+    public String takeTrace() {
+        if (trace.length() == 0) return "";
+        String t = trace.toString();
+        trace.setLength(0);
+        return t;
+    }
+
+    // launch trace (0.2.9): the pedal pressed while standing in a drive gear starts 30 rows, one every 100 ms, so a
+    // drive log shows what the model and the pack did on a pull-away; armed again once standing with the foot off
+    private final StringBuilder trace = new StringBuilder();
+    private long traceT0 = -1, traceNext;
+    private boolean traceArmed = true;
+
+    private void trace(long now) {
+        double ped = signals.get(Sig.PEDAL_PCT, now), gs = signals.get(Sig.GEAR, now);
+        boolean standing = params.speedKph < 1.0, footOff = Double.isNaN(ped) || ped <= 3;
+        if (traceT0 < 0) {
+            if (standing && footOff) traceArmed = true;
+            else if (standing && traceArmed && !Double.isNaN(gs) && Sig.isDrive((int) gs)) {
+                traceT0 = now;
+                traceNext = now + 100;
+                traceArmed = false;
+            }
+            return;
+        }
+        if (now >= traceNext) {
+            if (trace.length() < 16384) {
+                trace.append(String.format(java.util.Locale.ROOT,
+                        "launch +%dms kph=%.1f pedal=%.0f kw=%.1f rpm=%.0f load=%.2f layer=%.2f gain=%.2f gear=%d %s%n",
+                        traceNext - traceT0, params.speedKph, ped, signals.get(Sig.MOTOR_KW, now), params.rpm, params.load,
+                        usingPack ? packVoice.layerLoad() : Double.NaN, params.targetGain, params.virtualGear, params.reason));
+            }
+            traceNext += 100;
+            if (traceNext - traceT0 > 3000) traceT0 = -1;
+        }
+    }
+
     private boolean prevShifting; // the last block's EngineParams.shifting and virtualGear
     private int prevGear;
 
@@ -166,6 +204,7 @@ public final class VesCore {
         if (params.shifting && !prevShifting && usingPack) packVoice.shift(params.virtualGear > prevGear);
         prevShifting = params.shifting;
         prevGear = params.virtualGear;
+        trace(nowMs);
         pops.setLevel(Pops.level(s.pops));
         pops.update(params.rpm, params.load, params.speedKph, nowMs);
         boolean enabled = s.enabled && s.volume > 0;

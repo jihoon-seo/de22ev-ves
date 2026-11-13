@@ -450,9 +450,12 @@ public final class Vesd implements MicomAudio.Events {
             }
             long now = SystemClock.uptimeMillis();
             int act;
+            String trace;
             synchronized (core) {
                 act = core.renderBlock(buf, BLOCK, now);
+                trace = core.takeTrace();
             }
+            if (trace.length() > 0) for (String row : trace.split("\n")) Out.log(row); // a pull-away, every 100 ms for 3 s
             blocks++;
             if (exclusive) {
                 // a probe test owns the path: keep the model running, stay closed and quiet
