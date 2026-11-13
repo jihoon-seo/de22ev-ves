@@ -102,6 +102,12 @@ public final class Segments {
             lastAt = k;
         }
         for (int k = 0; k < frames; k++) if (cut[k]) lab[k] = EXCLUDED;
+        return fromLabels(tr, lab);
+    }
+
+    /** segments from one label per track frame; on and off runs shorter than MIN_RUN become excluded */
+    static Segments fromLabels(Track tr, int[] lab) {
+        int frames = tr.frames();
         int minRun = (int) Math.round(MIN_RUN / tr.dt);
         for (int k = 0; k < frames; ) {
             int j = k;

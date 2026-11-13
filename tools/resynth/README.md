@@ -104,6 +104,7 @@ Build and run (Git Bash; relative paths, the repo path has spaces):
 |---|---|
 | `track <in.wav> <out.track.txt> [cyl=N]` | cycle-frequency track (any rate in, analysed at 22.05 kHz); prints the segments and comb decisions |
 | `segments <in.wav> <track> <out.segments.txt>` | proposes on/off/excluded segments; review and edit the sidecar |
+| `csvtrack <log.csv> <in.wav> <out.track.txt> <out.segments.txt> [cyl=N] [offset=<s>] [refine=on\|off] [compare=<track>]` | track and segments from a driving log (`#` lines skipped; columns `t_s`, `rpm`, `throttle_pct`, optional `gear`; audio time = `t_s` + offset): fc = rpm / 120 on the tracker's hop, integrated, then the tracker's phase refinement locks theta to the audio, with fc held within 2 % of the log (it cannot slip where order phases jump, e.g. granular game audio; the share of frames at that limit is printed); `refine=off` keeps the log's fc as it is (when the audio's order phases do not hold, refinement only blurs the orders). Segments: on at throttle >= 50 %, off at <= 6 % above 1000 rpm, excluded 0.3 s either side of a gear change or throttle transition, the first/last 0.1 s and runs under 0.25 s. `compare=` (a `track` output) prints the median and p95 of \|rpm_tracker / rpm_csv - 1\| 0.3 s or more from a gear change and the best lag within +-0.3 s |
 | `fit <in.wav> <track> <segments> <out.vesmodel> [cyl=N] [seed=N] [model=auto\|m1\|m0]` | fits on and off layers; prints the in-range RMSE and the low-end holdout of M1 and M0 (fit on the upper 60 % of log-rpm, scored below); with `auto`, M0 takes over below the measured rpm where it holds out better |
 | `render <model> <pack-dir> name=<name> [off=<model>] [noise=on\|off\|<dB>] [seed=N]` | writes pack.txt and the 42 loops; `off=` takes the off-load layer from another model; `noise=<dB>` (-40..0, e.g. `-12` or `-12.5`) sets the noise that far below the model, `on` = 0 (byte-identical), `off` none; the level line is measured after, so the trim follows |
 | `bake <manifest.json> <pack-dir> name=<name>` | converts a physics bake (manifest.json, spec.txt beside it, wav/: crank-phase-0 loops of whole cycles per rpm and load, pops, bubbles, shift sounds) into an aligned pack: each loop at round(ref_rpm), N = floor(cycles x 2646000 / rpm) samples, resampled as one period (DFT, 8.5-9.5 kHz taper); loads off/on and the ones between as load layers; events resampled to 22.05 kHz; redline and pop_rpm from spec.txt; the level line as for render; refuses phase_zero_frame != 0, fractional cycles or a frame mismatch |
@@ -118,7 +119,10 @@ outside any checkout.
 
 `bash tests/resynth/run.sh [filter]` (also part of `tests/run-all.sh`): RS-W1/W2 (WAV, resampler), RS-T1/T2
 (tracker on a synthetic launch with shifts, lift-off and coast; a V8 pattern with a weak order 1), RS-C1
-(order levels within 0.5 dB through a 2500 rpm/s sweep, floor, a half order), RS-S1 (segments), RS-P2 (no
+(order levels within 0.5 dB through a 2500 rpm/s sweep, floor, a half order), RS-S1 (segments), RS-T3..T3e
+(`csvtrack`: a recording driven from a known log with a 0.3 % rpm wobble, theta within 0.02 cycles RMS and the
+segments as defined; `compare=` against the true track; worktree refusal and a log without rpm; a granular
+recording stays within 2 % of the log; `refine=off`), RS-P2 (no
 derived data tracked), RS-F1..F5 (fit recovery in range and at 800-2000 rpm, gauge invariance, the order model
 against M0 at 800 rpm, masked orders stay silent, a holdout below the fitted rpm), RS-R1..R9 (a fixture
 pack: exact lengths and limits, PackLoader accepts it, seamless wraps, equal phases, PackVoice at a midpoint

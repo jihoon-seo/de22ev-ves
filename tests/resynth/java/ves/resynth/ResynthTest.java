@@ -1367,7 +1367,288 @@ public final class ResynthTest {
             }
         });
 
+        // ---------------------------------------------------------------- csvtrack (driving log)
+
+        l.add(new T("RS-T3 csvtrack: a recording driven from a known log; theta locked to < 0.02 cycles RMS, segments as defined") {
+            void run() throws Exception {
+                File dir = tmpDir("t3");
+                try {
+                    LogFixture fx = new LogFixture();
+                    File csv = new File(dir, "drive.csv");
+                    fx.writeCsv(csv);
+                    CsvTrack.Log log = CsvTrack.read(csv);
+                    check(log.gear != null, "gear column not read");
+                    Track tr = CsvTrack.track(fx.x, SR, log, 0);
+                    Track truth = trueTrack(fx.d);
+                    // a constant crank offset does not matter: compare after taking the mean out
+                    List<Double> e = new ArrayList<Double>(), e0 = new ArrayList<Double>();
+                    double[] plain = Tracker.integrate(plainFc(log, tr), 256, fx.x.length, SR);
+                    for (int k = 0; k < tr.frames(); k++) {
+                        double t = tr.time(k);
+                        if (!fx.steady(t)) continue;
+                        e.add(tr.theta[k] - truth.thetaAt(t));
+                        e0.add(plain[Math.min(plain.length - 1, (int) Math.round(t * SR))] - truth.thetaAt(t));
+                    }
+                    double rms = rmsAboutMean(e), rms0 = rmsAboutMean(e0);
+                    note("theta error in steady parts: " + f3(rms) + " cycles RMS (log only, unrefined: " + f3(rms0) + "), "
+                            + e.size() + " frames");
+                    check(e.size() > 500, "too few steady frames " + e.size());
+                    check(rms < 0.02, "theta error " + rms + " cycles RMS");
+                    Segments sg = CsvTrack.segments(log, tr, 0);
+                    int bad = 0, checked = 0;
+                    String first = "";
+                    for (int k = 0; k < tr.frames(); k++) {
+                        double t = tr.time(k);
+                        int want = fx.label(t, tr.tEnd());
+                        if (want < 0) continue; // within a frame or two of a boundary
+                        checked++;
+                        if (sg.labelAt(t) != want) {
+                            if (bad++ == 0) first = " first at " + f3(t) + " s: " + sg.labelAt(t) + " for " + want;
+                        }
+                    }
+                    note("segments: on " + f3(sg.seconds(Segments.ON)) + " s, off " + f3(sg.seconds(Segments.OFF)) + " s, "
+                            + checked + " frames checked, " + bad + " wrong");
+                    check(checked > 900, "too few frames checked " + checked);
+                    check(bad == 0, bad + " frames labelled wrong;" + first);
+                    near(sg.seconds(Segments.ON), 4.8, 0.05, "on seconds");
+                    near(sg.seconds(Segments.OFF), 2.4 + (13 + 5 / 6.0 * 0.5 - 11.1), 0.05, "off seconds");
+                } finally {
+                    rmrf(dir);
+                }
+            }
+        });
+
+        l.add(new T("RS-T3b csvtrack compare= against the true track: median < 0.5 %, best lag 0; the command writes both files") {
+            void run() throws Exception {
+                File dir = tmpDir("t3b");
+                try {
+                    LogFixture fx = new LogFixture();
+                    File csv = new File(dir, "drive.csv"), wav = new File(dir, "drive.wav"), truthF = new File(dir, "truth.track.txt");
+                    fx.writeCsv(csv);
+                    WavIO.write(wav, fx.x, SR);
+                    trueTrack(fx.d).write(truthF, "synthetic truth");
+                    double[] c = CsvTrack.compare(CsvTrack.read(csv), Track.read(truthF), 0);
+                    note("median " + f3(100 * c[0]) + " %, p95 " + f3(100 * c[1]) + " %, best lag " + f3(c[2]) + " s");
+                    check(c[0] < 0.005, "median " + c[0]);
+                    check(Math.abs(c[2]) <= 0.02, "best lag " + c[2]);
+                    File ot = new File(dir, "out/drive.track.txt"), os = new File(dir, "out/drive.segments.txt");
+                    int rc = Main.run(new String[] {"csvtrack", csv.getPath(), wav.getPath(), ot.getPath(), os.getPath(), "cyl=4",
+                            "compare=" + truthF.getPath()});
+                    check(rc == 0, "exit " + rc);
+                    check(Track.read(ot).frames() > 1000, "track frames");
+                    check(Segments.read(os).seconds(Segments.ON) > 4, "segments on seconds");
+                    // a log that starts later than the audio: offset= moves it back into place
+                    File late = new File(dir, "late.csv");
+                    fx.writeCsvShifted(late, -0.5);
+                    double[] cl = CsvTrack.compare(CsvTrack.read(late), Track.read(truthF), 0.5);
+                    note("log shifted by 0.5 s, offset=0.5: median " + f3(100 * cl[0]) + " %, best lag " + f3(cl[2]) + " s");
+                    check(cl[0] < 0.005 && Math.abs(cl[2]) <= 0.02, "offset: median " + cl[0] + " lag " + cl[2]);
+                } finally {
+                    rmrf(dir);
+                }
+            }
+        });
+
+        l.add(new T("RS-T3c csvtrack: outputs inside a git worktree exit 2, a log without an rpm column exits 1") {
+            void run() throws Exception {
+                File root = tmpDir("t3c");
+                try {
+                    LogFixture fx = new LogFixture();
+                    File csv = new File(root, "drive.csv"), wav = new File(root, "drive.wav"), norpm = new File(root, "norpm.csv");
+                    fx.writeCsv(csv);
+                    WavIO.write(wav, java.util.Arrays.copyOf(fx.x, 2 * SR), SR);
+                    File repo = new File(root, "repo");
+                    new File(repo, ".git").mkdirs();
+                    String ot = new File(repo, "o.track.txt").getPath(), os = new File(repo, "o.segments.txt").getPath();
+                    check(Main.run(new String[] {"csvtrack", csv.getPath(), wav.getPath(), ot, os}) == 2, "track inside a worktree");
+                    check(Main.run(new String[] {"csvtrack", csv.getPath(), wav.getPath(), new File(root, "a.track.txt").getPath(), os}) == 2,
+                            "segments inside a worktree");
+                    check(repo.list().length == 1, "something was written: " + java.util.Arrays.toString(repo.list()));
+                    check(!new File(root, "a.track.txt").exists(), "track written before the refusal");
+                    Files.writeText(norpm, "# no rpm\nt_s,throttle_pct,gear\n0.00,5,1\n0.01,5,1\n");
+                    String[] err = new String[1];
+                    int rc = runCapturing(new String[] {"csvtrack", norpm.getPath(), wav.getPath(), new File(root, "b.track.txt").getPath(),
+                            new File(root, "b.segments.txt").getPath()}, err);
+                    check(rc == 1, "no rpm column: exit " + rc);
+                    check(err[0].contains("rpm"), "stderr " + err[0]);
+                    check(!new File(root, "b.track.txt").exists(), "wrote a track without rpm");
+                } finally {
+                    rmrf(root);
+                }
+            }
+        });
+
+        l.add(new T("RS-T3d csvtrack: a granular recording (order phases jump every 40 ms) keeps the track within 2 % of the log") {
+            void run() throws Exception {
+                LogFixture fx = new LogFixture();
+                double[] y = engine(fx.d, comb(4), new double[0], -60, 62), z = fx.x.clone();
+                int grain = (int) (0.04 * SR);
+                for (int i = 0; i < z.length; i++) if (i / grain % 2 == 1) z[i] = y[i];
+                File dir = tmpDir("t3d");
+                try {
+                    File csv = new File(dir, "drive.csv");
+                    fx.writeCsv(csv);
+                    CsvTrack.Log log = CsvTrack.read(csv);
+                    Track tr = CsvTrack.track(z, SR, log, 0);
+                    double worst = 0, at = 0;
+                    for (int k = 0; k < tr.frames(); k++) {
+                        double t = tr.time(k), e = Math.abs(120 * tr.fc[k] / log.rpmAt(t) - 1);
+                        if (e > worst) {
+                            worst = e;
+                            at = t;
+                        }
+                    }
+                    note("largest departure from the log " + f3(100 * worst) + " % at " + f3(at) + " s");
+                    check(worst <= 0.02 + 1e-9, "track departs from the log by " + worst + " at " + at + " s");
+                } finally {
+                    rmrf(dir);
+                }
+            }
+        });
+
+        l.add(new T("RS-T3e csvtrack refine=off: the log's rpm integrated, untouched by the audio; refine=bad exits 1") {
+            void run() throws Exception {
+                File dir = tmpDir("t3e");
+                try {
+                    LogFixture fx = new LogFixture();
+                    File csv = new File(dir, "drive.csv"), wav = new File(dir, "drive.wav");
+                    fx.writeCsv(csv);
+                    WavIO.write(wav, fx.x, SR);
+                    File ot = new File(dir, "o.track.txt"), os = new File(dir, "o.segments.txt");
+                    check(Main.run(new String[] {"csvtrack", csv.getPath(), wav.getPath(), ot.getPath(), os.getPath(), "refine=off"}) == 0, "refine=off exit");
+                    CsvTrack.Log log = CsvTrack.read(csv);
+                    Track tr = Track.read(ot);
+                    double worst = 0, th = 0;
+                    for (int k = 0; k < tr.frames(); k++) {
+                        worst = Math.max(worst, Math.abs(120 * tr.fc[k] - log.rpmAt(tr.time(k))));
+                        if (k > 0) th += 0.5 * (tr.fc[k - 1] + tr.fc[k]) * tr.dt;
+                    }
+                    double drift = Math.abs(tr.theta[tr.frames() - 1] - th);
+                    note("refine=off: largest |rpm - log| " + f3(worst) + " rpm, theta vs trapezoid " + f3(drift) + " cycles");
+                    check(worst < 0.01, "rpm departs from the log by " + worst);
+                    check(drift < 0.01, "theta is not the log integrated: " + drift);
+                    String[] err = new String[1];
+                    int rc = runCapturing(new String[] {"csvtrack", csv.getPath(), wav.getPath(), ot.getPath(), os.getPath(), "refine=maybe"}, err);
+                    check(rc == 1 && err[0].contains("refine"), "refine=maybe: exit " + rc + " " + err[0]);
+                } finally {
+                    rmrf(dir);
+                }
+            }
+        });
+
         return l;
+    }
+
+    // ------------------------------------------------------------------ csvtrack fixture
+
+    /**
+     * A synthetic 100 Hz driving log and the recording it drives: idle at 800 rpm (throttle 5, below the off-load
+     * rpm), a pull in gear 1, a 150 ms shift to gear 2 at 4.0 s with the throttle held, a pull, a lift-off at 7.0 s,
+     * a 0.8 s throttle blip (10.0-10.8 s, too short once guarded), a coast through 1000 rpm. The recording's rpm
+     * wobbles 0.3 % around the log's (3 s period), so the log alone drifts off the crank phase.
+     */
+    static final class LogFixture {
+        static final double[] EVENTS = {1.0, 4.0, 7.0, 10.0, 10.8};
+        static final double END = 13.5, WOBBLE = 0.003;
+        final double[][] rows; // {t, rpm, throttle, gear}
+        final Drive d;
+        final double[] x;
+
+        LogFixture() {
+            int n = (int) Math.round(END * 100) + 1;
+            rows = new double[n][];
+            for (int k = 0; k < n; k++) {
+                double t = k / 100.0, rpm, thr = 80, gear = 2;
+                if (t < 1.0) {
+                    rpm = 800;
+                    thr = 5;
+                    gear = 1;
+                } else if (t < 4.0) {
+                    rpm = 800 + 5200 * (t - 1) / 3;
+                    gear = 1;
+                } else if (t < 4.15) {
+                    double f = 0.5 - 0.5 * Math.cos(Math.PI * (t - 4) / 0.15);
+                    rpm = 6000 - 1800 * f;
+                } else if (t < 7.0) rpm = 4200 + 2300 * (t - 4.15) / 2.85;
+                else if (t < 10.0) {
+                    rpm = 6500 - 3500 * (t - 7) / 3;
+                    thr = 5;
+                } else if (t < 10.8) rpm = 3000 + 300 * (t - 10) / 0.8;
+                else if (t < 13.0) {
+                    rpm = 3300 - 1800 * (t - 10.8) / 2.2;
+                    thr = 5;
+                } else {
+                    rpm = 1500 - 600 * (t - 13) / 0.5;
+                    thr = 5;
+                }
+                rows[k] = new double[] {t, rpm, thr, gear};
+            }
+            d = new Drive(END);
+            for (int i = 0; i < d.rpm.length; i++) {
+                double u = i / (double) SR * 100;
+                int k = Math.min(rows.length - 2, (int) u);
+                double rpm = rows[k][1] + (rows[k + 1][1] - rows[k][1]) * (u - k);
+                d.rpm[i] = rpm * (1 + WOBBLE * Math.sin(2 * Math.PI * i / (double) SR / 3));
+                d.state[i] = rows[k][2] >= 50 ? ON : OFF;
+            }
+            x = engine(d, comb(4), new double[0], -60, 61);
+        }
+
+        void writeCsv(File f) throws IOException {
+            writeCsvShifted(f, 0);
+        }
+
+        /** the log with its times moved by dt (rows before 0 dropped) */
+        void writeCsvShifted(File f, double dt) throws IOException {
+            StringBuilder b = new StringBuilder("# synthetic log for the csvtrack tests\nt_s,rpm,throttle_pct,accel_pct,brake_pct,gear,mode\n");
+            for (double[] r : rows) {
+                double t = r[0] + dt;
+                if (t < -1e-9) continue;
+                b.append(String.format(java.util.Locale.ROOT, "%.2f,%.1f,%.0f,%.0f,0,%d,race%n", t, r[1], r[2], r[2], (int) r[3]));
+            }
+            Files.writeText(f, b.toString());
+        }
+
+        double dist(double t) {
+            double m = 1e9;
+            for (double e : EVENTS) m = Math.min(m, Math.abs(t - e));
+            return m;
+        }
+
+        /** away from every gear change and throttle step by more than 0.35 s, and from the ends */
+        boolean steady(double t) {
+            return dist(t) > 0.35 && t > 0.2 && t < END - 0.2;
+        }
+
+        /** the label the definition gives, or -1 within 0.02 s of one of its boundaries */
+        int label(double t, double tEnd) {
+            double rpm1000 = 13 + 5 / 6.0 * 0.5;
+            double[] edges = {0.1, tEnd - 0.1, rpm1000};
+            for (double e : edges) if (Math.abs(t - e) < 0.02) return -1;
+            for (double e : EVENTS) if (Math.abs(Math.abs(t - e) - 0.3) < 0.02) return -1;
+            if (t < 0.1 || t > tEnd - 0.1 || dist(t) < 0.3) return Segments.EXCLUDED;
+            if (t >= 10.0 && t <= 10.8) return Segments.EXCLUDED; // 0.2 s left after the guards: under 0.25 s
+            int k = (int) Math.round(t * 100);
+            double[] r = rows[Math.min(rows.length - 1, k)];
+            if (r[2] >= 50) return Segments.ON;
+            return r[2] <= 6 && r[1] > 1000 ? Segments.OFF : Segments.EXCLUDED;
+        }
+    }
+
+    /** fc at the track's frames straight from the log (no refinement) */
+    static double[] plainFc(CsvTrack.Log log, Track tr) {
+        double[] f = new double[tr.frames()];
+        for (int k = 0; k < f.length; k++) f[k] = log.rpmAt(tr.time(k)) / 120;
+        return f;
+    }
+
+    static double rmsAboutMean(List<Double> v) {
+        double m = 0;
+        for (double x : v) m += x;
+        m /= Math.max(1, v.size());
+        double s = 0;
+        for (double x : v) s += (x - m) * (x - m);
+        return Math.sqrt(s / Math.max(1, v.size()));
     }
 
     /** per 100 ms A/B frame: is its centre in a segment with this label */

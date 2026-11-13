@@ -19,6 +19,7 @@ public final class Main {
     static final String USAGE = "usage:\n"
             + "  track    <in.wav> <out.track.txt> [cyl=N]\n"
             + "  segments <in.wav> <in.track.txt> <out.segments.txt>\n"
+            + "  csvtrack <log.csv> <in.wav> <out.track.txt> <out.segments.txt> [cyl=N] [offset=<s>] [refine=on|off] [compare=<tracker.track.txt>]\n"
             + "  fit      <in.wav> <in.track.txt> <in.segments.txt> <out.vesmodel> [cyl=N] [seed=N] [model=auto|m1|m0]\n"
             + "  render   <in.vesmodel> <out-pack-dir> name=<pack name> [off=<other.vesmodel>] [noise=on|off|<dB>] [seed=N]\n"
             + "  bake     <manifest.json> <out-pack-dir> name=<pack name>\n"
@@ -33,6 +34,7 @@ public final class Main {
             String c = args[0];
             if (c.equals("track")) return track(args);
             if (c.equals("segments")) return segments(args);
+            if (c.equals("csvtrack")) return CsvTrack.run(args);
             if (c.equals("fit")) return fit(args);
             if (c.equals("render")) return render(args);
             if (c.equals("bake")) return bake(args);
