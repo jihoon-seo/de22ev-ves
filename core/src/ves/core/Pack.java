@@ -34,6 +34,11 @@ public final class Pack {
     public final Loop[] on;
     /** off-load (overrun) loops by rising rpm; the same array as on when the pack has none */
     public final Loop[] off;
+    /**
+     * each loop's final gain (PackVoice.gains, the level matching, times level), worked out here on the loader
+     * thread: PackVoice.setPack runs on the audio thread and only takes them. Not to be changed.
+     */
+    final double[] gainOn, gainOff;
 
     Pack(String name, int cylinders, int idleRpm, int redlineRpm, boolean aligned, double level, Loop[] on, Loop[] off) {
         this.aligned = aligned;
@@ -44,5 +49,9 @@ public final class Pack {
         this.redlineRpm = redlineRpm;
         this.on = on;
         this.off = off;
+        gainOn = PackVoice.gains(on);
+        gainOff = off == on ? gainOn : PackVoice.gains(off);
+        for (int k = 0; k < gainOn.length; k++) gainOn[k] *= level;
+        if (gainOff != gainOn) for (int k = 0; k < gainOff.length; k++) gainOff[k] *= level;
     }
 }

@@ -40,10 +40,9 @@ public final class PackVoice {
         pack = p;
         phOn = new double[p == null ? 0 : p.on.length];
         phOff = new double[p == null ? 0 : p.off.length];
-        gOn = gains(p == null ? new Pack.Loop[0] : p.on);
-        gOff = gains(p == null ? new Pack.Loop[0] : p.off);
-        for (int k = 0; k < gOn.length; k++) gOn[k] *= p.level;
-        for (int k = 0; k < gOff.length; k++) gOff[k] *= p.level;
+        // the gains come with the pack (worked out on the loader thread): this runs on the audio thread
+        gOn = p == null ? new double[0] : p.gainOn;
+        gOff = p == null ? new double[0] : p.gainOff;
     }
 
     static double[] gains(Pack.Loop[] L) {

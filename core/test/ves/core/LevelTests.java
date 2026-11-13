@@ -167,5 +167,24 @@ final class LevelTests {
                 check(shiftKph >= 15 && shiftKph <= 30, "first upshift at 15-30 km/h: " + shiftKph);
             }
         });
+
+        // ---------------- T3: the loop gains are worked out when the pack loads, not on the audio thread
+        l.add(new TestMain.T("PV1_setpack_reads_no_pcm") {
+            void run() throws Exception {
+                Pack p = PackLoader.load(TestMain.sinePack(false, false));
+                PackVoice ref = new PackVoice(SR);
+                ref.setPack(p);
+                double before = TestMain.rmsOf(ref, 2520, 1, 0);
+                near(before, PackVoice.LOOP_RMS, 0.01, "a loaded loop plays at the voice level");
+                for (Pack.Loop lp : p.on) for (int i = 0; i < lp.pcm.length; i++) lp.pcm[i] /= 2;
+                for (Pack.Loop lp : p.off) if (p.off != p.on) for (int i = 0; i < lp.pcm.length; i++) lp.pcm[i] /= 2;
+                PackVoice v = new PackVoice(SR);
+                v.setPack(p); // must not read the (now halved) PCM to work out gains
+                double after = TestMain.rmsOf(v, 2520, 1, 0);
+                System.out.println("    rms loaded=" + before + " after halving the pcm=" + after);
+                check(after < 0.2, "setPack re-normalized the loops from their PCM: rms " + after);
+                near(after, before / 2, 0.01, "halved PCM plays at half level with the load-time gains");
+            }
+        });
     }
 }
