@@ -36,10 +36,16 @@ EOF
         -e "s#/proc/self/status#$M/procstatus#g" -e "s#/data/hmgapi/logs#$M/logs#g" \
         -e "s#^export PATH=.*#export PATH=$M/bin:\$PATH#" "$M/usb/VES_MOD/run.sh"
     : > "$M/calls"
+    # the car's /system/bin/sh (Android 4.4 mksh, toolbox) has no printf: a kit line that uses it truncates its
+    # redirect target and fails (0.2.9 car: MODE.txt left empty). The mock shell hides printf the same way.
+    cat > "$M/carsh" <<'EOF'
+enable -n printf
+printf() { echo "sh: printf: not found" >&2; return 127; }
+EOF
 }
 run_kit() {   # run_kit MODE -> sets STATUS and OUTDIR
     echo "$1" > "$M/usb/VES_MOD/MODE.txt"
-    MOCK=$M bash "$M/usb/VES_MOD/run.sh" "$M/usb"
+    MOCK=$M BASH_ENV="$M/carsh" bash "$M/usb/VES_MOD/run.sh" "$M/usb"
     OUTDIR=$(cat "$M/usb/VES_MOD_LAST.txt")
     STATUS=$(cat "$OUTDIR/STATUS.txt")
 }

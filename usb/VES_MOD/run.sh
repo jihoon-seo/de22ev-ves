@@ -91,7 +91,8 @@ if [ "$UPDATE" = yes ]; then
 fi
 dump_state after
 # installed: the next run of this stick collects the logs instead of installing again
-printf 'status\n' > "$KIT/MODE.txt" && echo "MODE.txt: status" || echo "MODE.txt not switched"
+# (echo, not printf: the car's shell has no printf, and the failed command would leave MODE.txt empty)
+echo status > "$KIT/MODE.txt" && echo "MODE.txt: status" || echo "MODE.txt not switched"
 if [ "$UPDATE" = yes ]; then done_status UPDATED_IN_USE_NOW; exit 0; fi
 # first install: the menu tile, star key action and split-screen widget attach at the next boot
 done_status INSTALLED_RESTART_THE_CAR
