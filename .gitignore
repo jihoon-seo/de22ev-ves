@@ -14,7 +14,7 @@ pack.txt
 *.segments.txt
 *.track.txt
 /private/
-# except the built-in packs: 히릿's processed packs (tools/import_packs.py), shipped with his permission and
+# except the built-in packs: 히릿's processed packs (tools/import_packs.py), shipped with their permission and
 # their notice (THIRD_PARTY.md); never models, tracks, segments or original recordings
 !/packs/*/pack.txt
 !/packs/*/*.wav

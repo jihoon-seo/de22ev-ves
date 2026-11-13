@@ -1,7 +1,7 @@
 """import_packs.py <private VES/packs dir> [--dest DIR] [slot...]: copies 히릿's processed packs into packs/<slot>/.
 
 The built-in packs are engine sounds by 히릿 (engine physics simulator), processed by ves.resynth and used with
-his permission in this mod only (not MIT; see THIRD_PARTY.md). Only processed packs go into the repository:
+their permission in this mod only (not MIT; see THIRD_PARTY.md). Only processed packs go into the repository:
 the source folder must be a ves.resynth pack (line 1 one of PRIVATE_HEADERS), hold no models, tracks or
 segment files and no WAV that pack.txt does not reference, and every referenced WAV must be RIFF PCM16 mono
 22050 Hz, at most 2 s. Then pack.txt (line 1 = the built-in notice, name = the display name) and the
