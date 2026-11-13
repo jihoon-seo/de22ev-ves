@@ -168,6 +168,41 @@ final class LevelTests {
             }
         });
 
+        // ---------------- M3 (0.2.10): the launch slip rpm climbs with speed (ICE_SHIFT). 0.2.7-0.2.9 held it flat
+        // until first gear caught up, so the pitch stayed put from 0 to about 14 km/h (car trace 2026-11-13: pedal
+        // 49 %, 1992 rpm from 0 to 13 km/h). Now every 2 km/h step up to 15 km/h raises the rpm.
+        l.add(new TestMain.T("M3_launch_rpm_climbs_with_speed") {
+            void run() {
+                for (int pedal : new int[] {20, 49}) {
+                    TestMain.Rig r = new TestMain.Rig(TestMain.iceSettings(Profile.ICE_SHIFT, 70));
+                    r.speed = 0;
+                    r.pedal = 0;
+                    r.kw = 0;
+                    r.run(2000);
+                    r.pedal = pedal;
+                    r.run(1200); // the car starts moving about 1 s after the pedal (car trace)
+                    long t0 = r.t;
+                    double[] at = new double[16];
+                    while (r.t - t0 < 3000) {
+                        double el = (r.t - t0) / 1000.0;
+                        r.speed = Math.min(16, 8 * el); // 0 -> 16 km/h in 2 s
+                        r.kw = 1 + 3 * el;
+                        r.step();
+                        EngineParams q = r.c.lastParams();
+                        int k = (int) Math.floor(q.speedKph);
+                        if (k >= 0 && k < at.length && q.virtualGear == 1) at[k] = q.rpm;
+                    }
+                    StringBuilder b = new StringBuilder();
+                    for (int k = 1; k < 16; k += 2) b.append(k).append(':').append(Math.round(at[k])).append(' ');
+                    System.out.println("    pedal " + pedal + "%: rpm by km/h " + b);
+                    boolean climbs = true;
+                    for (int k = 3; k <= 15; k += 2) climbs &= at[k] - at[k - 2] >= 80;
+                    check(climbs, "pedal " + pedal + "%: the rpm climbs every 2 km/h up to 15 km/h: " + b);
+                    check(at[13] - at[1] >= 600, "pedal " + pedal + "%: 1 -> 13 km/h at least +600 rpm: " + b);
+                }
+            }
+        });
+
         // ---------------- T3: the loop gains are worked out when the pack loads, not on the audio thread
         l.add(new TestMain.T("PV1_setpack_reads_no_pcm") {
             void run() throws Exception {

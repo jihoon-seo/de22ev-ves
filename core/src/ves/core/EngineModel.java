@@ -37,6 +37,8 @@ package ves.core;
 public final class EngineModel {
     static final double IDLE_RPM = 800, MAX_RPM = 6500, FREE_REV_RPM = 4500;
     static final double[] RATIO = {0, 150, 98, 68, 50, 37, 27};
+    /** first-gear launch slip: IDLE_RPM + SLIP_LOAD_RPM x load at standstill, rising SLIP_RISE x RATIO[1] per km/h */
+    static final double SLIP_LOAD_RPM = 1400, SLIP_RISE = 0.55;
     static final double SHIFT_S = 0.25;
     static final long DWELL_MS = 700, KICK_DWELL_MS = 300, ACCEL_HANG_MS = 1000;
     static final double STOP_KPH = 0.8, MOVE_KPH = 1.2;
@@ -350,8 +352,10 @@ public final class EngineModel {
 
     private static double gearRpm(int g, double v, double L) {
         double r = v * RATIO[g];
-        // launch slip: held until first gear's own rpm catches up (0.2.6 let it decay with speed, a dip on pull-away)
-        if (g == 1) r = Math.max(r, IDLE_RPM + 2200 * L);
+        // launch slip: climbs with speed at SLIP_RISE x first gear's slope until first gear's own rpm catches up
+        // (0.2.6 let it decay with speed, a dip on pull-away; 0.2.7-0.2.9 held it flat, so the pitch stayed put
+        // from 0 to about 14 km/h). Only under load: coasting down into first keeps the plain idle floor.
+        if (g == 1) r = Math.max(r, IDLE_RPM + SLIP_LOAD_RPM * L + Math.min(1, L / 0.1) * SLIP_RISE * RATIO[1] * v);
         r = Math.max(r, g == 1 ? IDLE_RPM : 900);
         return Math.min(r, MAX_RPM);
     }

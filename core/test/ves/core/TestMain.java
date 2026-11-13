@@ -141,7 +141,8 @@ public final class TestMain {
     // +6 dB volume curve (S5, VC1) changes all three (0.2.6: ICE_SMOOTH=4afaa3acacd639b1 EV_FUTURE=54180ef1274a9222),
     // and again the makeup dropping at once on an onset (OS2; before: ICE_SMOOTH=41530d7a3f993c94
     // ICE_SHIFT=0d9a6b3857c4099c EV_FUTURE=4f69dc23df282e10)
-    static final String O1_WANT = "ICE_SMOOTH=5017ab23cb7b714b ICE_SHIFT=615b8d00311dc3b0 EV_FUTURE=91ac0fb068a924ea";
+    // 0.2.10 launch slip climbing with speed (M3) changes ICE_SHIFT only (before: 615b8d00311dc3b0)
+    static final String O1_WANT = "ICE_SMOOTH=5017ab23cb7b714b ICE_SHIFT=119dcc9b0bf40b07 EV_FUTURE=91ac0fb068a924ea";
     static final int BLOCK = 220; // 10 ms
 
     /** the classic modes (0.1.x behaviour: P/N/R silent, mode decides stops and regen) */
