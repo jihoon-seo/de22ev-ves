@@ -504,6 +504,43 @@ final class PackFormatTests {
             }
         });
 
+        // LX1 (0.2.9) packs with 3+ load layers move up through their layers slowly (tau 0.4 s) and back down fast
+        // (tau 0.08 s): on a pull-away the rpm rises first and the darker loaded layer follows, instead of the timbre
+        // dropping within 0.1 s (S2000 Baked: centroid 273 -> 238 Hz while rpm went 800 -> 1800). A fresh voice starts
+        // at the current load; two-layer packs are unchanged (PK0a/PK0b pin them).
+        l.add(new TestMain.T("LX1_layer_crossfade_up_slow_down_fast") {
+            double run(PackVoice v, int blocks, double load) {
+                float[] blk = new float[220];
+                for (int b = 0; b < blocks; b++) v.renderRaw(blk, 220, 2100, load, 0);
+                return v.layerLoad();
+            }
+
+            void run() throws Exception {
+                Pack p = loadOk(threeLayers(null));
+                double eP = 0.45, lp = loadFor(eP);
+                PackVoice v = new PackVoice(SR);
+                v.setPack(p);
+                near(run(v, 100, 0), 0, 1e-9, "1 s at load 0: off layer");
+                double e20 = run(v, 2, lp);
+                check(e20 < 0.15 * eP, "20 ms after the step up the partial layer is not there yet: e " + e20);
+                double e400 = run(v, 38, lp);
+                near(e400, eP * (1 - Math.exp(-1)), 0.03, "0.4 s after the step up: 63 % of the way");
+                check(run(v, 110, lp) > 0.97 * eP, "1.5 s after the step up: partial layer");
+                double d250 = run(v, 25, 0);
+                check(d250 < 0.05 * eP, "0.25 s after the step down: back at the off layer: e " + d250);
+                // a fresh voice starts where the load is (no slow fade-in on a pack switch)
+                PackVoice f = new PackVoice(SR);
+                f.setPack(p);
+                near(run(f, 1, lp), eP, 1e-9, "fresh voice: at the load at once");
+                // two layers: no smoothing
+                Pack two = loadOk(layered(new String[] {"off", "on"}, new int[] {4, 4}, new int[] {8, 20}, new double[] {9000, 3000}, null));
+                PackVoice t = new PackVoice(SR);
+                t.setPack(two);
+                run(t, 50, 0);
+                near(run(t, 1, 1), 1, 1e-9, "two layers: the step is immediate");
+            }
+        });
+
         // EV1 one-shot events: "event pop|bubble|shift_up|shift_down <file>.wav", "pop_rpm <n>"
         l.add(new TestMain.T("EV1_events_parse") {
             void run() throws Exception {

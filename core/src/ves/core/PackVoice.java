@@ -52,6 +52,7 @@ public final class PackVoice {
 
     public void setPack(Pack p) {
         pack = p;
+        eStarted = false;
         ph = new double[p == null ? 0 : p.layers.length][];
         for (int k = 0; k < ph.length; k++) ph[k] = new double[p.layers[k].length];
         // the gains come with the pack (worked out on the loader thread): this runs on the audio thread
@@ -207,6 +208,16 @@ public final class PackVoice {
         pMk = mT;
     }
 
+    /** 3+ layer packs: time constants of the effective layer load going up and down */
+    static final double LAYER_UP_S = 0.4, LAYER_DOWN_S = 0.08;
+    private double lastE, eS;
+    private boolean eStarted;
+
+    /** the effective layer load the last mix used (tests) */
+    double layerLoad() {
+        return lastE;
+    }
+
     private void mix(float[] out, int at, int n, double rpm, double load, double regen) {
         if (pack == null) {
             for (int i = 0; i < n; i++) out[at + i] = 0;
@@ -217,6 +228,18 @@ public final class PackVoice {
         int top = lam.length - 1, k = 0;
         // smoothstep, overrun pulls to off; held to the layers' range
         double e = clamp(l * l * (3 - 2 * l) * (1 - clamp(regen, 0, 1)), lam[0], lam[top]);
+        if (top >= 2) {
+            // 3+ layers: up slowly, down fast (the loaded layers can be darker than the off layer: on a pull-away the
+            // rpm rises first and the loaded timbre follows, instead of the sound dropping within 0.1 s)
+            if (!eStarted) {
+                eS = e; // a fresh voice or pack starts at the current load
+                eStarted = true;
+            } else {
+                eS += (e - eS) * (1 - Math.exp(-n / (sr * (e > eS ? LAYER_UP_S : LAYER_DOWN_S))));
+            }
+            e = eS;
+        }
+        lastE = e;
         while (k < top - 1 && e >= lam[k + 1]) k++;
         double w = (e - lam[k]) / (lam[k + 1] - lam[k]); // two layers: w = e exactly
         boolean al = pack.aligned;
