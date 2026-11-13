@@ -31,6 +31,18 @@ public final class GainEnvelope {
         return CAP * x * Math.sqrt(x) * VOLUME_BOOST;
     }
 
+    /**
+     * speed_boost: the level rises with wind and road noise, by 0 at 40 km/h to maxDb at 110 km/h and above
+     * (linear in dB): off/low/mid/high = 0/3/6/9 dB (anything else: off); NaN speed: 1. Above 1 it ends up in
+     * the output-stage makeup, so a high volume leaves less of it audible.
+     */
+    public static double speedBoost(String level, double kph) {
+        double maxDb = "high".equals(level) ? 9 : "mid".equals(level) ? 6 : "low".equals(level) ? 3 : 0;
+        if (maxDb == 0 || !(kph > 40)) return 1; // also NaN
+        double f = Math.min(1, (kph - 40) / 70.0);
+        return Math.pow(10, maxDb * f / 20);
+    }
+
     public double next(double target, int frames) {
         if (!(target > 0)) target = 0; // also NaN
         if (target > TOTAL_MAX) target = TOTAL_MAX;

@@ -262,6 +262,27 @@ final class LevelTests {
             }
         });
 
+        // a sudden loud onset (a pop, a kickdown) after quiet lifted sound: the makeup drops at once, so the onset
+        // is never pushed past TPK into the hard limit
+        l.add(new TestMain.T("OS2_makeup_onset") {
+            void run() {
+                long[] clamps = new long[2];
+                double[] mx = new double[2];
+                for (int k = 0; k < 2; k++) {
+                    OutputStage st = new OutputStage(SR);
+                    double m = k == 0 ? 1 : 3;
+                    for (int i = 0; i < SR; i++) {
+                        double a = i < SR / 2 ? 0.02 : 0.6; // about peak 0.25 then 2.9 into the clip at 600 Hz
+                        double y = st.process(a * Math.sin(2 * Math.PI * 600 * i / SR), m);
+                        mx[k] = Math.max(mx[k], Math.abs(y));
+                    }
+                    clamps[k] = st.clamped();
+                }
+                System.out.println("    onset: clamped m=1 " + clamps[0] + " m=3 " + clamps[1] + ", max " + mx[1]);
+                check(clamps[1] <= clamps[0], "the makeup pushes an onset into the hard limit: " + clamps[1] + " > " + clamps[0]);
+            }
+        });
+
         // ---------------- T4b: the whole volume curve 6 dB louder
         l.add(new TestMain.T("VC1_volume_louder") {
             void run() throws Exception {
@@ -289,6 +310,151 @@ final class LevelTests {
                 }
                 // the status line carries the makeup
                 check(new VesCore(SR).status().contains(" mk="), "status has mk=");
+            }
+        });
+
+        // ---------------- T5: the level rises with speed (speed_boost off/low/mid/high)
+        l.add(new TestMain.T("SB1_curve") {
+            void run() {
+                near(GainEnvelope.speedBoost("high", 0), 1, 0, "high at 0 km/h");
+                near(GainEnvelope.speedBoost("high", 40), 1, 0, "high at 40 km/h");
+                near(GainEnvelope.speedBoost("high", 110), Math.pow(10, 9 / 20.0), 1e-12, "high at 110 km/h: +9 dB");
+                near(GainEnvelope.speedBoost("high", 150), Math.pow(10, 9 / 20.0), 1e-12, "high at 150 km/h: +9 dB");
+                near(db(GainEnvelope.speedBoost("mid", 75)), 3, 0.05, "mid at 75 km/h: +3 dB");
+                near(db(GainEnvelope.speedBoost("low", 110)), 3, 1e-9, "low at 110 km/h: +3 dB");
+                near(db(GainEnvelope.speedBoost("mid", 110)), 6, 1e-9, "mid at 110 km/h: +6 dB");
+                for (int v = 0; v <= 200; v += 10) near(GainEnvelope.speedBoost("off", v), 1, 0, "off at " + v);
+                near(GainEnvelope.speedBoost("high", Double.NaN), 1, 0, "NaN speed");
+                double prev = 0;
+                for (int v = 0; v <= 200; v++) {
+                    double g = GainEnvelope.speedBoost("high", v);
+                    check(g >= prev, "monotonic at " + v);
+                    prev = g;
+                }
+            }
+        });
+
+        l.add(new TestMain.T("SB2_settings") {
+            void run() {
+                check(new Settings().speedBoost.equals("high"), "default high");
+                check(java.util.Arrays.equals(Settings.SPEED_BOOSTS, new String[] {"off", "low", "mid", "high"}), "choices");
+                java.util.Map<String, String> m = new java.util.HashMap<String, String>();
+                check(Settings.fromMap(m).speedBoost.equals("high"), "missing: high");
+                for (String v : Settings.SPEED_BOOSTS) {
+                    m.put("speed_boost", v);
+                    check(Settings.fromMap(m).speedBoost.equals(v), "parses " + v);
+                }
+                m.put("speed_boost", " MID ");
+                check(Settings.fromMap(m).speedBoost.equals("mid"), "trims and lower-cases");
+                m.put("speed_boost", "loud");
+                check(Settings.fromMap(m).speedBoost.equals("high"), "garbage: high");
+                Settings a = new Settings(), b = new Settings();
+                b.speedBoost = "off";
+                check(!a.equals(b) && a.hashCode() != b.hashCode(), "equals/hashCode see speed_boost");
+                check(b.copy().equals(b) && b.copy().speedBoost.equals("off"), "copy keeps it");
+                b.speedBoost = "nonsense";
+                check(b.copy().speedBoost.equals("high"), "copy sanitizes");
+                check(a.toString().contains("speed_boost=high"), "toString: " + a);
+                check(TestMain.settings(Profile.ICE_SMOOTH, 50, "idle_regen").speedBoost.equals("off"), "0.1.x rig settings: off");
+            }
+        });
+
+        l.add(new TestMain.T("SB3_highway_louder") {
+            void run() {
+                double[] rms = new double[2];
+                for (double kph : new double[] {100, 30}) {
+                    TestMain.Rig[] r = new TestMain.Rig[2];
+                    boolean same = true;
+                    for (int k = 0; k < 2; k++) {
+                        Settings s = TestMain.iceSettings(Profile.ICE_SMOOTH, 60);
+                        s.speedBoost = k == 0 ? "off" : "high";
+                        r[k] = new TestMain.Rig(s);
+                        r[k].speed = kph;
+                        r[k].pedal = 15;
+                    }
+                    for (int b = 0; b < 600; b++) {
+                        if (b == 300) for (TestMain.Rig q : r) q.resetStats();
+                        r[0].step();
+                        r[1].step();
+                        if (!java.util.Arrays.equals(r[0].buf, r[1].buf)) same = false;
+                    }
+                    for (int k = 0; k < 2; k++) {
+                        TestMain.eq(r[k].capViolations, 0, kph + " km/h cap violations (" + k + ")");
+                        rms[k] = r[k].rms();
+                    }
+                    System.out.println("    " + kph + " km/h volume 60 pedal 15: rms off " + Math.round(rms[0]) + " high "
+                            + Math.round(rms[1]) + " (+" + db(rms[1] / rms[0]) + " dB), mk=" + r[1].c.lastMakeup());
+                    if (kph == 100) check(db(rms[1] / rms[0]) >= 6.5, "high at 100 km/h: +" + db(rms[1] / rms[0]) + " dB");
+                    else check(same, "30 km/h: high must be identical to off");
+                }
+            }
+        });
+
+        l.add(new TestMain.T("SB4_bounds") {
+            void run() {
+                // a pull from 60 to 110 km/h at full pedal, volume 100: off and high on the same trace
+                TestMain.Rig[] r = new TestMain.Rig[2];
+                for (int k = 0; k < 2; k++) {
+                    Settings s = TestMain.iceSettings(Profile.ICE_SMOOTH, 100);
+                    s.speedBoost = k == 0 ? "off" : "high";
+                    r[k] = new TestMain.Rig(s);
+                    r[k].speed = 60;
+                    r[k].pedal = 0;
+                    r[k].kw = -10;
+                    r[k].run(3000);
+                    r[k].pedal = 100; // in one update
+                    r[k].kw = 150;
+                    for (int b = 0; b < 500; b++) {
+                        r[k].speed = Math.min(110, 60 + b * 0.2);
+                        r[k].step();
+                    }
+                    r[k].run(3000);
+                    r[k].pedal = 0; // lift-off at 110
+                    r[k].kw = -40;
+                    r[k].run(2000);
+                }
+                // a click is a step bigger than the loudest steady sound's own steepest step (as S1d)
+                int steady = 0;
+                for (Profile sp : Profile.values()) {
+                    for (double kph : new double[] {30, 80, 110}) {
+                        Settings s = TestMain.iceSettings(sp, 100);
+                        s.speedBoost = "high";
+                        TestMain.Rig q = new TestMain.Rig(s);
+                        q.speed = kph;
+                        q.pedal = 100;
+                        q.run(3000);
+                        q.resetStats();
+                        q.havePrev = false;
+                        q.run(2000);
+                        steady = Math.max(steady, q.maxDelta);
+                    }
+                }
+                long cOff = r[0].c.clampedSamples(), cHigh = r[1].c.clampedSamples();
+                System.out.println("    110 km/h full pedal volume 100: peak off " + r[0].peak + " high " + r[1].peak + ", maxDelta high "
+                        + r[1].maxDelta + " (steady " + steady + "), clamped off " + cOff + " high " + cHigh);
+                for (int k = 0; k < 2; k++) {
+                    check(r[k].peak <= 30000, "peak above full scale: " + r[k].peak);
+                    TestMain.eq(r[k].capViolations, 0, "cap violations (" + k + ")");
+                    check(r[k].maxDelta <= steady * 1.1 + 300, "click: max sample delta " + r[k].maxDelta + " > steady " + steady);
+                }
+                check(cHigh <= cOff, "speed boost limits harder: clamped " + cHigh + " > " + cOff);
+            }
+        });
+
+        l.add(new TestMain.T("SB5_fade_still_silences") {
+            void run() {
+                Settings s = TestMain.iceSettings(Profile.ICE_SMOOTH, 100);
+                s.speedBoost = "high";
+                s.fadeAboveKph = 60;
+                TestMain.Rig r = new TestMain.Rig(s);
+                r.speed = 100;
+                r.pedal = 30;
+                r.run(3000);
+                r.resetStats();
+                r.run(1000);
+                check("fade_speed".equals(r.c.lastParams().reason), "reason " + r.c.lastParams().reason);
+                near(r.c.lastGain(), 0, 0, "fade_above still reaches 0 with speed_boost high");
+                TestMain.eq(r.zeros, r.n, "silent above the fade");
             }
         });
     }

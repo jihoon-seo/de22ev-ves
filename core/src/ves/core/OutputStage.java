@@ -19,8 +19,8 @@ public final class OutputStage {
     private double presLo, presHi;
     private long clamped;
     /** makeup: the peak it lifts quiet sound towards (into the soft clip: about 0.98 out), and its time constants */
-    static final double TPK = 2.0, PEAK_REL_S = 0.2, MG_DOWN_S = 0.001, MG_UP_S = 0.1;
-    private final double peakRel, mgDown, mgUp;
+    static final double TPK = 2.0, PEAK_REL_S = 0.2, MG_UP_S = 0.1;
+    private final double peakRel, mgUp;
     private double peak, mg = 1;
 
     public OutputStage(int sampleRate) {
@@ -36,7 +36,6 @@ public final class OutputStage {
         presLoC = 1 - Math.exp(-2 * Math.PI * PRES_LO_HZ / sr);
         presHiC = 1 - Math.exp(-2 * Math.PI * Math.min(PRES_HI_HZ, 0.4 * sr) / sr);
         peakRel = Math.exp(-1.0 / (PEAK_REL_S * sr));
-        mgDown = 1 - Math.exp(-1.0 / (MG_DOWN_S * sr));
         mgUp = 1 - Math.exp(-1.0 / (MG_UP_S * sr));
     }
 
@@ -47,9 +46,10 @@ public final class OutputStage {
 
     /**
      * process() with up to makeup x of upward gain after the drive: a peak follower on |y| (instant attack, 200 ms
-     * release) sets the gain to TPK / peak, at least 1 and at most makeup, applied through a 1 ms (down) / 100 ms
-     * (up) smoother, so quiet sound is lifted towards TPK while loud sound (peaks at or above TPK) is left as it
-     * is: still |result| &lt;= 1, and no more hard limiting on loud sound. makeup 1: exactly process(x).
+     * release) sets the gain to TPK / peak, at least 1 and at most makeup; the applied gain rises towards it in
+     * 100 ms and drops to it at once (0.2.7 first had 1 ms, which lifted pop onsets into the hard limit), so quiet
+     * sound is lifted towards TPK while loud sound (peaks at or above TPK) is left as it is: still |result| &lt;= 1,
+     * and no more hard limiting on loud sound. makeup 1: exactly process(x).
      */
     public double process(double x, double makeup) {
         double y = hb0 * x + hb1 * hx1 + hb2 * hx2 - ha1 * hy1 - ha2 * hy2;
@@ -67,7 +67,7 @@ public final class OutputStage {
             tg = peak > TPK / makeup ? TPK / peak : makeup;
             if (tg < 1) tg = 1;
         }
-        mg += (tg - mg) * (tg < mg ? mgDown : mgUp);
+        mg = tg < mg ? tg : mg + (tg - mg) * mgUp; // down at once: an onset is never lifted past TPK
         y *= mg;
         if (y > 3) {
             y = 3;

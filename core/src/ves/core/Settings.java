@@ -24,6 +24,7 @@ import java.util.Map;
  * pops           off|soft|strong: exhaust pops on lift-off (behaviour ice and classic)  default soft
  * fade_above     0 = off, else km/h (fade to silence over +20 km/h)  default 0
  *                (aliases fade_above_kph, fadeAboveKph; clamp 0..250)
+ * speed_boost    off|low|mid|high: louder with speed, from 40 km/h to +0/3/6/9 dB at 110 km/h  default high
  * </pre>
  */
 public final class Settings {
@@ -32,6 +33,7 @@ public final class Settings {
     public static final String[] BEHAVIORS = {"ice", "classic"};
     public static final String[] POPS = {"off", "soft", "strong"};
     public static final String[] PROMPTS = {"duck", "pause", "voice"};
+    public static final String[] SPEED_BOOSTS = {"off", "low", "mid", "high"};
     public static final String[] SOUNDS = {"synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
 
     public boolean enabled = false;
@@ -46,6 +48,7 @@ public final class Settings {
     public int regenLevel = 50;
     public String response = "normal";
     public int fadeAboveKph = 0;
+    public String speedBoost = "high";
 
     public Settings() {}
 
@@ -66,6 +69,7 @@ public final class Settings {
         String f = get(m, "fade_above", "fade_above_kph");
         if (f == null) f = get(m, "fadeAboveKph", null);
         s.fadeAboveKph = integer(f, 0, 0, 250);
+        s.speedBoost = choice(get(m, "speed_boost", null), SPEED_BOOSTS, "high");
         return s;
     }
 
@@ -84,6 +88,7 @@ public final class Settings {
         s.regenLevel = clamp(regenLevel, 0, 100);
         s.response = choice(response, RESPONSES, "normal");
         s.fadeAboveKph = clamp(fadeAboveKph, 0, 250);
+        s.speedBoost = choice(speedBoost, SPEED_BOOSTS, "high");
         return s;
     }
 
@@ -131,7 +136,7 @@ public final class Settings {
         Settings s = (Settings) o;
         return enabled == s.enabled && volume == s.volume && profile == s.profile && eqs(mode, s.mode) && eqs(behavior, s.behavior) && eqs(pops, s.pops) && eqs(prompts, s.prompts) && eqs(sound, s.sound)
                 && idleLevel == s.idleLevel && regenLevel == s.regenLevel && eqs(response, s.response)
-                && fadeAboveKph == s.fadeAboveKph;
+                && fadeAboveKph == s.fadeAboveKph && eqs(speedBoost, s.speedBoost);
     }
 
     private static boolean eqs(String a, String b) {
@@ -151,12 +156,13 @@ public final class Settings {
         h = h * 31 + regenLevel;
         h = h * 31 + (response == null ? 0 : response.hashCode());
         h = h * 31 + fadeAboveKph;
+        h = h * 31 + (speedBoost == null ? 0 : speedBoost.hashCode());
         return h;
     }
 
     public String toString() {
         return "enabled=" + enabled + " volume=" + volume + " profile=" + (profile == null ? "null" : profile.key())
                 + " behavior=" + behavior + " pops=" + pops + " prompts=" + prompts + " sound=" + sound + " mode=" + mode + " idle_level=" + idleLevel + " regen_level=" + regenLevel + " response=" + response
-                + " fade_above=" + fadeAboveKph;
+                + " fade_above=" + fadeAboveKph + " speed_boost=" + speedBoost;
     }
 }

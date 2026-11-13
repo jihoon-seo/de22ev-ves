@@ -162,7 +162,8 @@ public final class VesCore {
         pops.setLevel(Pops.level(s.pops));
         pops.update(params.rpm, params.load, params.speedKph, nowMs);
         boolean enabled = s.enabled && s.volume > 0;
-        double target = enabled ? params.targetGain * GainEnvelope.volumeToLinear(s.volume) : 0;
+        double target = enabled ? params.targetGain * GainEnvelope.volumeToLinear(s.volume)
+                * GainEnvelope.speedBoost(s.speedBoost, params.speedKph) : 0;
         boolean want = enabled && (target > 0 || env.value() > 0);
         int action = policy.tick(nowMs, want, lastGain);
         lastAction = action;

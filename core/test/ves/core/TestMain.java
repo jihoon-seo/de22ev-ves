@@ -138,8 +138,10 @@ public final class TestMain {
     static final int SR = 22050;
     // 0.1.2 output was ICE_SMOOTH=4bdf3f9889a03759 ...; 0.2.0 faster normal response (L1) changes it on purpose
     // 0.2.7 launch slip held in 1st (M2) changed ICE_SHIFT only (0.2.6: b73cf032a167a19f -> e262d54caaa95598); the
-    // +6 dB volume curve (S5, VC1) changes all three (0.2.6: ICE_SMOOTH=4afaa3acacd639b1 EV_FUTURE=54180ef1274a9222)
-    static final String O1_WANT = "ICE_SMOOTH=41530d7a3f993c94 ICE_SHIFT=0d9a6b3857c4099c EV_FUTURE=4f69dc23df282e10";
+    // +6 dB volume curve (S5, VC1) changes all three (0.2.6: ICE_SMOOTH=4afaa3acacd639b1 EV_FUTURE=54180ef1274a9222),
+    // and again the makeup dropping at once on an onset (OS2; before: ICE_SMOOTH=41530d7a3f993c94
+    // ICE_SHIFT=0d9a6b3857c4099c EV_FUTURE=4f69dc23df282e10)
+    static final String O1_WANT = "ICE_SMOOTH=5017ab23cb7b714b ICE_SHIFT=615b8d00311dc3b0 EV_FUTURE=91ac0fb068a924ea";
     static final int BLOCK = 220; // 10 ms
 
     /** the classic modes (0.1.x behaviour: P/N/R silent, mode decides stops and regen) */
@@ -152,6 +154,7 @@ public final class TestMain {
         s.behavior = "classic";
         s.pops = "off"; // 0.1.x had none; P_pops tests them
         s.prompts = "pause"; // 0.1.x stepped aside for prompts; Y_ tests the ducking
+        s.speedBoost = "off"; // 0.1.x level did not rise with speed; SB_ tests it
         return s;
     }
 
