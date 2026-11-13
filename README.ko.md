@@ -64,7 +64,7 @@ loop r2000_off.wav rpm=2000 load=off
 | `sound` | `synth`(기본), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
 | `profile` | 회전수 움직임(합성음은 소리 종류도): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice`(기본: Ready면 항상 소리) / `classic`(아래 `mode`를 따름) |
-| `prompts` | 안내 음성·알림음 때: `duck`(기본, 30%로 계속) / `pause`(멈춤). 전화·음성인식 때는 항상 멈춤 |
+| `prompts` | 안내 음성·알림음 때: `duck`(기본, 30%로 계속) / `pause`(멈춤) / `voice`(실험: 순정 내비 음성 중에도 0.4초 뒤 채널을 되찾아 30%로 계속. 내비 안내가 끊길 수 있고, 끊긴 것 같으면 그 주행이 끝날 때까지 쓰지 않음). 전화·음성인식 때는 항상 멈춤 |
 | `pops` | 페달을 뗄 때 배기 팝: `off`, `soft`(기본), `strong` |
 | `mode` | `classic`일 때: `idle_regen`(정차 시 작은 공회전 + 회생음), `stop_silent_regen`, `accel_only`, `drive_all` |
 | `idle_level` | 공회전 크기, 주행 소리의 10–60% |

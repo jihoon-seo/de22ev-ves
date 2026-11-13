@@ -70,7 +70,7 @@ import stay on your car; only use recordings you may use.
 | `sound` | `synth` (default), `i4t`, `v6`, `v8`, `i6`, `user1`–`user8` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
 | `behavior` | `ice` (default: sound whenever Ready) / `classic` (the `mode` below) |
-| `prompts` | under prompts and alerts: `duck` (default, 30 %) / `pause`; calls and voice recognition always pause |
+| `prompts` | under prompts and alerts: `duck` (default, 30 %) / `pause` / `voice` (experimental: also 30 % under the stock navigation's voice, taking the channel back 0.4 s into it; it may cut navigation prompts, and if a prompt seems cut vesd gives up for the rest of the drive); calls and voice recognition always pause |
 | `pops` | exhaust pops on lift-off: `off`, `soft` (default), `strong` |
 | `mode` | with `classic`: `idle_regen` (quiet idle at a stop + regen sound), `stop_silent_regen`, `accel_only`, `drive_all` |
 | `idle_level` | idle loudness, 10–60 % of the driving sound |

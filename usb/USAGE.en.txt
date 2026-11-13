@@ -31,7 +31,8 @@ Sound: the synth, inline-4 turbo, V6, V8, inline-6, or user slots 1-8. Behaviour
 ICE car" (idles in P/N/D when Ready, engine braking when coasting, optional exhaust pops).
 Under navigation prompts and alerts the engine sound plays on at 30 % (or pauses, a setting); the
 stock navigation's voice takes the channel, so it pauses for that and is back 0.5 s later. Calls and
-voice recognition always pause it.
+voice recognition always pause it. The experimental setting "voice" plays on quietly under the
+navigation's voice too, but it may cut prompts (if one seems cut, it gives up for the rest of the drive).
 Own sound packs: put pack.txt and WAV loops (22050 Hz mono 16-bit) in VES/packs/<folder>/ on the
 stick and use "USB에서 소리 팩 가져오기" in the app (format: README on GitHub).
 Settings: the app, the split-screen widget, the star key action, or HMG-API's Mods tab (there,

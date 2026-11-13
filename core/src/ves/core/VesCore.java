@@ -71,6 +71,7 @@ public final class VesCore {
     public void setSettings(Settings s) {
         if (s == null) return;
         settings = s.copy();
+        policy.setVoiceRegrab("voice".equals(settings.prompts));
     }
 
     public Settings settings() {
@@ -79,7 +80,8 @@ public final class VesCore {
 
     /** another source speaks: duck under it (setting prompts=duck and a duckable source) or step aside */
     public void onYieldStart(String src, long now) {
-        policy.onYieldStart(src, now, "duck".equals(settings.prompts) && AudioPolicy.duckable(src));
+        String p = settings.prompts;
+        policy.onYieldStart(src, now, ("duck".equals(p) || "voice".equals(p)) && AudioPolicy.duckable(src));
     }
 
     public void onYieldEnd(String src, long now) {
@@ -117,6 +119,11 @@ public final class VesCore {
     /** whether the MICOM accepted the startAudio of the last ACT_REGRAB (AudioPolicy.regrabResult) */
     public void regrabResult(boolean ok, long nowMs) {
         policy.regrabResult(ok, nowMs);
+    }
+
+    /** prompts=voice: "off", "on" or "given up (reason)" (AudioPolicy.voiceRegrabState) */
+    public String voiceRegrabState() {
+        return policy.voiceRegrabState();
     }
 
     /** call before startAudio (its AudioStart may arrive before the call returns) */

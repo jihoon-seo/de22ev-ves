@@ -32,8 +32,8 @@ final class Actions {
     static final String[] USER_SLOTS = { "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8" };
     static final String[] BEHAVIORS = { "ice", "classic" };
     static final String[] BEHAVIOR_NAMES = { "내연기관처럼", "예전 방식" };
-    static final String[] PROMPTS = { "duck", "pause" };
-    static final String[] PROMPTS_NAMES = { "작게 계속", "멈춤" };
+    static final String[] PROMPTS = { "duck", "pause", "voice" };
+    static final String[] PROMPTS_NAMES = { "작게 계속", "멈춤", "안내 음성 중에도 작게 (실험)" };
     static final String[] POPS = { "off", "soft", "strong" };
     static final String[] POPS_NAMES = { "끔", "약하게", "강하게" };
     static final String[] IDLE = { "10", "20", "30", "40", "50", "60" };

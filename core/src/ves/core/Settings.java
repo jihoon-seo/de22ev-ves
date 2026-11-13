@@ -17,8 +17,10 @@ import java.util.Map;
  *                braking when coasting); classic keeps the 0.1.x modes (P/N/R silent, mode decides)  default ice
  * sound          synth|i4t|v6|v8|i6|user1..user8: the procedural synth or a sound pack (built-in, or
  *                imported from USB into a user slot); a missing pack falls back to the synth   default synth
- * prompts        duck|pause: under navigation prompts and alerts play at 30 % or stop (calls, ringing and
- *                voice recognition always stop)  default duck
+ * prompts        duck|pause|voice: under navigation prompts and alerts play at 30 % or stop (calls, ringing and
+ *                voice recognition always stop); voice (experimental, 0.2.7) is duck and also plays at 30 % under
+ *                the stock navigation's voice, which takes our channel (AudioPolicy.VOICE_REGRAB_DELAY_MS)
+ *                default duck
  * pops           off|soft|strong: exhaust pops on lift-off (behaviour ice and classic)  default soft
  * fade_above     0 = off, else km/h (fade to silence over +20 km/h)  default 0
  *                (aliases fade_above_kph, fadeAboveKph; clamp 0..250)
@@ -29,7 +31,7 @@ public final class Settings {
     public static final String[] RESPONSES = {"soft", "normal", "sport"};
     public static final String[] BEHAVIORS = {"ice", "classic"};
     public static final String[] POPS = {"off", "soft", "strong"};
-    public static final String[] PROMPTS = {"duck", "pause"};
+    public static final String[] PROMPTS = {"duck", "pause", "voice"};
     public static final String[] SOUNDS = {"synth", "i4t", "v6", "v8", "i6", "user1", "user2", "user3", "user4", "user5", "user6", "user7", "user8"};
 
     public boolean enabled = false;

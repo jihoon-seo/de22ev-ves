@@ -195,5 +195,173 @@ final class ChannelTests {
                 TestMain.check(after >= 0.9 * before, "S15 level back: " + Math.round(after) + " of " + Math.round(before));
             }
         });
+
+        // ---------------- VR prompts=voice (experimental, off by default): after the AudioEnd that comes before a
+        // navigation voice, take the channel back VOICE_REGRAB_DELAY_MS into the voice and play at DUCK_GAIN
+
+        // VR1 with the flag off nothing changes: duck and pause close for the voice; voice is duck byte for byte
+        // wherever no end comes before a voice
+        l.add(new T("VR1_voice_flag_off") {
+            void run() {
+                String[] modes = {"duck", "pause"};
+                for (int i = 0; i < modes.length; i++) {
+                    Rig r = playing(modes[i]);
+                    TestMain.check("off".equals(r.c.voiceRegrabState()), "VR1 " + modes[i] + " state " + r.c.voiceRegrabState());
+                    voiceAfterEndCloses(r, "VR1 " + modes[i]);
+                }
+                Rig d = playing("duck"), v = playing("voice");
+                long t0 = d.t;
+                for (int k = 0; k < 1200; k++) {
+                    long t = d.t;
+                    if (t == t0 + 1000) { // a prompt with no end before it: ducked
+                        d.c.onYieldStart("navi", t);
+                        v.c.onYieldStart("navi", t);
+                    }
+                    if (t == t0 + 3000) {
+                        d.c.onYieldEnd("navi", t);
+                        v.c.onYieldEnd("navi", t);
+                    }
+                    if (t == t0 + 5000) { // a chime end: regrab
+                        d.c.ownTypeEvent(false, t);
+                        v.c.ownTypeEvent(false, t);
+                    }
+                    if (t == t0 + 8000) { // a call
+                        d.c.onYieldStart("btvoice", t);
+                        v.c.onYieldStart("btvoice", t);
+                    }
+                    if (t == t0 + 9000) {
+                        d.c.onYieldEnd("btvoice", t);
+                        v.c.onYieldEnd("btvoice", t);
+                    }
+                    d.step();
+                    v.step();
+                    TestMain.eq(v.lastAction, d.lastAction, "VR1 action at " + (t - t0));
+                    for (int j = 0; j < TestMain.BLOCK; j++)
+                        if (v.buf[j] != d.buf[j]) throw new AssertionError("VR1 voice differs from duck at " + (t - t0) + " ms");
+                }
+                TestMain.check(d.regrabs == 1, "VR1 the chime end regrabbed");
+            }
+        });
+        // VR2 the voice regrab: silent until 400 ms into the voice, one REGRAB, 30 % under it, full after it
+        l.add(new T("VR2_voice_regrab") {
+            void run() {
+                Rig r = playing("voice");
+                double before = rmsOver(r, 500);
+                TestMain.check("on".equals(r.c.voiceRegrabState()), "VR2 state " + r.c.voiceRegrabState());
+                long rg = voiceRegrab(r);
+                TestMain.check(rg >= 0, "VR2 no regrab during the voice");
+                TestMain.eq(r.zeros, r.n, "VR2 silent until the regrab");
+                TestMain.eq(r.closes, 0, "VR2 path kept open");
+                r.run(100);
+                double ducked = rmsOver(r, 1500);
+                TestMain.check(ducked > before * 0.2 && ducked < before * 0.45,
+                        "VR2 ducked to ~30%: " + Math.round(ducked) + " of " + Math.round(before));
+                r.c.onYieldEnd("navi", r.t);
+                r.run(400);
+                double after = rmsOver(r, 500);
+                TestMain.check(after > before * 0.8, "VR2 full again after the voice: " + Math.round(after) + " of " + Math.round(before));
+                TestMain.check(r.closes == 0 && r.opens == 0 && r.regrabs == 0, "VR2 no more path actions");
+                TestMain.check("on".equals(r.c.voiceRegrabState()), "VR2 still on: " + r.c.voiceRegrabState());
+                // closed by an end (here: the thrash guard after a chime regrab), the voice 20 ms later: the
+                // regrab opens the closed path
+                Rig c = playing("voice");
+                c.c.ownTypeEvent(false, c.t);
+                c.run(1000);
+                TestMain.eq(c.regrabs, 1, "VR2b chime regrab");
+                long e = c.t;
+                c.c.ownTypeEvent(false, e);
+                c.run(20);
+                TestMain.check(!c.c.isOpen(), "VR2b closed by the second end");
+                c.c.onYieldStart("navi", e + 20);
+                c.resetStats();
+                long rg2 = stepUntil(c, AudioPolicy.ACT_REGRAB, e + 1000);
+                TestMain.check(rg2 - (e + 20) >= AudioPolicy.VOICE_REGRAB_DELAY_MS && rg2 - (e + 20) <= AudioPolicy.VOICE_REGRAB_DELAY_MS + 10,
+                        "VR2b regrab 400 ms into the voice: " + (rg2 - e - 20));
+                TestMain.check(c.c.isOpen(), "VR2b open after the regrab");
+                c.run(500);
+                double d2 = rmsOver(c, 1000);
+                TestMain.check(d2 > before * 0.2 && d2 < before * 0.45, "VR2b ducked: " + Math.round(d2) + " of " + Math.round(before));
+            }
+        });
+        // VR3 any sign that the regrab cut the voice gives up for the rest of the process: refused, our channel ended
+        // within 2 s, or the voice ended within 300 ms of our startAudio. Later voices close as with duck.
+        l.add(new T("VR3_voice_give_up") {
+            void run() {
+                Rig a = playing("voice");
+                long rg = voiceRegrab(a);
+                TestMain.check(rg >= 0, "VR3a regrab");
+                a.c.regrabResult(false, rg);
+                TestMain.check(!a.c.isOpen(), "VR3a refused: not open");
+                TestMain.check(a.c.voiceRegrabState().startsWith("given up (refused"), "VR3a state " + a.c.voiceRegrabState());
+                a.run(1500);
+                a.c.onYieldEnd("navi", a.t);
+                a.run(3000);
+                voiceAfterEndCloses(a, "VR3a");
+
+                Rig b = playing("voice");
+                rg = voiceRegrab(b);
+                TestMain.check(rg >= 0, "VR3b regrab");
+                b.run(500);
+                long e = b.t;
+                b.c.ownTypeEvent(false, e);
+                TestMain.check(b.c.voiceRegrabState().startsWith("given up (channel ended"), "VR3b state " + b.c.voiceRegrabState());
+                long cl = stepUntil(b, AudioPolicy.ACT_CLOSE, e + 100);
+                TestMain.check(cl >= 0 && cl - e <= 20, "VR3b closed at once: " + (cl < 0 ? -1 : cl - e));
+                TestMain.eq(b.regrabs, 1, "VR3b no second regrab");
+                b.run(1000);
+                b.c.onYieldEnd("navi", b.t);
+                b.run(3000);
+                voiceAfterEndCloses(b, "VR3b");
+
+                Rig c = playing("voice");
+                rg = voiceRegrab(c);
+                TestMain.check(rg >= 0, "VR3c regrab");
+                c.run(200);
+                c.c.onYieldEnd("navi", c.t);
+                TestMain.check(c.c.voiceRegrabState().startsWith("given up (voice ended"), "VR3c state " + c.c.voiceRegrabState());
+                c.run(3000);
+                voiceAfterEndCloses(c, "VR3c");
+                c.c.setSettings(c.c.settings()); // a settings reload keeps the latch
+                TestMain.check(c.c.voiceRegrabState().startsWith("given up"), "VR3c latched: " + c.c.voiceRegrabState());
+            }
+        });
+    }
+
+    /**
+     * Our channel ends, NavigationVoiceStart 20 ms later; returns the time of the REGRAB block within 1 s of the
+     * voice start (-1: none). Stats are reset at the voice start.
+     */
+    static long voiceRegrab(Rig r) {
+        long t = r.t;
+        r.c.ownTypeEvent(false, t);
+        r.run(20);
+        r.c.onYieldStart("navi", t + 20);
+        r.resetStats();
+        long rg = stepUntil(r, AudioPolicy.ACT_REGRAB, t + 1020);
+        if (rg >= 0) {
+            long d = rg - (t + 20);
+            TestMain.check(d >= AudioPolicy.VOICE_REGRAB_DELAY_MS && d <= AudioPolicy.VOICE_REGRAB_DELAY_MS + 10,
+                    "regrab 400 ms after the voice start: " + d);
+        }
+        return rg;
+    }
+
+    /** the 0.2.6/T2 behaviour: an end, a voice 20 ms later: closed, silent, no regrab, back after the voice */
+    static void voiceAfterEndCloses(Rig r, String id) {
+        TestMain.check(r.c.isOpen(), id + " playing before");
+        long t = r.t;
+        r.c.ownTypeEvent(false, t);
+        r.run(20);
+        r.c.onYieldStart("navi", t + 20);
+        r.run(20);
+        TestMain.check(!r.c.isOpen(), id + " closed by t+40");
+        r.resetStats();
+        r.run(2000);
+        TestMain.check(r.regrabs == 0 && r.opens == 0 && r.zeros == r.n,
+                id + " silent and closed under the voice: regrabs " + r.regrabs + " opens " + r.opens + " audible " + (r.n - r.zeros));
+        r.c.onYieldEnd("navi", r.t);
+        r.resetStats();
+        r.run(1000);
+        TestMain.eq(r.opens, 1, id + " back after the voice");
     }
 }
