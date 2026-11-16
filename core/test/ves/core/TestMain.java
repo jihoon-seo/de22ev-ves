@@ -141,8 +141,10 @@ public final class TestMain {
     // +6 dB volume curve (S5, VC1) changes all three (0.2.6: ICE_SMOOTH=4afaa3acacd639b1 EV_FUTURE=54180ef1274a9222),
     // and again the makeup dropping at once on an onset (OS2; before: ICE_SMOOTH=41530d7a3f993c94
     // ICE_SHIFT=0d9a6b3857c4099c EV_FUTURE=4f69dc23df282e10)
-    // 0.2.10 launch slip climbing with speed (M3) changes ICE_SHIFT only (before: 615b8d00311dc3b0)
-    static final String O1_WANT = "ICE_SMOOTH=5017ab23cb7b714b ICE_SHIFT=119dcc9b0bf40b07 EV_FUTURE=91ac0fb068a924ea";
+    // 0.2.10 launch slip climbing with speed (M3) changes ICE_SHIFT only (before: 615b8d00311dc3b0); 0.2.11 makeup
+    // following the crest (OS3) changes all three (before: ICE_SMOOTH=5017ab23cb7b714b ICE_SHIFT=119dcc9b0bf40b07
+    // EV_FUTURE=91ac0fb068a924ea)
+    static final String O1_WANT = "ICE_SMOOTH=8bc532aceca0de2b ICE_SHIFT=f9402a1b797a3461 EV_FUTURE=e403de91492f37e5";
     static final int BLOCK = 220; // 10 ms
 
     /** the classic modes (0.1.x behaviour: P/N/R silent, mode decides stops and regen) */
@@ -403,6 +405,21 @@ public final class TestMain {
             x[i] = (short) (amp * Math.sin(2 * Math.PI * 4 * cyc));
         }
         return x;
+    }
+
+    /** rmsOf through the speaker stage's filters (OutputStage.filter): how loud it is on the speaker (0.2.11) */
+    static double speakerRmsOf(PackVoice v, double rpm, double load, double regen) {
+        float[] x = new float[SR / 2];
+        OutputStage st = new OutputStage(SR);
+        double ss = 0;
+        for (int pass = 0; pass < 2; pass++) {
+            v.renderRaw(x, x.length, rpm, load, regen);
+            for (float f : x) {
+                double y = st.filter(f);
+                if (pass == 1) ss += y * y;
+            }
+        }
+        return Math.sqrt(ss / x.length);
     }
 
     static double rmsOf(PackVoice v, double rpm, double load, double regen) {
@@ -2132,9 +2149,13 @@ public final class TestMain {
                     System.arraycopy(blk, 0, sweep, b * 220, 220);
                 }
                 double lo = 1e9, hi = 0, maxD = 0;
+                // the level on the speaker (0.2.11: loops are levelled through the speaker stage's filters)
+                float[] heard = new float[sweep.length];
+                OutputStage st = new OutputStage(SR);
+                for (int i = 0; i < sweep.length; i++) heard[i] = (float) st.filter(sweep[i]);
                 for (int k = 1; k < 100; k++) {
                     double ss = 0;
-                    for (int i = k * 2205; i < (k + 1) * 2205; i++) ss += sweep[i] * sweep[i];
+                    for (int i = k * 2205; i < (k + 1) * 2205; i++) ss += heard[i] * heard[i];
                     double rms = Math.sqrt(ss / 2205);
                     lo = Math.min(lo, rms);
                     hi = Math.max(hi, rms);
@@ -2142,7 +2163,8 @@ public final class TestMain {
                 for (int i = 1; i < sweep.length; i++) maxD = Math.max(maxD, Math.abs(sweep[i] - sweep[i - 1]));
                 double db = 20 * Math.log10(hi / lo);
                 System.out.println("    pack sweep: level spread " + Math.round(db * 100) / 100.0 + " dB, max step " + maxD);
-                check(db < 1.0, "G2 level spread " + db + " dB");
+                // 1.5 dB on the speaker (0.2.11): a pure tone pitch-shifted between loops slides along the high-pass slope
+                check(db < 1.5, "G2 level spread " + db + " dB");
                 double slope = 2 * Math.PI * 650 / SR * (12000 / 32768.0); // steepest loop (650 Hz) at its amplitude
                 check(maxD <= slope * 1.3, "G3 no clicks: max step " + maxD + " vs " + slope);
                 // G4 load picks the layer
@@ -2282,10 +2304,16 @@ public final class TestMain {
                 }
                 PackVoice v = new PackVoice(SR);
                 v.setPack(PackLoader.load(src));
-                double low = rmsOf(v, 900, 1, 0), high = rmsOf(v, 5000, 1, 0), offl = rmsOf(v, 900, 0, 0);
-                System.out.println("    level-matched pack: 900 rpm " + low + ", 5000 rpm " + high + ", off " + offl);
+                // on the speaker (0.2.11) at 1500 rpm (the -14 dB loop, 150 Hz): the 840 rpm loop (84 Hz, -22 dB) is under the
+                // stage's 120 Hz high-pass and runs into the gain cap
+                double low = speakerRmsOf(v, 1500, 1, 0), high = speakerRmsOf(v, 5000, 1, 0), offl = rmsOf(v, 900, 0, 0);
+                double rawLow = rmsOf(v, 900, 1, 0), rawHigh = rmsOf(v, 5000, 1, 0);
+                System.out.println("    level-matched pack (on the speaker): 1500 rpm " + low + ", 5000 rpm " + high + ", off " + offl
+                        + "; raw 900 rpm " + rawLow);
                 check(Math.abs(20 * Math.log10(low / high)) < 1.5, "G7 quiet loops brought up: " + low + " vs " + high);
-                near(low, 0.30, 0.06, "G7 about the synth's voice level (0.30 rms)");
+                check(rawLow > 0.2, "G7 the -22 dB loop brought up too: " + rawLow);
+                // (the raw level now follows the speaker weighting: LW1 checks the pack's average level)
+                check(rawHigh > 0.1, "G7 the 5000 rpm loop plays: " + rawHigh);
                 check(offl > 0.2, "G7 off layer too: " + offl);
             }
         });

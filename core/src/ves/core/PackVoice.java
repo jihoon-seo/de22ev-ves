@@ -24,7 +24,7 @@ public final class PackVoice {
      * loudness (idle level, load) as for the synth, the pack gives the timbre. Rendered idle loops are much
      * quieter than full-load ones (12-18 dB under the synth in the first comparison renders).
      */
-    static final double LOOP_RMS = 0.30, MAX_LOOP_GAIN = 16;
+    static final double LOOP_RMS = 0.30, MAX_LOOP_GAIN = 16, MAX_EMPHASIS_FIX = 2;
 
     private final OutputStage stage;
     private Pops pops;
@@ -61,14 +61,48 @@ public final class PackVoice {
         popEvents = p != null && p.events[Pack.POP].length + p.events[Pack.BUBBLE].length > 0;
     }
 
-    static double[] gains(Pack.Loop[] L) {
-        double[] g = new double[L.length];
-        for (int k = 0; k < L.length; k++) {
-            double ss = 0;
-            short[] s = L[k].pcm;
-            for (short v : s) ss += (double) v * v;
-            double rms = Math.sqrt(ss / Math.max(1, s.length)) / 32768.0;
-            g[k] = rms < 1e-6 ? 0 : Math.min(MAX_LOOP_GAIN, LOOP_RMS / rms);
+    /**
+     * per layer, per loop: LOOP_RMS / raw RMS, times (the pack's geometric-mean speaker emphasis / the loop's own),
+     * where a loop's emphasis is its RMS through the speaker stage's filters over its raw RMS (0.2.11). So every loop
+     * is equally loud on the speaker (a darker loaded layer was quieter than a brighter off layer at the same gain)
+     * while the pack's average level stays what raw-RMS levelling gave. The correction is held to +-6 dB
+     * (MAX_EMPHASIS_FIX: the built-in packs need at most about 1.2 dB per layer; a loop of pure low rumble the speaker
+     * can't play is not chased), and the gain to MAX_LOOP_GAIN. Layers that are the same array share one gain array.
+     */
+    static double[][] gains(Pack.Loop[][] layers, int sampleRate) {
+        double[][] raw = new double[layers.length][], emph = new double[layers.length][];
+        double logSum = 0;
+        int n = 0;
+        for (int k = 0; k < layers.length; k++) {
+            if (k > 0 && layers[k] == layers[k - 1]) continue;
+            Pack.Loop[] L = layers[k];
+            raw[k] = new double[L.length];
+            emph[k] = new double[L.length];
+            for (int i = 0; i < L.length; i++) {
+                double ss = 0;
+                short[] s = L[i].pcm;
+                for (short v : s) ss += (double) v * v;
+                raw[k][i] = Math.sqrt(ss / Math.max(1, s.length)) / 32768.0;
+                double sp = OutputStage.speakerRms(s, sampleRate);
+                if (raw[k][i] >= 1e-6 && sp > 1e-9) {
+                    emph[k][i] = sp / raw[k][i];
+                    logSum += Math.log(emph[k][i]);
+                    n++;
+                }
+            }
+        }
+        double mean = n == 0 ? 1 : Math.exp(logSum / n);
+        double[][] g = new double[layers.length][];
+        for (int k = 0; k < layers.length; k++) {
+            if (k > 0 && layers[k] == layers[k - 1]) {
+                g[k] = g[k - 1];
+                continue;
+            }
+            g[k] = new double[layers[k].length];
+            for (int i = 0; i < g[k].length; i++)
+                g[k][i] = raw[k][i] < 1e-6 || emph[k][i] <= 0 ? 0
+                        : Math.min(MAX_LOOP_GAIN, LOOP_RMS / raw[k][i]
+                                * Math.max(1 / MAX_EMPHASIS_FIX, Math.min(MAX_EMPHASIS_FIX, mean / emph[k][i])));
         }
         return g;
     }

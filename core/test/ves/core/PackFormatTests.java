@@ -370,13 +370,16 @@ final class PackFormatTests {
         return hex(out.digest(), 8);
     }
 
-    // 0.2.7's output for two-layer packs (sine aligned, sine free-running, no off layer, marked level -6)
-    static final String[] PK0A_WANT = {"f20eec7431596b72/d603ed14cc2c58f8", "b3f800d29699d8bd/bc0524672e4dad7b",
-            "8fbab212fc1dd547/8e47dc35bcb4cb5e", "3a2e16408d8d6e03/1630fc1f4b3caf93"};
-    static final String[] PK0B_WANT = {"43e43689eb5ad2ff", "4d804ce4264a7e8a", "5a833ef42472bbcf", "585485a6e0469c42"};
+    // two-layer packs' output (sine aligned, sine free-running, no off layer, marked level -6): 0.2.11's speaker-
+    // weighted loop levels (LW1) and crest-following makeup (OS3) change it on purpose (0.2.7-0.2.10: f20eec7431596b72/d603ed14cc2c58f8
+    // b3f800d29699d8bd/bc0524672e4dad7b 8fbab212fc1dd547/8e47dc35bcb4cb5e 3a2e16408d8d6e03/1630fc1f4b3caf93; pops
+    // 43e43689eb5ad2ff 4d804ce4264a7e8a 5a833ef42472bbcf 585485a6e0469c42)
+    static final String[] PK0A_WANT = {"72f1b30c0cfa54fb/39c0ba5da87cba04", "d80e9227760079fc/bf50639f93bd4ca1",
+            "78740c251d1f0f13/5be83807f06ab124", "87a09737f6625ae9/ab665f914aa45e94"};
+    static final String[] PK0B_WANT = {"d09553f9995d9bf9", "bbf1e2a88baeb77a", "002b143e1e7d05bf", "78d38589fe5e40c8"};
 
     static void add(List<TestMain.T> l) {
-        // PK0 two-layer packs play exactly as 0.2.7 did: the load layers, events and shift sounds leave them alone
+        // PK0 two-layer packs: the load layers, events and shift sounds leave them alone (pinned output)
         l.add(new TestMain.T("PK0a_two_layer_output_pinned") {
             void run() throws Exception {
                 Pack[] ps = pinPacks();
@@ -464,11 +467,13 @@ final class PackFormatTests {
                 Pack p = loadOk(threeLayers(null));
                 double[] off = layerAmps(p, 0, 0), par = layerAmps(p, loadFor(0.45), 0), high = layerAmps(p, 1, 0);
                 double a = high[2];
-                System.out.println("    solo amplitudes off " + off[0] + " partial " + par[1] + " high " + a);
+                // each layer's solo amplitude is its tone amplitude x its 2100 rpm loop gain (0.2.11: speaker-weighted)
+                double rPar = p.gains[1][1] * 6000 / (p.gains[2][1] * 3000), rOff = p.gains[0][1] * 9000 / (p.gains[2][1] * 3000);
+                System.out.println("    solo amplitudes off " + off[0] + " partial " + par[1] + " high " + a + " (gain ratios " + rOff + ", " + rPar + ")");
                 check(a > 0.3, "the top layer plays at load 1: " + a);
-                near(par[1], a, 0.02 * a, "e = 0.45: the partial layer alone");
+                near(par[1], a * rPar, 0.02 * a * rPar, "e = 0.45: the partial layer alone");
                 check(par[0] < 1e-3 * a && par[2] < 1e-3 * a, "e = 0.45: off " + par[0] + " high " + par[2] + " (< -60 dB)");
-                near(off[0], a, 0.02 * a, "load 0: the off layer");
+                near(off[0], a * rOff, 0.02 * a * rOff, "load 0: the off layer");
                 check(off[1] < 1e-3 * a && off[2] < 1e-3 * a, "load 0: off only (" + off[1] + ", " + off[2] + ")");
                 check(high[0] < 1e-3 * a && high[1] < 1e-3 * a, "load 1: high only");
                 double[] mid = layerAmps(p, loadFor(0.725), 0);
@@ -476,7 +481,7 @@ final class PackFormatTests {
                 near(mid[2] / a, 0.5, 0.01, "e = 0.725: high at half");
                 check(mid[0] < 1e-3 * a, "e = 0.725: no off layer " + mid[0]);
                 double[] rg = layerAmps(p, 1, 1);
-                near(rg[0], a, 0.02 * a, "regen 1: the off layer");
+                near(rg[0], a * rOff, 0.02 * a * rOff, "regen 1: the off layer");
                 check(rg[1] < 1e-3 * a && rg[2] < 1e-3 * a, "regen 1: off only");
                 // a 10 s load ramp at 3000 rpm through layers of the same tone: no clicks, level held
                 Pack same = loadOk(layered(new String[] {"off", "0.45", "on"}, new int[] {4, 4, 4}, new int[] {8, 8, 8},
@@ -501,6 +506,48 @@ final class PackFormatTests {
                 System.out.println("    load ramp: level spread " + Math.round(db * 100) / 100.0 + " dB, max step " + maxD);
                 check(db < 1.0, "ramp level spread " + db + " dB");
                 check(maxD <= 1.3 * slope, "ramp max step " + maxD + " vs " + slope);
+            }
+        });
+
+        // LW1 (0.2.11) loops are levelled by their loudness through the speaker stage (120 Hz high-pass, +11 dB on
+        // 400-2500 Hz), not by raw RMS: a darker loaded layer was quieter than the off layer at the same gain (S2000
+        // Baked at 90 km/h: pedal 40 % -6.5 dBFS vs coasting -5.5 at the output ceiling, about 1.2 dB from the timbre
+        // alone below it). Here off is order 30 (525 Hz at 2100 rpm) and on is order 8 (140 Hz) at the same amplitude:
+        // the same output RMS at load 0 and load 1 within 1 dB, and the pack's average level is kept.
+        l.add(new TestMain.T("LW1_speaker_weighted_loop_levels") {
+            double outRms(Pack p, double load) {
+                PackVoice v = new PackVoice(SR);
+                v.setPack(p);
+                EngineParams e = new EngineParams();
+                e.rpm = 2100;
+                e.load = load;
+                short[] y = new short[SR];
+                for (int k = 0; k < 2; k++) v.render(y, 0, y.length, e, 0.25, 1); // the second second: settled
+                double ss = 0;
+                for (short x : y) ss += (double) x * x;
+                return Math.sqrt(ss / y.length);
+            }
+
+            void run() throws Exception {
+                Pack p = loadOk(layered(new String[] {"off", "on"}, new int[] {4, 4}, new int[] {30, 8}, new double[] {6000, 6000}, null));
+                double off = outRms(p, 0), on = outRms(p, 1), d = 20 * Math.log10(on / off);
+                System.out.println("    output rms off " + Math.round(off) + " on " + Math.round(on) + " (" + Math.round(d * 10) / 10.0 + " dB)");
+                check(Math.abs(d) <= 1, "loaded (dark) vs off (bright) layer through the speaker: " + d + " dB");
+                // the pack's geometric-mean loop gain is the raw-RMS one: the overall level stays
+                double lg = 0, lr = 0;
+                int n = 0;
+                for (int k = 0; k < p.layers.length; k++)
+                    for (int i = 0; i < p.layers[k].length; i++) {
+                        double ss = 0;
+                        for (short x : p.layers[k][i].pcm) ss += (double) x * x;
+                        double raw = Math.sqrt(ss / p.layers[k][i].pcm.length) / 32768.0;
+                        lg += Math.log(p.gains[k][i]);
+                        lr += Math.log(PackVoice.LOOP_RMS / raw);
+                        n++;
+                    }
+                // exact without the +-6 dB clamp; here the 70 Hz loop (under the high-pass) is held by it
+                check(Math.abs(20 * (lg - lr) / n / Math.log(10)) <= 1.5, "geometric-mean loop gain kept within 1.5 dB: "
+                        + 20 * (lg - lr) / n / Math.log(10) + " dB");
             }
         });
 

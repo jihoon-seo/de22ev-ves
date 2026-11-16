@@ -794,9 +794,9 @@ public final class ResynthTest {
                     for (int i : new int[] {0, 7, 14, 19}) {
                         ves.core.Pack.Loop a = p.on[i], b = p.on[i + 1];
                         double mid = Math.sqrt((double) a.rpm * b.rpm);
-                        double[] ga = gains(a), gb = gains(b);
-                        ga[0] *= p.level; // the pack's level trim, as PackVoice.setPack applies it
-                        gb[0] *= p.level;
+                        // the gains the pack plays them with (speaker-weighted since 0.2.11, the level trim in)
+                        double[] og = new ves.core.PackVoiceProbe().onGains(p);
+                        double[] ga = {og[i]}, gb = {og[i + 1]};
                         double[] ra = renderAt(p, a.rpm), rb = renderAt(p, b.rpm), rm = renderAt(p, mid);
                         double dip = 20 * Math.log10(rms(rm) / Math.sqrt(0.5 * (rms(ra) * rms(ra) + rms(rb) * rms(rb))));
                         worstDip = Math.max(worstDip, -dip);
@@ -1040,7 +1040,7 @@ public final class ResynthTest {
             void run() throws Exception {
                 ves.core.Pack p = loadPack(fixturePack(true));
                 double steep = 0;
-                double[] g = new ves.core.PackVoiceProbe().gains(p.on);
+                double[] g = new ves.core.PackVoiceProbe().onGains(p);
                 for (int k = 0; k < p.on.length; k++) {
                     short[] s = p.on[k].pcm;
                     int st = 0;
@@ -1062,9 +1062,10 @@ public final class ResynthTest {
                 for (int i = 1; i < total; i++) maxStep = Math.max(maxStep, Math.abs(y[i] - y[i - 1]));
                 int win = 2205;
                 double lo = 999, hi = -999;
+                float[] heard = new ves.core.PackVoiceProbe().speaker(y); // 0.2.11: loops are levelled on the speaker
                 for (int w = 1; w + 1 < total / win; w++) { // skip the first window (start-up)
                     double ss = 0;
-                    for (int i = w * win; i < (w + 1) * win; i++) ss += y[i] * y[i];
+                    for (int i = w * win; i < (w + 1) * win; i++) ss += heard[i] * heard[i];
                     double dbv = 10 * Math.log10(ss / win);
                     lo = Math.min(lo, dbv);
                     hi = Math.max(hi, dbv);
@@ -1095,9 +1096,10 @@ public final class ResynthTest {
                         System.arraycopy(blk, 0, y, i, Math.min(16, total - i));
                     }
                     double lo = 999, hi = -999;
+                    float[] heard = new ves.core.PackVoiceProbe().speaker(y); // the level on the speaker (0.2.11)
                     for (int w = 1; w + 1 < total / 2205; w++) {
                         double ss = 0;
-                        for (int i = w * 2205; i < (w + 1) * 2205; i++) ss += y[i] * y[i];
+                        for (int i = w * 2205; i < (w + 1) * 2205; i++) ss += heard[i] * heard[i];
                         double dbv = 10 * Math.log10(ss / 2205);
                         lo = Math.min(lo, dbv);
                         hi = Math.max(hi, dbv);

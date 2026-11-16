@@ -210,7 +210,7 @@ final class LevelTests {
                 PackVoice ref = new PackVoice(SR);
                 ref.setPack(p);
                 double before = TestMain.rmsOf(ref, 2520, 1, 0);
-                near(before, PackVoice.LOOP_RMS, 0.01, "a loaded loop plays at the voice level");
+                check(before > 0.1, "a loaded loop plays: " + before);
                 for (Pack.Loop lp : p.on) for (int i = 0; i < lp.pcm.length; i++) lp.pcm[i] /= 2;
                 for (Pack.Loop lp : p.off) if (p.off != p.on) for (int i = 0; i < lp.pcm.length; i++) lp.pcm[i] /= 2;
                 PackVoice v = new PackVoice(SR);
@@ -315,6 +315,37 @@ final class LevelTests {
                 }
                 System.out.println("    onset: clamped m=1 " + clamps[0] + " m=3 " + clamps[1] + ", max " + mx[1]);
                 check(clamps[1] <= clamps[0], "the makeup pushes an onset into the hard limit: " + clamps[1] + " > " + clamps[0]);
+            }
+        });
+
+        // ---------------- OS3 (0.2.11): at the makeup's ceiling a peakier sound is as loud as a smoother one of the same
+        // level. The makeup lifted every sound's peak to TPK, so the RMS followed the crest factor: S2000 Baked's loaded
+        // layer (crest 9.6 dB through the speaker filters) played 1 dB under its off layer (8.5 dB) at 90 km/h, volume
+        // 100, speed_boost high. Two signals with the same spectrum (400-1600 Hz harmonics), in phase (peaky) and with
+        // spread phases (smooth): their outputs within 0.5 dB at makeup 3, never the hard limit, |y| <= 1.
+        l.add(new TestMain.T("OS3_makeup_follows_rms") {
+            double[] run(double[] phase) {
+                OutputStage st = new OutputStage(SR);
+                double ss = 0, mx = 0;
+                for (int i = 0; i < 3 * SR; i++) {
+                    double x = 0;
+                    for (int h = 1; h <= 4; h++) x += 0.06 * Math.sin(2 * Math.PI * 400 * h * i / SR + phase[h - 1]);
+                    double y = st.process(x, 3);
+                    if (i >= 2 * SR) {
+                        ss += y * y;
+                        mx = Math.max(mx, Math.abs(y));
+                    }
+                }
+                return new double[] {Math.sqrt(ss / SR), mx, st.clamped()};
+            }
+
+            void run() {
+                double[] peaky = run(new double[] {0, 0, 0, 0}), smooth = run(new double[] {0, 1.9, 4.1, 0.7});
+                double d = db(peaky[0] / smooth[0]);
+                System.out.println("    makeup 3: peaky rms " + peaky[0] + " smooth " + smooth[0] + " (" + Math.round(d * 100) / 100.0 + " dB)");
+                check(Math.abs(d) <= 0.5, "peaky vs smooth at the makeup ceiling: " + d + " dB");
+                check(peaky[1] <= 1 && smooth[1] <= 1, "|y| <= 1: " + peaky[1] + " " + smooth[1]);
+                check(peaky[2] == 0 && smooth[2] == 0, "hard limit reached: " + peaky[2] + " " + smooth[2]);
             }
         });
 

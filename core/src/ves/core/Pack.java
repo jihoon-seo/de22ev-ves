@@ -78,13 +78,9 @@ public final class Pack {
         this.layers = layers;
         on = layers[layers.length - 1];
         off = layers[0];
-        gains = new double[layers.length][];
+        gains = PackVoice.gains(layers, PackLoader.RATE);
         for (int k = 0; k < layers.length; k++) {
-            if (k > 0 && layers[k] == layers[k - 1]) {
-                gains[k] = gains[k - 1];
-                continue;
-            }
-            gains[k] = PackVoice.gains(layers[k]);
+            if (k > 0 && gains[k] == gains[k - 1]) continue;
             for (int i = 0; i < gains[k].length; i++) gains[k][i] *= level;
         }
     }
