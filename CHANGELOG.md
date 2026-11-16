@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.11
+
+From the drives with 0.2.10 (2026-11-14 to 16):
+
+- Fix: above about 80 km/h (volume 100, speed boost high) the sound got a little quieter when you pressed
+  the pedal and louder when you lifted off. Everything there is lifted to the output's ceiling, where
+  loudness follows the crest factor, and the loaded sound is peakier (S2000 Baked: 9.6 dB against 8.5 dB
+  through the speaker filters). Two changes:
+  - Loops are now levelled by their loudness through the speaker stage (120 Hz high-pass, +11 dB on
+    400-2500 Hz) instead of by raw RMS, keeping each pack's average level. A darker loaded layer is no
+    longer quieter than the off layer at the same gain. Below the ceiling, pedal-on is now clearly louder
+    than coasting (volume 50, boost high, 90 km/h: +2.7 dB, was +1.7).
+  - The output stage's makeup now follows the crest factor, so at the ceiling coasting, cruising and
+    pulling are within 0.3 dB of each other (S2000 Baked at 90 km/h: -6.1 / -5.9 / -6.4 dBFS; before,
+    pulling was 1 dB under coasting).
+- The USB kit's switch to `status` and the launch rpm rising from standstill are confirmed in the car.
+
 ## 0.2.10
 
 From the drive with 0.2.9 (2026-11-13) and its launch trace:
