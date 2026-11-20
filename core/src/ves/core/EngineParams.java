@@ -14,6 +14,9 @@ public final class EngineParams {
     /** ICE_SHIFT 1..6, other profiles 0 */
     public int virtualGear;
     public boolean shifting;
+    /** the rpm the gauge's shift light counts up to (0.2.12): ICE_SHIFT's upshift point for the current gear (NaN in
+     *  6th), elsewhere a fixed point near the top of the scale */
+    public double shiftRpm = Double.NaN;
     /** short state token: not_ready, park, neutral, reverse, gear_none, stale, stopped_silent, idle, drive, regen,
      *  accel_only_wait, fade_speed */
     public String reason = "stale";
@@ -26,6 +29,7 @@ public final class EngineParams {
         speedKph = o.speedKph;
         virtualGear = o.virtualGear;
         shifting = o.shifting;
+        shiftRpm = o.shiftRpm;
         reason = o.reason;
     }
 

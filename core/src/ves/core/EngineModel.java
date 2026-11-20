@@ -48,6 +48,10 @@ public final class EngineModel {
     private long lastNow;
 
     private double spd1, spd2, ev1, ev2, ped1, ped2, kwn, load, regen, gain, rpm = IDLE_RPM, kickRef;
+    /** EngineParams.shiftRpm: display only, never read back into the model */
+    private double shiftNow = Double.NaN;
+    /** the shift light's point where there is no gearbox: just under the 6500 redline, or near EV_FUTURE's 9000 top */
+    static final double SHIFT_LIGHT_ICE = MAX_RPM - 500, SHIFT_LIGHT_EV = 8500;
     private boolean stopped = true;
     private long lastAccelActive = Long.MIN_VALUE / 4;
 
@@ -277,9 +281,11 @@ public final class EngineModel {
             rpm += (target - rpm) * alpha(dt, target > rpm ? 0.15 : 0.5);
             gear = 1;
             shifting = false;
+            shiftNow = SHIFT_LIGHT_ICE;
         } else if (profile == Profile.EV_FUTURE) {
             double target = Math.min(9000, 1000 + 50 * ev2);
             rpm += (target - rpm) * alpha(dt, 0.15);
+            shiftNow = SHIFT_LIGHT_EV;
         } else if (profile == Profile.ICE_SHIFT) {
             loadMul = gearbox(nowMs, dt, sp, L, pRaw);
             vg = gear;
@@ -288,6 +294,7 @@ public final class EngineModel {
             double target = IDLE_RPM + 2600 * L + sp * (14 + 16 * L);
             target = clamp(target, IDLE_RPM, MAX_RPM);
             rpm += (target - rpm) * alpha(dt, target > rpm ? tauRpmUp : 0.45);
+            shiftNow = SHIFT_LIGHT_ICE;
         }
         if (profile != Profile.ICE_SHIFT && !(ice && (parked || reversing))) {
             // keep the gearbox consistent for a later switch to ICE_SHIFT
@@ -302,6 +309,7 @@ public final class EngineModel {
         out.speedKph = sp;
         out.virtualGear = vg;
         out.shifting = sh;
+        out.shiftRpm = shiftNow;
         out.reason = reason;
     }
 
@@ -337,6 +345,7 @@ public final class EngineModel {
         } else {
             rpm += (target - rpm) * alpha(dt, 0.06);
         }
+        shiftNow = gear < 6 ? upRpm : Double.NaN; // the upshift rule above, for the gear it is in now
         return loadMul;
     }
 

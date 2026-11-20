@@ -141,6 +141,36 @@ public final class VesCore {
         }
     }
 
+    /**
+     * The gauge's line (vesd LIVE, 0.2.12), key=value, "-" unknown: rpm gear sh(ifting) sel(ector code) kph kw
+     * shift(rpm) dm (drive-mode raw) profile state red(line) max (scale). Parsed by ves.gauge.LiveData. Call under the
+     * core lock, as status().
+     */
+    public String liveLine() {
+        EngineParams p = params;
+        long now = lastNow;
+        boolean ev = current == Profile.EV_FUTURE;
+        StringBuilder b = new StringBuilder(160);
+        b.append("rpm=").append(Math.round(p.rpm));
+        b.append(" gear=").append(p.virtualGear);
+        b.append(" sh=").append(p.shifting ? 1 : 0);
+        b.append(" sel=").append(code(signals.get(Sig.GEAR, now)));
+        b.append(" kph=").append(EngineParams.r2(p.speedKph));
+        double kw = signals.get(Sig.MOTOR_KW, now);
+        b.append(" kw=").append(Double.isNaN(kw) ? "-" : EngineParams.r2(kw));
+        b.append(" shift=").append(Double.isNaN(p.shiftRpm) ? "-" : String.valueOf(Math.round(p.shiftRpm)));
+        b.append(" dm=").append(code(signals.get(Sig.DRIVE_MODE, now)));
+        b.append(" profile=").append(current.key());
+        b.append(" state=").append(p.reason);
+        b.append(" red=").append(ev ? "-" : String.valueOf(Math.round(EngineModel.MAX_RPM)));
+        b.append(" max=").append(ev ? 9000 : 8000);
+        return b.toString();
+    }
+
+    private static String code(double v) {
+        return Double.isNaN(v) ? "-" : String.valueOf((int) v);
+    }
+
     /** the launch-trace rows collected since the last call, one per line ("" when none); vesd logs them */
     public String takeTrace() {
         if (trace.length() == 0) return "";
@@ -155,7 +185,15 @@ public final class VesCore {
     private long traceT0 = -1, traceNext;
     private boolean traceArmed = true;
 
+    private double lastDriveMode = Double.NaN;
+
     private void trace(long now) {
+        // drive-mode raw changes (0.2.12): which value is ECO / NORMAL / SPORT is not known yet (ves.gauge.Theme)
+        double dm = signals.get(Sig.DRIVE_MODE, now);
+        if (!Double.isNaN(dm) && dm != lastDriveMode) {
+            lastDriveMode = dm;
+            if (trace.length() < 16384) trace.append("drive_mode raw=").append((int) dm).append('\n');
+        }
         double ped = signals.get(Sig.PEDAL_PCT, now), gs = signals.get(Sig.GEAR, now);
         boolean standing = params.speedKph < 1.0, footOff = Double.isNaN(ped) || ped <= 3;
         if (traceT0 < 0) {
