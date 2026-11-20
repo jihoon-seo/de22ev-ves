@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.12
+
+- New: an RPM + gear gauge in the app. A strip at the top of the main screen shows the virtual rpm, the gear,
+  the speed, shift lamps and a power / regen bar; tapping it opens a full-width gauge screen (tap again to go
+  back).
+  - The rpm and gear are the ones the engine sound itself uses (vesd's model): in the virtual-shift profile the
+    gear shows as D1-D6 with a 1-6 strip; the other profiles show the selector letter only. EV FUTURE gets its
+    own 0-9 scale without a red zone.
+  - The shift lamps fill from 80 % of the model's upshift point for the current gear and flash at it (near the
+    red zone in the profiles without virtual shifts).
+  - The colours are to follow the car's drive mode (ECO / NORMAL / SPORT). Which drive-mode value is which is not
+    known yet, so the gauge stays neutral for now and vesd's log records every change ("drive_mode raw=N"): a
+    drive through the three modes will fill the table.
+  - The app asks vesd 10 times a second only while a gauge is on screen; the needle is smoothed between those
+    updates and the static parts are drawn once.
+- The sound is unchanged (the engine model only reports one more number, its upshift point).
+
 ## 0.2.11
 
 From the drives with 0.2.10 (2026-11-14 to 16):
