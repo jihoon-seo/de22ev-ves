@@ -157,8 +157,10 @@ public final class GaugeRenderer {
             p.text("RPM", lx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
             float rx = g.w - lx;
             String mode = Theme.name(theme);
-            p.color(mode.length() > 0 ? accent : DIM);
-            p.text(mode.length() > 0 ? mode : "-", rx, g.cy, r * 0.17f, true, true, 0);
+            if (mode.length() > 0) { // unknown drive mode: just the profile
+                p.color(accent);
+                p.text(mode, rx, g.cy, r * 0.17f, true, true, 0);
+            }
             p.color(DIM);
             p.text(profileName(d.profile), rx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
         }
@@ -178,8 +180,9 @@ public final class GaugeRenderer {
                 big = r * 0.11f;
                 small = r * 0.075f;
             }
+            boolean drive = GaugeMath.gearLabel(d.profile, d.selector, d.gear).startsWith("D");
             for (int k = 1; k <= 6; k++) {
-                boolean on = k == d.gear;
+                boolean on = drive && k == d.gear; // P, R, N: the strip stays dim
                 p.color(on ? accent : DIM);
                 p.text(String.valueOf(k), sx + (k - 1) * step, sy, on ? big : small, on, true, 0);
             }
@@ -192,9 +195,10 @@ public final class GaugeRenderer {
             int c = flash ? RED : i < 3 ? GREEN : i < 6 ? AMBER : RED;
             p.color(on ? c : LAMP_OFF);
             float lx, ly, lr;
-            if (g.compact) {
+            if (g.compact) { // a cluster at the start of the bar, not spread over its whole width
                 float[] b = bar(g);
-                lx = b[0] + (b[1] - b[0]) * (i + 0.5f) / LAMPS;
+                float span = Math.min(b[1] - b[0], g.h * 2.6f);
+                lx = b[0] + span * (i + 0.5f) / LAMPS;
                 ly = g.h * 0.20f;
                 lr = g.h * 0.045f;
             } else {

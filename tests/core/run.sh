@@ -118,5 +118,11 @@ echo "METRICS navi duck $M"
 assert "$(num "$M" yield_closed_ms) == 0" "navi duck: path closed under the prompt"
 assert "$(num "$M" yield_audible_ms) > 3000" "navi duck: not audible under the prompt"
 
+# the gauge (0.2.12) drawn on the PC through the same renderer: every state at 1920x720 and the compact strip
+"$JAVA" -Djava.awt.headless=true -cp "$CLS" ves.tools.GaugePreview "$WORK/gauge" > "$WORK/gauge.txt" 2>&1 || fail "gauge preview"
+N=$(ls "$WORK/gauge" | grep -c '\.png$')
+[ "$N" = 15 ] || fail "gauge preview: $N PNGs (want 14 + sheet)"
+echo "PASS gauge preview: $N PNGs"
+
 echo "CORE TESTS PASSED"
 exit 0
