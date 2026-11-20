@@ -3,6 +3,7 @@ package ves.app;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
@@ -37,6 +38,7 @@ public final class MainActivity extends Activity {
     private Button power, sound, profile, pops, prompts, idle, regen, response, speedBoost;
     private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
+    private LivePoller gaugePoller; // 0.2.12: the compact gauge at the top; a tap opens GaugeActivity
 
     @Override
     protected void onCreate(Bundle b) {
@@ -51,6 +53,16 @@ public final class MainActivity extends Activity {
         TextView title = text(root, "가상 엔진 사운드", 30, Color.WHITE);
         title.setPadding(0, 0, 0, 8);
         status = text(root, "…", 20, Color.rgb(150, 200, 255));
+        GaugeView gauge = new GaugeView(this);
+        gauge.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                startActivity(new Intent(MainActivity.this, GaugeActivity.class));
+            }
+        });
+        LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 300);
+        glp.setMargins(0, 8, 0, 12);
+        root.addView(gauge, glp);
+        gaugePoller = new LivePoller(gauge);
 
         LinearLayout row = row(root);
         power = big(row, "켜기", 2);
@@ -103,12 +115,14 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         visible = true;
+        gaugePoller.start();
         refresh();
     }
 
     @Override
     protected void onPause() {
         visible = false;
+        gaugePoller.stop();
         super.onPause();
     }
 

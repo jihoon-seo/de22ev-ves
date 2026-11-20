@@ -131,7 +131,7 @@ for d in packs/*/; do
     cp "$d"pack.txt "$d"*.wav "$T/jar/packs/$s/" 2> /dev/null
 done
 "$PY" -I tools/zipdir.py "$(native "$T/jar")" "$(native "$T/mod/vesd.jar")"
-mapfile -t S < <({ find core/src/ves/core core/src/ves/tools -name '*.java'; echo android/src/ves/android/PackStore.java;
+mapfile -t S < <({ find core/src/ves/core core/src/ves/tools core/src/ves/gauge -name '*.java'; echo android/src/ves/android/PackStore.java;
     echo tests/packs/java/ves/android/BuiltinPacks.java; } | while IFS= read -r f; do native "$f"; done)
 if "$JAVAC" --release 8 -Xlint:-options -nowarn -encoding UTF-8 -d "$(native "$T/cls")" "${S[@]}"; then
     "$JAVA" -cp "$(native "$T/cls")" ves.android.BuiltinPacks "$(native "$T/mod")" "$(native "$ROOT/packs")" || FAILED=$((FAILED + 1))

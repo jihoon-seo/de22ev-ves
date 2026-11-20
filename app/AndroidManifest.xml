@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.jihoonseo.ves"
-    android:versionCode="15"
-    android:versionName="0.2.11">
+    android:versionCode="16"
+    android:versionName="0.2.12">
 
     <uses-sdk android:minSdkVersion="19" android:targetSdkVersion="19" />
 
@@ -17,6 +17,9 @@
         </activity>
         <activity android:name="ves.app.ProbeActivity" android:label="@string/probe_name"
             android:screenOrientation="landscape" />
+        <!-- 0.2.12: the full-width RPM + gear gauge, opened from the gauge strip on the main screen -->
+        <activity android:name="ves.app.GaugeActivity" android:label="@string/app_name"
+            android:screenOrientation="landscape" android:theme="@android:style/Theme.Holo.NoActionBar.Fullscreen" />
         <!-- the side-panel page (mod.json provides.panel) and the star key / widget actions -->
         <receiver android:name="ves.app.VesWidget" android:label="@string/app_name">
             <intent-filter>
