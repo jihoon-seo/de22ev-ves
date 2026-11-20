@@ -75,6 +75,7 @@ final class Control implements Runnable {
         String[] a = line.split("\\s+");
         String cmd = a.length > 0 ? a[0].toUpperCase() : "";
         if (cmd.equals("STATUS")) return "ok\n" + d.status();
+        if (cmd.equals("LIVE")) return "ok\n" + d.live() + "\n"; // the app's gauge, 10 times a second while shown
         if (cmd.equals("RELOAD")) {
             d.loadSettings(false);
             return "ok\n" + d.status();

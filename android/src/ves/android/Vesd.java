@@ -532,6 +532,13 @@ public final class Vesd implements MicomAudio.Events {
                 + fd.underruns());
     }
 
+    /** the gauge's line (VesCore.liveLine): built under the core lock, a few microseconds next to the audio block */
+    String live() {
+        synchronized (core) {
+            return core.liveLine();
+        }
+    }
+
     String status() {
         StringBuilder b = new StringBuilder();
         synchronized (core) {
