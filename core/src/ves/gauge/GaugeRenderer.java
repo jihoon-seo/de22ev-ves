@@ -300,7 +300,7 @@ public final class GaugeRenderer {
         boolean over = NavText.over(d);
         // the left-hand zone, above the rpm readout (drawDynamic): sign, camera line, current speed
         float r = g.r, zone = g.cx - r * 1.12f, rx = zone / 2;
-        float rs = Math.min(r * 0.20f, zone * 0.22f), sy = g.cy - r * 0.62f;
+        float rs = Math.min(r * 0.20f, zone * 0.22f), sy = g.cy - r * 0.66f;
         int lim = d.section == 1 || "section".equals(d.cam) ? (d.sectionLimit > 0 ? d.sectionLimit : d.camLimit) : d.camLimit;
         if (lim > 0) { // the round limit sign
             p.color(RED);
@@ -317,14 +317,22 @@ public final class GaugeRenderer {
             float ns = rs * 0.9f;
             p.text("!", rx, sy + rs * 0.2f + ns * 0.36f, ns, true, false, 0);
         }
-        float ly = g.cy - r * 0.24f;
+        // a section's average is as important as the current speed (owner): its own big line between them
+        String avg = NavText.sectionAvg(d);
+        boolean hasAvg = avg.length() > 0;
+        float ly = g.cy - r * (hasAvg ? 0.30f : 0.24f), big = r * 0.15f, step = hasAvg ? 0.22f : 0.24f;
         p.color(over ? RED : WHITE);
         String detail = NavText.signDetail(d); // the sign already shows the limit
         p.text(detail, rx, ly, fit(detail, r * 0.105f, zone * 0.92f), true, false, 0);
+        if (hasAvg) {
+            ly += r * step;
+            p.color(NavText.avgOver(d) ? RED : WHITE);
+            p.text(avg, rx, ly, fit(avg, big, zone * 0.92f), true, false, 0);
+        }
         String kph = d.kph == d.kph ? String.valueOf(Math.round(d.kph)) : "--";
         String now = "현재 " + kph;
-        p.color(over ? RED : WHITE);
-        p.text(now, rx, ly + r * 0.24f, fit(now, r * 0.15f, zone * 0.92f), true, false, 0);
+        p.color(NavText.nowOver(d) ? RED : WHITE);
+        p.text(now, rx, ly + r * step, fit(now, big, zone * 0.92f), true, false, 0);
     }
 
     /**
@@ -412,7 +420,7 @@ public final class GaugeRenderer {
     }
 
     /** the rpm readout's baseline below the centre line, in radii (full layout): room above it for the camera panel */
-    static final float RPM_DY = 0.40f;
+    static final float RPM_DY = 0.46f;
 
     /** text size so s fits width: Hangul about 1 em wide, other characters about 0.6 em (no measuring in Painter) */
     static float fit(String s, float size, float width) {

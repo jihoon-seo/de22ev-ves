@@ -402,7 +402,21 @@ final class GaugeTests {
                                 boolean over = NavText.over(d);
                                 check(over == cam[0].endsWith("over"), what + ": over " + over);
                                 int red = 0xFFFF3B30;
-                                check((ex.textColors.get(ni) == red) == over && (ex.textColors.get(si) == red) == over, what + ": red exactly when over");
+                                check((ex.textColors.get(ni) == red) == over, what + ": camera line red exactly when over");
+                                // the current speed is red only above the limit itself; a section's average gets its own line
+                                // between the camera line and the current speed, as big and red above the section limit
+                                check((ex.textColors.get(si) == red) == (d.kph > 80 || (cam[0].startsWith("speed") && d.kph > 60)),
+                                        what + ": current speed red exactly above the limit");
+                                int ai = ex.texts.indexOf("평균 87");
+                                if (cam[0].startsWith("section")) {
+                                    check(ai >= 0 && ex.anchors.get(ai)[0] < leftEdge, what + ": section average on its own line " + ex.texts);
+                                    check(ai >= 0 && ex.anchors.get(ni)[1] < ex.anchors.get(ai)[1] && ex.anchors.get(ai)[1] < ex.anchors.get(si)[1],
+                                            what + ": average between the camera line and the current speed");
+                                    check(ai >= 0 && ex.textColors.get(ai) == red, what + ": average 87 above 80 in red");
+                                    check("구간단속".equals(ex.texts.get(ni)), what + ": camera line is just 구간단속 " + ex.texts);
+                                } else {
+                                    check(ai < 0, what + ": no average line " + ex.texts);
+                                }
                                 check(dy.texts.contains("VIRTUAL SHIFT"), what + ": the profile label stays on the right " + dy.texts);
                             }
                         }

@@ -30,12 +30,39 @@ public final class NavText {
     public static String signDetail(LiveData d) {
         String full = line(d);
         if (full.length() == 0) return "";
-        if (d.section == 1 || "section".equals(d.cam)) return d.sectionAvg > 0 ? "구간단속" + SEP + "평균 " + d.sectionAvg : "구간단속";
+        if (section(d)) return "구간단속"; // the average gets its own line (sectionAvg)
         if (!(d.camLimit > 0)) return full; // a warning triangle instead of a sign: the whole line
         String far = d.camDist > 0 ? dist(d.camDist) : "";
         if ("mobile".equals(d.cam)) return far.length() > 0 ? "이동식" + SEP + far : "이동식";
         if (far.length() > 0) return far;
         return "speed".equals(d.cam) ? "단속 카메라" : "제한속도";
+    }
+
+    /** the full gauge's section-average line under the camera line, "평균 87"; "" outside a section or unknown */
+    public static String sectionAvg(LiveData d) {
+        return section(d) && d.sectionAvg > 0 ? "평균 " + d.sectionAvg : "";
+    }
+
+    /** a section's average above its limit */
+    public static boolean avgOver(LiveData d) {
+        int lim = limit(d);
+        return section(d) && lim > 0 && d.sectionAvg > lim;
+    }
+
+    /** the current speed above the camera's (or the section's) limit */
+    public static boolean nowOver(LiveData d) {
+        int lim = limit(d);
+        return d != null && lim > 0 && !Double.isNaN(d.kph) && d.kph > lim;
+    }
+
+    static boolean section(LiveData d) {
+        return d != null && (d.section == 1 || "section".equals(d.cam));
+    }
+
+    /** the limit that applies: the section's in a section (the camera's when it has none), else the camera's */
+    static int limit(LiveData d) {
+        if (d == null) return -1;
+        return section(d) && d.sectionLimit > 0 ? d.sectionLimit : d.camLimit;
     }
 
     /**

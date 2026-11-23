@@ -369,7 +369,11 @@ final class NavTests {
                 check("이동식 · 1.2 km".equals(NavText.signDetail(live(" nav=1 cam=mobile lim=50 dist=1200" + rest, 50))), "mobile");
                 check("350 m".equals(NavText.signDetail(live(" nav=1 cam=limit lim=80 dist=350" + rest, 50))), "limit");
                 check("주의 구간 · 350 m".equals(NavText.signDetail(live(" nav=1 cam=zone lim=- dist=350 zone=2 sec=0 slim=- savg=- ssrc=- sdist=-", 50))), "zone: no sign number");
-                check("구간단속 · 평균 87".equals(NavText.signDetail(live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 50))), "section");
+                LiveData sec = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 50);
+                check("구간단속".equals(NavText.signDetail(sec)), "section: the average has its own line");
+                check("평균 87".equals(NavText.sectionAvg(sec)), "section average line");
+                check(NavText.avgOver(sec) && !NavText.nowOver(sec), "average 87 over 80, current 50 not");
+                check("".equals(NavText.sectionAvg(live(" nav=1 cam=speed lim=60 dist=350" + rest, 50))), "no section: no average line");
                 check("구간단속".equals(NavText.signDetail(live(" nav=1 cam=section lim=- dist=- zone=0 sec=1 slim=80 savg=- ssrc=- sdist=-", 50))), "section, no average");
                 check("".equals(NavText.signDetail(live(" nav=1 cam=none lim=- dist=-" + rest, 50))) && "".equals(NavText.signDetail(null)), "none");
             }
