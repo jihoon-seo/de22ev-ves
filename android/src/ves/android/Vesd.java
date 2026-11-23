@@ -9,6 +9,7 @@ import org.json.JSONObject;
 import java.util.Map;
 
 import ves.core.AudioPolicy;
+import ves.core.NavCam;
 import ves.core.Settings;
 import ves.core.SharedChannel;
 import ves.core.Sig;
@@ -37,6 +38,10 @@ public final class Vesd implements MicomAudio.Events {
     final HscanReader hscan = new HscanReader(core.framer(), core);
     final Probe probe = new Probe(this);
     final PackStore packs = PackStore.fromEnv();
+    /** system uptime when vesd started (main): the boot window of BootReset is measured from it */
+    static long startUptimeMs = -1;
+    final BootOff boot = new BootOff(startUptimeMs);
+    final NavCam nav = new NavCam();
     volatile String packSlot = ""; // the slot whose pack is loaded (or was tried)
     volatile String packNote = "";
 
@@ -54,7 +59,8 @@ public final class Vesd implements MicomAudio.Events {
     private Settings ownerSettings = Settings.fromMap(new java.util.HashMap<String, String>());
 
     public static void main(String[] args) {
-        Out.log("vesd starting (rate " + RATE + ")");
+        startUptimeMs = SystemClock.uptimeMillis();
+        Out.log("vesd starting (rate " + RATE + ") uptime=" + startUptimeMs / 1000 + "s");
         try {
             new Vesd().run(args);
         } catch (Throwable t) {
@@ -92,6 +98,17 @@ public final class Vesd implements MicomAudio.Events {
             }
         });
         thread("control", new Control(this));
+        thread("nav", new NavReader(nav));
+        thread("nav-speed", new Runnable() {
+            public void run() {
+                // NavCam's own section average: the speed every 500 ms (SignalState locks itself, not the core)
+                while (true) {
+                    SystemClock.sleep(500);
+                    long now = SystemClock.uptimeMillis();
+                    nav.tickSpeed(core.signals().get(Sig.SPEED_KPH, now), now);
+                }
+            }
+        });
         audioLoop();
     }
 
@@ -106,15 +123,21 @@ public final class Vesd implements MicomAudio.Events {
 
     void loadSettings(boolean first) {
         try {
+            boolean afterWrite = boot.landed(); // before the read: a read begun later sees our boot write
             String t = hmg.settingsJson();
             if (t == null) {
                 if (first) Out.log("settings: hmgapid refused (is the mod enabled?)");
                 return;
             }
-            if (t.equals(settingsText)) return;
+            // the same text is parsed again while the boot reset is open (a post-write read may equal the boot text)
+            boolean same = t.equals(settingsText);
+            if (same && !boot.active()) return;
             settingsText = t;
             JSONObject o = new JSONObject(t.length() == 0 ? "{}" : t);
             Map<String, String> m = Prefs.toMap(o);
+            int b = boot.onRead(t, m, afterWrite); // D3: before the core sees the settings
+            bootNote(b, t, m);
+            if (same && b == BootOff.FORCED) return; // the boot text again: the core already has it forced off
             Settings s = Settings.fromMap(m);
             // channel 0x45 only (0.2.1): 0x46 kept the stock navigation's voice prompts from playing
             int type = MicomAudio.NAVI_SOUNDEFFECT;
@@ -133,6 +156,41 @@ public final class Vesd implements MicomAudio.Events {
             lastError = "settings: " + e;
             if (first) Out.log(lastError);
         }
+    }
+
+    /** the boot reset's log line for a read; WAS_ON starts the writer */
+    void bootNote(int b, String text, Map<String, String> m) throws Exception {
+        if (b == BootOff.KEPT) Out.log("boot: vesd restart (uptime " + startUptimeMs / 1000 + "s at start), settings kept");
+        else if (b == BootOff.ALREADY_OFF) Out.log("boot: VES already off");
+        else if (b == BootOff.SETTLED) Out.log("boot: settings settled, enabled=" + m.get(Prefs.ENABLED));
+        else if (b == BootOff.OWNER) Out.log("boot: settings changed by the owner, honoured (enabled=" + m.get(Prefs.ENABLED) + ")");
+        if (b != BootOff.WAS_ON) return;
+        Out.log("boot: VES off (was on)");
+        JSONObject off = new JSONObject(text); // every key, as the app saves them (Prefs.save)
+        off.put(Prefs.ENABLED, false);
+        final String json = off.toString();
+        thread("boot", new Runnable() {
+            public void run() {
+                Out.log(boot.writeOff(bootStore(), json, new BootOff.Sleeper() {
+                    public void sleep(long ms) {
+                        SystemClock.sleep(ms);
+                    }
+                }));
+            }
+        });
+    }
+
+    /** vesd's only settings write: the boot reset (tests/android/allowlist.sh AL4) */
+    BootOff.Store bootStore() {
+        return new BootOff.Store() {
+            public String read() throws Exception {
+                return hmg.settingsJson();
+            }
+
+            public boolean write(String json) throws Exception {
+                return hmg.saveSettingsJson(json);
+            }
+        };
     }
 
     /**
@@ -532,11 +590,16 @@ public final class Vesd implements MicomAudio.Events {
                 + fd.underruns());
     }
 
-    /** the gauge's line (VesCore.liveLine): built under the core lock, a few microseconds next to the audio block */
+    /**
+     * the gauge's line: VesCore.liveLine built under the core lock (a few microseconds next to the audio block), then
+     * NavCam's camera fields under its own lock
+     */
     String live() {
+        String l;
         synchronized (core) {
-            return core.liveLine();
+            l = core.liveLine();
         }
+        return l + nav.liveFields(SystemClock.uptimeMillis());
     }
 
     String status() {

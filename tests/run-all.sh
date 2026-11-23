@@ -9,6 +9,7 @@ echo "== core"; bash "$HERE/core/run.sh" || RC=1
 echo "== allowlist"; bash "$HERE/android/allowlist.sh" || RC=1
 echo "== sockets"; bash "$HERE/android/sockets.sh" || RC=1
 echo "== packstore"; bash "$HERE/android/packstore.sh" || RC=1
+echo "== bootoff"; bash "$HERE/android/bootoff.sh" || RC=1
 echo "== render (packs)"; bash "$HERE/render/run.sh" || RC=1
 echo "== resynth (recordings to packs)"; bash "$HERE/resynth/run.sh" || RC=1
 echo "== packs (built-in packs, sounds by 히릿)"; bash "$HERE/packs/run.sh" || RC=1
