@@ -1,6 +1,6 @@
 package ves.gauge;
 
-/** Colours by the car's drive mode (VCU CF_Vcu_EvMod raw value). */
+/** Colours by the car's drive mode; neutral for now (CF_Vcu_EvMod is the power flow 1/2/6, see forDriveMode). */
 public final class Theme {
     public static final int NEUTRAL = 0, ECO = 1, NORMAL = 2, SPORT = 3;
     /** a drive mode that went stale keeps its colours this long (the VCU5 rate is unknown) */
@@ -12,8 +12,9 @@ public final class Theme {
     private Theme() {}
 
     /**
-     * Which raw value is which mode is not known yet (the stock firmware never reads it): vesd logs each change
-     * ("drive_mode raw=N") so a drive through ECO / NORMAL / SPORT can fill this table; until then neutral.
+     * Always neutral. CF_Vcu_EvMod (VCU5, Sig.DRIVE_MODE) turned out to be the power flow, not the drive mode: the
+     * 2026-11-20 drive log showed only 0/1/2/6, flipping every few seconds while driving (owner decision D6, 0.2.13),
+     * so vesd no longer logs its changes. ECO / NORMAL / SPORT would need another signal; until then neutral.
      */
     public static int forDriveMode(int raw) {
         return NEUTRAL;

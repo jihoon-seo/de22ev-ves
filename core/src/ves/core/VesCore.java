@@ -143,8 +143,8 @@ public final class VesCore {
 
     /**
      * The gauge's line (vesd LIVE, 0.2.12), key=value, "-" unknown: rpm gear sh(ifting) sel(ector code) kph kw
-     * shift(rpm) dm (drive-mode raw) profile state red(line) max (scale). Parsed by ves.gauge.LiveData. Call under the
-     * core lock, as status().
+     * shift(rpm) dm (drive-mode raw) profile state red(line) max (scale), on (settings.enabled 1|0, 0.2.13; vesd
+     * appends NavCam.liveFields after it). Parsed by ves.gauge.LiveData. Call under the core lock, as status().
      */
     public String liveLine() {
         EngineParams p = params;
@@ -164,6 +164,7 @@ public final class VesCore {
         b.append(" state=").append(p.reason);
         b.append(" red=").append(ev ? "-" : String.valueOf(Math.round(EngineModel.MAX_RPM)));
         b.append(" max=").append(ev ? 9000 : 8000);
+        b.append(" on=").append(settings.enabled ? 1 : 0); // 0.2.13: the panel page's on/off button
         return b.toString();
     }
 
@@ -185,15 +186,9 @@ public final class VesCore {
     private long traceT0 = -1, traceNext;
     private boolean traceArmed = true;
 
-    private double lastDriveMode = Double.NaN;
-
+    // (0.2.12 also logged every drive-mode raw change here; dropped in 0.2.13: CF_Vcu_EvMod is the power flow 1/2/6,
+    // not ECO/NORMAL/SPORT, and flips every few seconds - see ves.gauge.Theme)
     private void trace(long now) {
-        // drive-mode raw changes (0.2.12): which value is ECO / NORMAL / SPORT is not known yet (ves.gauge.Theme)
-        double dm = signals.get(Sig.DRIVE_MODE, now);
-        if (!Double.isNaN(dm) && dm != lastDriveMode) {
-            lastDriveMode = dm;
-            if (trace.length() < 16384) trace.append("drive_mode raw=").append((int) dm).append('\n');
-        }
         double ped = signals.get(Sig.PEDAL_PCT, now), gs = signals.get(Sig.GEAR, now);
         boolean standing = params.speedKph < 1.0, footOff = Double.isNaN(ped) || ped <= 3;
         if (traceT0 < 0) {

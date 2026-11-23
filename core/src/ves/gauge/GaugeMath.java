@@ -67,6 +67,15 @@ public final class GaugeMath {
     }
 
     /** -1 (full regen) .. 0 .. 1 (full drive); unknown 0 */
+    /** the panel page's needle (RotateDrawable 140..400 degrees): level 0..10000 in steps of NEEDLE_STEP */
+    public static int needleLevel(double rpm, double max) {
+        double level = (angle(rpm, max) - START_DEG) / SWEEP_DEG * 10000;
+        return (int) Math.round(level / NEEDLE_STEP) * NEEDLE_STEP;
+    }
+
+    /** needle level quantum: 260 degrees / 400 steps = 0.65 degree, so a still needle sends no update */
+    public static final int NEEDLE_STEP = 25;
+
     public static double kwBar(double kw) {
         if (Double.isNaN(kw)) return 0;
         return kw < 0 ? Math.max(-1, kw / REGEN_FULL_KW) : Math.min(1, kw / DRIVE_FULL_KW);

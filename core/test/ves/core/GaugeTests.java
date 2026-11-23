@@ -1,13 +1,19 @@
 package ves.core;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.GregorianCalendar;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 
+import ves.gauge.Clock;
 import ves.gauge.GaugeMath;
 import ves.gauge.GaugeRenderer;
 import ves.gauge.LiveData;
 import ves.gauge.Needle;
 import ves.gauge.Painter;
+import ves.gauge.SplitLayout;
 import ves.gauge.Theme;
 
 import static ves.core.TestMain.check;
@@ -77,6 +83,7 @@ final class GaugeTests {
                         what + " shiftRpm " + d.shiftRpm + " vs " + p.shiftRpm);
                 check(d.profile.equals(r.c.settings().profile.key()), what + " profile " + d.profile);
                 check(d.state.equals(p.reason), what + " state " + d.state + " vs " + p.reason);
+                check(d.on == (r.c.settings().enabled ? 1 : 0), what + " on " + d.on + " (" + line + ")");
             }
 
             void run() {
@@ -118,12 +125,14 @@ final class GaugeTests {
             }
         });
 
-        // ---------------- GA3 drive-mode raw value changes go to vesd's log (the ECO/NORMAL/SPORT values are unknown)
-        l.add(new TestMain.T("GA3_drive_mode_logged") {
+        // ---------------- GA3 drive-mode raw changes are NOT logged any more (0.2.13, owner D6): CF_Vcu_EvMod is the
+        // power flow (1/2/6 flipping every few seconds), not ECO/NORMAL/SPORT; the launch trace still works
+        l.add(new TestMain.T("GA3_drive_mode_not_logged") {
             void run() {
                 TestMain.Rig r = new TestMain.Rig(TestMain.iceSettings(Profile.ICE_SHIFT, 70));
+                r.gear = Sig.GEAR_D;
                 StringBuilder all = new StringBuilder();
-                double[] seq = {1, 1, 3};
+                double[] seq = {1, 2, 6, 2, 1};
                 for (double v : seq) {
                     for (int i = 0; i < 30; i++) {
                         r.c.signals().set(Sig.DRIVE_MODE, v, r.t);
@@ -131,10 +140,15 @@ final class GaugeTests {
                         all.append(r.c.takeTrace());
                     }
                 }
-                int n = 0;
-                for (String line : all.toString().split("\n")) if (line.startsWith("drive_mode raw=")) n++;
-                check(n == 2 && all.indexOf("drive_mode raw=1") >= 0 && all.indexOf("drive_mode raw=3") >= 0,
-                        "two rows (1 then 3): " + all.toString().replace('\n', '|'));
+                check(all.indexOf("drive_mode") < 0, "no drive_mode rows: " + all.toString().replace('\n', '|'));
+                r.pedal = 40;
+                r.kw = 40;
+                for (int i = 0; i < 100; i++) {
+                    r.c.signals().set(Sig.DRIVE_MODE, i % 2 == 0 ? 2 : 6, r.t);
+                    r.step();
+                    all.append(r.c.takeTrace());
+                }
+                check(all.indexOf("launch +") >= 0 && all.indexOf("drive_mode") < 0, "launch rows only: " + all.length());
             }
         });
 
@@ -247,6 +261,77 @@ final class GaugeTests {
                         check(texts.contains("D4") == st[0].equals("ECO D4"), what + ": D4 only in the ICE_SHIFT D4 state " + texts);
                     }
                 }
+            }
+        });
+
+        // ---------------- GA6 LIVE carries on=1|0 (settings.enabled); LiveData: missing keys (old vesd) are unknown
+        l.add(new TestMain.T("GA6_live_on_and_nav") {
+            void run() {
+                Settings off = TestMain.iceSettings(Profile.ICE_SMOOTH, 70);
+                off.enabled = false;
+                TestMain.Rig r = new TestMain.Rig(off);
+                r.run(300);
+                String line = r.c.liveLine();
+                check(line.endsWith(" max=8000 on=0"), "on=0 appended after max: " + line);
+                check(LiveData.parse("ok\n" + line).on == 0, "parses on=0");
+                TestMain.Rig q = new TestMain.Rig(TestMain.iceSettings(Profile.ICE_SMOOTH, 70));
+                q.run(300);
+                check(q.c.liveLine().endsWith(" on=1") && LiveData.parse("ok\n" + q.c.liveLine()).on == 1, "on=1: " + q.c.liveLine());
+                String old = "rpm=820 gear=1 sh=0 sel=0 kph=0 kw=0 shift=6000 dm=- profile=ice_shift state=park red=6500 max=8000";
+                LiveData o = LiveData.parse("ok\n" + old);
+                check(o != null && o.on == -1 && o.navAge == -1 && "-".equals(o.cam) && o.camLimit == -1 && o.camDist == -1 && o.zone == -1
+                        && o.section == -1 && o.sectionLimit == -1 && o.sectionAvg == -1 && "-".equals(o.sectionSrc) && o.sectionDist == -1,
+                        "0.2.12 line: all new fields unknown");
+                LiveData n = LiveData.parse("ok\n" + old + " on=1 nav=3 cam=speed lim=60 dist=350 zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500\n");
+                check(n != null && n.on == 1 && n.navAge == 3 && "speed".equals(n.cam) && n.camLimit == 60 && n.camDist == 350 && n.zone == 0
+                        && n.section == 1 && n.sectionLimit == 80 && n.sectionAvg == 87 && "nav".equals(n.sectionSrc) && n.sectionDist == 1500,
+                        "0.2.13 line parses every field");
+                near(n.rpm, 820, 0, "old fields still parse");
+                LiveData u = LiveData.parse("ok\n" + old + " on=0 nav=- cam=- lim=- dist=- zone=- sec=0 slim=- savg=- ssrc=- sdist=-");
+                check(u.on == 0 && u.navAge == -1 && "-".equals(u.cam) && u.camLimit == -1 && u.camDist == -1 && u.zone == -1 && u.section == 0
+                        && u.sectionLimit == -1 && u.sectionAvg == -1 && "-".equals(u.sectionSrc) && u.sectionDist == -1, "dashes are unknown");
+            }
+        });
+
+        // ---------------- GA7 the clock: yyyy.MM.dd. (요일) HH:mm:ss, weekday from a fixed table (not the locale)
+        l.add(new TestMain.T("GA7_clock_format") {
+            void run() {
+                Locale was = Locale.getDefault();
+                try {
+                    Locale.setDefault(Locale.US);
+                    Calendar c = new GregorianCalendar(2026, Calendar.NOVEMBER, 23, 14, 5, 9);
+                    check("2026.11.23. (월) 14:05:09".equals(Clock.format(c)), "Monday: " + Clock.format(c));
+                    c = new GregorianCalendar(2026, Calendar.NOVEMBER, 23, 23, 59, 59);
+                    c.add(Calendar.SECOND, 1);
+                    check("2026.11.24. (화) 00:00:00".equals(Clock.format(c)), "rolls to Tuesday: " + Clock.format(c));
+                    c = new GregorianCalendar(2027, Calendar.JANUARY, 4, 7, 8, 9);
+                    check("2027.01.04. (월) 07:08:09".equals(Clock.format(c)), "padding: " + Clock.format(c));
+                    String[] week = {"일", "월", "화", "수", "목", "금", "토"};
+                    for (int i = 0; i < 7; i++) {
+                        c = new GregorianCalendar(2026, Calendar.NOVEMBER, 22 + i, 12, 0, 0); // 22 = Sunday
+                        check(Clock.format(c).indexOf("(" + week[i] + ")") > 0, "weekday " + i + ": " + Clock.format(c));
+                    }
+                    TimeZone seoul = TimeZone.getTimeZone("Asia/Seoul");
+                    Calendar z = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
+                    z.clear();
+                    z.set(2026, Calendar.NOVEMBER, 23, 5, 5, 9);
+                    check("2026.11.23. (월) 14:05:09".equals(Clock.format(z.getTimeInMillis(), seoul)), "epoch ms in KST: "
+                            + Clock.format(z.getTimeInMillis(), seoul));
+                    check("yyyy.MM.dd. (E) HH:mm:ss".equals(Clock.PATTERN), "TextClock pattern " + Clock.PATTERN);
+                } finally {
+                    Locale.setDefault(was);
+                }
+            }
+        });
+
+        // ---------------- GA8 split screen: the stock apps narrow their content to 1281 px while split_screen_status == 1
+        l.add(new TestMain.T("GA8_split_width") {
+            void run() {
+                check(SplitLayout.contentWidth(1, 1920) == 1281, "split on: 1281");
+                check(SplitLayout.contentWidth(0, 1920) == 1920, "split off: full");
+                check(SplitLayout.contentWidth(5, 1920) == 1920 && SplitLayout.contentWidth(-1, 1920) == 1920, "other values: full");
+                check(SplitLayout.contentWidth(1, 1000) == 1000, "never wider than the screen");
+                check(SplitLayout.SPLIT_WIDTH == 1281, "SPLIT_WIDTH " + SplitLayout.SPLIT_WIDTH);
             }
         });
     }
