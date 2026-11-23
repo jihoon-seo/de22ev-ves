@@ -4,6 +4,7 @@ import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Arc2D;
@@ -23,36 +24,61 @@ import ves.gauge.Theme;
 /**
  * Host-only preview of the gauge (0.2.12): draws GaugeRenderer through AWT into PNGs, full 1920x720 and the main
  * screen's compact strip, for design review before the car. Fonts differ from the head unit's Roboto: layout only.
- * <pre>java ves.tools.GaugePreview &lt;out dir&gt;</pre> writes one PNG per state and size, plus sheet.png.
+ * 0.2.13: also the split screen's sizes (the full gauge narrowed to 1281x720, the strip 1217x300) and the full gauge's
+ * extras (clock, VES on/off button, camera panel).
+ * <pre>java ves.tools.GaugePreview &lt;out dir&gt;</pre> writes one PNG per state and size (40), plus sheet.png.
  */
 public final class GaugePreview {
     static final int BG = 0xFF07090C;
+    /** the full gauge's clock in every preview (Clock.format of a fixed time: deterministic PNGs) */
+    static final String CLOCK = "2026.11.23. (월) 14:05:09";
+    static final String CAM_SPEED = " nav=1 cam=speed lim=60 dist=350 zone=0 sec=0 slim=- savg=- ssrc=- sdist=-",
+            CAM_SECTION = " nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500",
+            CAM_MOBILE = " nav=1 cam=mobile lim=80 dist=1200 zone=0 sec=0 slim=- savg=- ssrc=- sdist=-";
+    /** name, theme, LIVE line; on= picks the button's state (left out: unknown "--"), cam= the camera panel */
     static final String[][] STATES = {
-            {"p-idle", "0", "rpm=820 gear=1 sh=0 sel=0 kph=0 kw=0 shift=6000 dm=- profile=ice_shift state=park red=6500 max=8000"},
-            {"eco-d4-cruise", "1", "rpm=2100 gear=4 sh=0 sel=5 kph=64 kw=12 shift=2950 dm=- profile=ice_shift state=drive red=6500 max=8000"},
-            {"sport-near-shift", "3", "rpm=5550 gear=2 sh=0 sel=5 kph=58 kw=118 shift=5800 dm=- profile=ice_shift state=drive red=6500 max=8000"},
-            {"sport-shift-flash", "3", "rpm=5900 gear=2 sh=0 sel=5 kph=61 kw=125 shift=5800 dm=- profile=ice_shift state=drive red=6500 max=8000"},
-            {"normal-regen", "2", "rpm=1650 gear=3 sh=0 sel=5 kph=42 kw=-31 shift=3900 dm=- profile=ice_shift state=overrun red=6500 max=8000"},
+            {"p-idle", "0", "rpm=820 gear=1 sh=0 sel=0 kph=0 kw=0 shift=6000 dm=- profile=ice_shift state=park red=6500 max=8000 on=0"},
+            {"eco-d4-cruise", "1", "rpm=2100 gear=4 sh=0 sel=5 kph=64 kw=12 shift=2950 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1"},
+            {"sport-near-shift", "3", "rpm=5550 gear=2 sh=0 sel=5 kph=58 kw=118 shift=5800 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1"},
+            {"sport-shift-flash", "3", "rpm=5900 gear=2 sh=0 sel=5 kph=61 kw=125 shift=5800 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1"},
+            {"normal-regen", "2", "rpm=1650 gear=3 sh=0 sel=5 kph=42 kw=-31 shift=3900 dm=- profile=ice_shift state=overrun red=6500 max=8000 on=1"},
             {"reverse-smooth", "0", "rpm=900 gear=0 sh=0 sel=7 kph=3 kw=2 shift=6000 dm=- profile=ice_smooth state=reverse_quiet red=6500 max=8000"},
-            {"ev-future", "2", "rpm=5200 gear=0 sh=0 sel=5 kph=84 kw=63 shift=8500 dm=- profile=ev_future state=drive red=- max=9000"}};
-    static final int[][] SIZES = {{1920, 720}, {1856, 300}};
+            {"ev-future", "2", "rpm=5200 gear=0 sh=0 sel=5 kph=84 kw=63 shift=8500 dm=- profile=ev_future state=drive red=- max=9000 on=1"},
+            {"cam-speed-over", "0", "rpm=2600 gear=4 sh=0 sel=5 kph=72 kw=28 shift=3300 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1"
+                    + CAM_SPEED},
+            {"cam-section-avg", "0", "rpm=2900 gear=0 sh=0 sel=5 kph=84 kw=35 shift=6000 dm=- profile=ice_smooth state=drive red=6500 max=8000 on=1"
+                    + CAM_SECTION},
+            {"cam-mobile-off", "0", "rpm=4100 gear=0 sh=0 sel=5 kph=64 kw=20 shift=8500 dm=- profile=ev_future state=drive red=- max=9000 on=0"
+                    + CAM_MOBILE}};
+    /** full, the split screen's full gauge (1281), the main screen's strip, the strip when split (1281 - 64 padding) */
+    static final int[][] SIZES = {{1920, 720}, {1281, 720}, {1856, 300}, {1217, 300}};
 
     public static void main(String[] a) throws Exception {
         File out = new File(a.length > 0 ? a[0] : "gauge-preview");
         if (!out.isDirectory() && !out.mkdirs()) throw new IllegalStateException("cannot make " + out);
         int n = 0;
-        BufferedImage sheet = new BufferedImage(1920, STATES.length * (720 + 300 + 40), BufferedImage.TYPE_INT_RGB);
+        // the sheet at half scale: per state the two full sizes side by side, the two strips below them
+        int row = 360 + 150 + 40;
+        BufferedImage sheet = new BufferedImage(1920, STATES.length * row, BufferedImage.TYPE_INT_RGB);
         Graphics2D sg = sheet.createGraphics();
+        sg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         int sy = 0;
         for (String[] st : STATES) {
             LiveData d = LiveData.parse("ok\n" + st[2]);
+            int xFull = 0, xStrip = 0;
             for (int[] wh : SIZES) {
                 BufferedImage img = render(d, Integer.parseInt(st[1]), wh[0], wh[1]);
                 ImageIO.write(img, "png", new File(out, st[0] + "-" + wh[0] + "x" + wh[1] + ".png"));
-                sg.drawImage(img, 0, sy, null);
-                sy += wh[1];
+                if (wh[1] < 720) {
+                    sg.drawImage(img, xStrip, sy + 360, wh[0] / 2, wh[1] / 2, null);
+                    xStrip += wh[0] / 2 + 16;
+                } else {
+                    sg.drawImage(img, xFull, sy, wh[0] / 2, wh[1] / 2, null);
+                    xFull += wh[0] / 2 + 16;
+                }
                 n++;
             }
+            sy += 360 + 150;
             sg.setColor(new Color(0x30, 0x34, 0x3A));
             sg.fillRect(0, sy, 1920, 40);
             sg.setColor(Color.LIGHT_GRAY);
@@ -67,15 +93,31 @@ public final class GaugePreview {
 
     static BufferedImage render(LiveData d, int theme, int w, int h) {
         BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = img.createGraphics();
+        Graphics2D g = smooth(img.createGraphics());
+        g.setColor(new Color(BG, true));
+        g.fillRect(0, 0, w, h);
+        Awt p = new Awt(g);
+        GaugeRenderer.draw(p, d, d.rpm, theme, true, w, h);
+        GaugeRenderer.drawExtras(p, d, CLOCK, w, h); // the full gauge only (nothing on the strip)
+        g.dispose();
+        return img;
+    }
+
+    static Graphics2D smooth(Graphics2D g) {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
-        g.setColor(new Color(BG, true));
-        g.fillRect(0, 0, w, h);
-        GaugeRenderer.draw(new Awt(g), d, d.rpm, theme, true, w, h);
-        g.dispose();
-        return img;
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR); // PanelArt's rotated needle
+        return g;
+    }
+
+    /** a font with Hangul for the Korean texts (clock weekday, button, camera): Malgun Gothic on Windows, else Dialog */
+    static final String HANGUL = hangulFamily();
+
+    static String hangulFamily() {
+        for (String f : GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames())
+            if (f.equals("Malgun Gothic")) return f;
+        return Font.DIALOG;
     }
 
     /** Painter over Graphics2D (Android angles: clockwise from 3 o'clock; AWT's are counter-clockwise) */
@@ -113,7 +155,8 @@ public final class GaugePreview {
         }
 
         public void text(String s, float x, float y, float size, boolean bold, boolean italic, int align) {
-            Font f = new Font(Font.SANS_SERIF, bold ? Font.BOLD : Font.PLAIN, Math.max(1, Math.round(size)));
+            // ASCII keeps the 0.2.12 font (identical PNGs); Korean needs a font with Hangul
+            Font f = new Font(ascii(s) ? Font.SANS_SERIF : HANGUL, bold ? Font.BOLD : Font.PLAIN, Math.max(1, Math.round(size)));
             float w = g.getFontMetrics(f).stringWidth(s);
             float x0 = align < 0 ? x : align == 0 ? x - w / 2 : x - w;
             AffineTransform keep = g.getTransform();
@@ -126,6 +169,11 @@ public final class GaugePreview {
                 g.drawString(s, x0, y);
             }
             g.setTransform(keep);
+        }
+
+        static boolean ascii(String s) {
+            for (int i = 0; i < s.length(); i++) if (s.charAt(i) > 0x7E) return false;
+            return true;
         }
     }
 }

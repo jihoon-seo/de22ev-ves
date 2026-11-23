@@ -11,6 +11,7 @@ import ves.gauge.Clock;
 import ves.gauge.GaugeMath;
 import ves.gauge.GaugeRenderer;
 import ves.gauge.LiveData;
+import ves.gauge.NavText;
 import ves.gauge.Needle;
 import ves.gauge.Painter;
 import ves.gauge.SplitLayout;
@@ -334,5 +335,189 @@ final class GaugeTests {
                 check(SplitLayout.SPLIT_WIDTH == 1281, "SPLIT_WIDTH " + SplitLayout.SPLIT_WIDTH);
             }
         });
+
+        // ---------------- GA10 the full gauge's extras (0.2.13): clock top-left, the VES on/off button top-right (its
+        // rect is the touch target), the camera panel in the right-hand zone; all inside the view at 1920x720 and at the
+        // split width 1281x720, clear of the dial, the shift lamps and the readouts; nothing on the compact strip
+        l.add(new TestMain.T("GA10_extras_layout") {
+            void run() {
+                String base = "rpm=5900 gear=2 sh=0 sel=5 kph=72 kw=125 shift=5800 dm=- profile=ice_shift state=drive red=6500 max=8000";
+                String[][] cams = {
+                        {"none", ""},
+                        {"speed over", " nav=1 cam=speed lim=60 dist=350 zone=0 sec=0 slim=- savg=- ssrc=- sdist=-"},
+                        {"mobile under", " nav=1 cam=mobile lim=80 dist=1200 zone=0 sec=0 slim=- savg=- ssrc=- sdist=-"},
+                        {"section over", " nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500"},
+                        {"zone", " nav=1 cam=zone lim=- dist=350 zone=2 sec=0 slim=- savg=- ssrc=- sdist=-"}};
+                String[] ons = {" on=1", " on=0", ""};
+                String clock = "2026.11.23. (월) 14:05:09";
+                float[][] sizes = {{1920, 720}, {1281, 720}};
+                for (float[] wh : sizes) {
+                    float w = wh[0], h = wh[1];
+                    float[] b = GaugeRenderer.buttonRect(w, h);
+                    String at = " at " + (int) w + "x" + (int) h;
+                    check(b.length == 4 && b[0] >= 0 && b[1] >= 0 && b[2] <= w && b[3] <= h && b[2] - b[0] >= 0.15f * h && b[3] - b[1] >= 0.06f * h,
+                            "button inside the view and big enough" + at + ": " + rect(b));
+                    // the dial circle (the static layer's first arc), the lamps (circles) and the readouts (text anchors)
+                    Rec st = new Rec(w, h);
+                    GaugeRenderer.drawStatic(st, "ice_shift", Theme.NEUTRAL, w, h);
+                    float[] dial = st.arcs.get(0);
+                    for (String[] cam : cams) {
+                        for (String on : ons) {
+                            LiveData d = LiveData.parse("ok\n" + base + on + cam[1]);
+                            String what = cam[0] + on + at;
+                            Rec dy = new Rec(w, h);
+                            GaugeRenderer.drawDynamic(dy, d, d.rpm, Theme.NEUTRAL, true, w, h);
+                            check(dy.circles.size() == 9, what + ": 9 lamps " + dy.circles.size());
+                            for (float[] c : dy.circles)
+                                check(!overlaps(b, c[0] - c[2], c[1] - c[2], c[0] + c[2], c[1] + c[2]), what + ": button over a lamp " + rect(b));
+                            for (float[] t : dy.anchors) check(!inside(b, t[0], t[1]), what + ": button over a readout at " + t[0] + "," + t[1]);
+                            Rec ex = new Rec(w, h);
+                            GaugeRenderer.drawExtras(ex, d, clock, w, h);
+                            check(ex.calls > 3 && ex.bad == null, what + ": " + ex.calls + " calls, bad " + ex.bad);
+                            for (float[] pt : ex.points)
+                                check(Math.hypot(pt[0] - dial[0], pt[1] - dial[1]) > dial[2] * 1.02, what + ": extras inside the dial at " + pt[0] + "," + pt[1]);
+                            for (float[] c : dy.circles)
+                                for (float[] pt : ex.points)
+                                    check(Math.hypot(pt[0] - c[0], pt[1] - c[1]) > c[2] * 2, what + ": extras on a lamp at " + pt[0] + "," + pt[1]);
+                            int ci = ex.texts.indexOf(clock);
+                            check(ci >= 0 && ex.anchors.get(ci)[0] < b[0] && ex.anchors.get(ci)[1] < 0.12f * h, what + ": clock top-left " + ex.texts);
+                            String label = on.equals(" on=1") ? "켜짐" : on.equals(" on=0") ? "꺼짐" : "--";
+                            int li = -1;
+                            for (int i = 0; i < ex.texts.size(); i++) if (ex.texts.get(i).indexOf(label) >= 0 && i != ci) li = i;
+                            check(li >= 0 && inside(b, ex.anchors.get(li)[0], ex.anchors.get(li)[1]), what + ": button label " + label + " in its rect " + ex.texts);
+                            String line = NavText.line(d);
+                            check(line.length() > 0 == !cam[0].equals("none"), what + ": NavText " + line);
+                            if (line.length() == 0) {
+                                check(ex.texts.size() == 2, what + ": no camera, clock and button only " + ex.texts);
+                                check(dy.texts.contains("VIRTUAL SHIFT"), what + ": the profile label stays without a camera " + dy.texts);
+                            } else {
+                                int ni = ex.texts.indexOf(line), si = ex.texts.indexOf("현재 72");
+                                check(ni >= 0 && ex.anchors.get(ni)[0] > w / 2, what + ": camera line in the right-hand zone " + ex.texts);
+                                check(si >= 0 && ex.anchors.get(si)[0] > w / 2, what + ": current speed " + ex.texts);
+                                boolean over = NavText.over(d);
+                                check(over == cam[0].endsWith("over"), what + ": over " + over);
+                                int red = 0xFFFF3B30;
+                                check((ex.textColors.get(ni) == red) == over && (ex.textColors.get(si) == red) == over, what + ": red exactly when over");
+                                check(!dy.texts.contains("VIRTUAL SHIFT"), what + ": the camera takes the profile label's place " + dy.texts);
+                            }
+                        }
+                    }
+                }
+                for (float[] wh : new float[][] {{1856, 300}, {1217, 300}}) {
+                    Rec ex = new Rec(wh[0], wh[1]);
+                    GaugeRenderer.drawExtras(ex, LiveData.parse("ok\n" + base + " on=1" + cams[1][1]), clock, wh[0], wh[1]);
+                    check(ex.calls == 0, "compact strip " + (int) wh[0] + "x" + (int) wh[1] + ": no extras, " + ex.calls + " calls");
+                }
+            }
+
+            boolean inside(float[] b, float x, float y) {
+                return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
+            }
+
+            boolean overlaps(float[] b, float x0, float y0, float x1, float y1) {
+                return x0 < b[2] && x1 > b[0] && y0 < b[3] && y1 > b[1];
+            }
+        });
+
+        // ---------------- GA11 the panel page's art: the dial in a square (ticks, numerals 0-8 / 0-9, redline only on
+        // the ICE scale) and the needle alone pointing at the START angle (0 rpm) for a <rotate> drawable
+        l.add(new TestMain.T("GA11_dial_and_needle_art") {
+            void run() {
+                float size = 480;
+                for (String prof : new String[] {"ice_shift", "ev_future"}) {
+                    Rec r = new Rec(size, size);
+                    GaugeRenderer.drawDial(r, prof, size);
+                    boolean ev = prof.equals("ev_future");
+                    check(r.calls > 40 && r.bad == null, prof + " dial inside the square: " + r.calls + " calls, bad " + r.bad);
+                    for (int k = 0; k <= 9; k++)
+                        check(r.texts.contains(String.valueOf(k)) == (k <= 8 || ev), prof + ": numeral " + k + " " + r.texts);
+                    check(r.colors.contains(0xFFFF3B30) == !ev, prof + ": redline only on the ICE dial");
+                    check(r.arcs.size() > 0, prof + ": the rail arc");
+                    for (float[] a : r.arcs) check(Math.abs(a[0] - size / 2) < 0.01 && Math.abs(a[1] - size / 2) < 0.01, prof + ": arcs centred");
+                }
+                Rec n = new Rec(size, size);
+                GaugeRenderer.drawNeedle(n, size);
+                check(n.calls > 0 && n.bad == null && n.polys.size() > 0, "needle inside the square: bad " + n.bad);
+                double far = 0, farDeg = 0;
+                for (float[] xy : n.polys)
+                    for (int i = 0; i + 1 < xy.length; i += 2) {
+                        double dx = xy[i] - size / 2, dy = xy[i + 1] - size / 2, dist = Math.hypot(dx, dy);
+                        double deg = (Math.toDegrees(Math.atan2(dy, dx)) + 360) % 360;
+                        check(Math.abs(deg - GaugeMath.START_DEG) < 12, "needle vertex off the START ray: " + deg);
+                        if (dist > far) {
+                            far = dist;
+                            farDeg = deg;
+                        }
+                    }
+                near(farDeg, GaugeMath.START_DEG, 0.01, "the tip at the START angle (level 0)");
+                check(far > size * 0.40 && far < size * 0.5, "the tip near the scale: " + far);
+                check(n.texts.isEmpty() && n.circles.isEmpty(), "the needle only");
+            }
+        });
+    }
+
+    static String rect(float[] b) {
+        return b.length == 4 ? "[" + b[0] + "," + b[1] + "," + b[2] + "," + b[3] + "]" : "len " + b.length;
+    }
+
+    /** records every Painter call; bad: the first coordinate outside 0..w x 0..h (1 px slack) or not finite */
+    static final class Rec implements Painter {
+        final float w, h;
+        int calls, color;
+        String bad;
+        final List<String> texts = new ArrayList<String>();
+        /** every colour set; the colour each text was drawn in */
+        final List<Integer> colors = new ArrayList<Integer>(), textColors = new ArrayList<Integer>();
+        /** text anchors (x, baseline y); every point checked; arcs cx, cy, r; circles cx, cy, r */
+        final List<float[]> anchors = new ArrayList<float[]>(), points = new ArrayList<float[]>(), arcs = new ArrayList<float[]>(),
+                circles = new ArrayList<float[]>(), polys = new ArrayList<float[]>();
+
+        Rec(float w, float h) {
+            this.w = w;
+            this.h = h;
+        }
+
+        void in(String what, float... v) {
+            calls++;
+            for (int i = 0; i < v.length; i++) {
+                float lim = i % 2 == 0 ? w : h;
+                if ((Float.isNaN(v[i]) || Float.isInfinite(v[i]) || v[i] < -1 || v[i] > lim + 1) && bad == null) bad = what + " " + i + "=" + v[i];
+            }
+            for (int i = 0; i + 1 < v.length; i += 2) points.add(new float[] {v[i], v[i + 1]});
+        }
+
+        public void color(int argb) {
+            color = argb;
+            colors.add(argb);
+        }
+
+        public void line(float x1, float y1, float x2, float y2, float width) {
+            in("line", x1, y1, x2, y2);
+        }
+
+        public void arc(float cx, float cy, float r, float startDeg, float sweepDeg, float width) {
+            arcs.add(new float[] {cx, cy, r});
+            for (int k = 0; k <= 16; k++) {
+                double a = Math.toRadians(startDeg + sweepDeg * k / 16.0);
+                in("arc", (float) (cx + r * Math.cos(a)), (float) (cy + r * Math.sin(a)));
+            }
+        }
+
+        public void poly(float[] xy) {
+            polys.add(xy.clone());
+            in("poly", xy);
+        }
+
+        public void circle(float cx, float cy, float r) {
+            circles.add(new float[] {cx, cy, r});
+            in("circle", cx - r, cy - r, cx + r, cy + r);
+        }
+
+        public void text(String s, float x, float y, float size, boolean bold, boolean italic, int align) {
+            in("text", x, y);
+            texts.add(s);
+            textColors.add(color);
+            anchors.add(new float[] {x, y});
+        }
     }
 }

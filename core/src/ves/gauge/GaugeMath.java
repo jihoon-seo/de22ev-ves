@@ -67,7 +67,7 @@ public final class GaugeMath {
     }
 
     /** -1 (full regen) .. 0 .. 1 (full drive); unknown 0 */
-    /** the panel page's needle (RotateDrawable 140..400 degrees): level 0..10000 in steps of NEEDLE_STEP */
+    /** the panel page's needle (a RotateDrawable over the 260 degree sweep, see GaugeRenderer.drawNeedle): level 0..10000 in steps of NEEDLE_STEP */
     public static int needleLevel(double rpm, double max) {
         double level = (angle(rpm, max) - START_DEG) / SWEEP_DEG * 10000;
         return (int) Math.round(level / NEEDLE_STEP) * NEEDLE_STEP;

@@ -3,7 +3,8 @@ package ves.gauge;
 /**
  * The six drawing calls the gauge needs, so one renderer draws on the head unit (Android Canvas) and on a PC (AWT,
  * ves.tools.GaugePreview). Screen coordinates in pixels, y down. Angles in degrees clockwise from 3 o'clock (Android's
- * convention). Text: ASCII only, y is the baseline, align -1 left, 0 centre, 1 right; italic is a fixed slant.
+ * convention). Text: y is the baseline, align -1 left, 0 centre, 1 right; italic is a fixed slant. ASCII, plus Korean
+ * in the 0.2.13 extras (clock weekday, on/off button, camera panel): the font must have Hangul.
  */
 public interface Painter {
     /** colour (ARGB) for the calls that follow */

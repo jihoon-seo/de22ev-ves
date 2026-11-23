@@ -118,11 +118,22 @@ echo "METRICS navi duck $M"
 assert "$(num "$M" yield_closed_ms) == 0" "navi duck: path closed under the prompt"
 assert "$(num "$M" yield_audible_ms) > 3000" "navi duck: not audible under the prompt"
 
-# the gauge (0.2.12) drawn on the PC through the same renderer: every state at 1920x720 and the compact strip
+# the gauge (0.2.12) drawn on the PC through the same renderer: 10 states x 4 sizes (1920x720, the split 1281x720,
+# the compact strip 1856x300 and 1217x300) with the full gauge's extras (0.2.13)
 "$JAVA" -Djava.awt.headless=true -cp "$CLS" ves.tools.GaugePreview "$WORK/gauge" > "$WORK/gauge.txt" 2>&1 || fail "gauge preview"
 N=$(ls "$WORK/gauge" | grep -c '\.png$')
-[ "$N" = 15 ] || fail "gauge preview: $N PNGs (want 14 + sheet)"
+[ "$N" = 41 ] || fail "gauge preview: $N PNGs (want 40 + sheet)"
 echo "PASS gauge preview: $N PNGs"
+
+# the split screen's panel page art (0.2.13): 16 PNGs for the widget's drawables + the composed preview
+"$JAVA" -Djava.awt.headless=true -cp "$CLS" ves.tools.PanelArt "$WORK/panel" --preview > "$WORK/panel.txt" 2>&1 || fail "panel art: $(cat "$WORK/panel.txt")"
+for f in gp_dial_ice gp_dial_ev gp_needle gp_lamps_0 gp_lamps_1 gp_lamps_2 gp_lamps_3 gp_lamps_4 gp_lamps_5 gp_lamps_6 gp_lamps_7 \
+        gp_lamps_8 gp_lamps_9 gp_lamps_flash gp_bar_drive gp_bar_regen panel-preview; do
+    [ -s "$WORK/panel/$f.png" ] || fail "panel art: no $f.png"
+done
+N=$(ls "$WORK/panel" | grep -c '\.png$')
+[ "$N" = 17 ] || fail "panel art: $N PNGs (want 16 + panel-preview)"
+echo "PASS panel art: $N PNGs"
 
 echo "CORE TESTS PASSED"
 exit 0

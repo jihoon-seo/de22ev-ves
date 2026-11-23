@@ -10,11 +10,20 @@ package ves.gauge;
  * up to the needle and the ticks it passes light up; a hatched redline; the needle is an outer blade only, so the
  * centre holds the gear (D4) and the speed; nine round shift lamps ride above the scale; a split bar shows regen
  * (left, green) and power (right, theme colour).
+ *
+ * 0.2.13: drawExtras adds the full gauge's clock, VES on/off button (buttonRect) and camera panel; drawDial,
+ * drawNeedle, drawLamps and drawBar draw the split screen's panel page art (ves.tools.PanelArt, PNGs at build time).
  */
 public final class GaugeRenderer {
     static final int WHITE = 0xFFF2F6FA, DIM = 0x59FFFFFF, FAINT = 0x24FFFFFF, RED = 0xFFFF3B30, RED_ZONE = 0x66FF3B30,
             GREEN = 0xFF46D17A, AMBER = 0xFFFFB020, LAMP_OFF = 0x2EFFFFFF;
+    /** text on light fills (the accent button, the limit sign); the panel dial's disc */
+    static final int INK = 0xFF0B0E12, DIAL_BG = 0xFF0B0E12;
+    /** the on/off pill while off / unknown: opaque (its circles and rect overlap, a translucent fill would band) */
+    static final int BUTTON_OFF = 0xFF3A3E44, BUTTON_UNKNOWN = 0xFF1C2024;
     static final int LAMPS = 9;
+    /** the panel dial's scale radius as a share of its square (the disc reaches 1.08 x this: inside the square) */
+    static final float DIAL_R = 0.44f;
 
     private GaugeRenderer() {}
 
@@ -43,6 +52,14 @@ public final class GaugeRenderer {
             }
         }
 
+        /** the panel page's art: the scale alone, centred in a size x size square */
+        Geo(float size) {
+            w = h = size;
+            compact = false;
+            cx = cy = size / 2;
+            r = size * DIAL_R;
+        }
+
         float x(double deg, double rad) {
             return (float) (cx + rad * Math.cos(Math.toRadians(deg)));
         }
@@ -54,6 +71,21 @@ public final class GaugeRenderer {
 
     public static void drawStatic(Painter p, String profile, int theme, float w, float h) {
         Geo g = new Geo(w, h);
+        float r = g.r;
+        scale(p, g, profile);
+        p.color(DIM);
+        if (!g.compact) p.text("rpm x1000", g.cx, g.cy + r * 0.74f, r * 0.065f, false, false, 0);
+        float[] bar = bar(g);
+        p.color(FAINT);
+        p.line(bar[0], bar[2], bar[1], bar[2], bar[3]);
+        p.color(DIM);
+        float mid = (bar[0] + bar[1]) / 2;
+        p.line(mid, bar[2] - bar[3] * 1.4f, mid, bar[2] + bar[3] * 1.4f, 2);
+        p.text("REGEN", bar[0] - bar[3] * 1.5f, bar[2] + bar[4] * 0.36f, bar[4], false, false, 1);
+    }
+
+    /** the scale: rail, hatched redline (ICE), ticks, numerals */
+    static void scale(Painter p, Geo g, String profile) {
         double max = GaugeMath.maxRpm(profile), red = GaugeMath.redline(profile);
         float r = g.r;
         p.color(FAINT);
@@ -74,15 +106,6 @@ public final class GaugeRenderer {
             float s = r * (g.compact ? 0.17f : 0.14f), rr = r * (g.compact ? 0.66f : 0.70f);
             p.text(String.valueOf(k), g.x(a, rr), g.y(a, rr) + s * 0.36f, s, true, true, 0);
         }
-        p.color(DIM);
-        if (!g.compact) p.text("rpm x1000", g.cx, g.cy + r * 0.74f, r * 0.065f, false, false, 0);
-        float[] bar = bar(g);
-        p.color(FAINT);
-        p.line(bar[0], bar[2], bar[1], bar[2], bar[3]);
-        p.color(DIM);
-        float mid = (bar[0] + bar[1]) / 2;
-        p.line(mid, bar[2] - bar[3] * 1.4f, mid, bar[2] + bar[3] * 1.4f, 2);
-        p.text("REGEN", bar[0] - bar[3] * 1.5f, bar[2] + bar[4] * 0.36f, bar[4], false, false, 1);
     }
 
     /** one tick; lit: in the theme colour (the needle passed it) */
@@ -119,16 +142,7 @@ public final class GaugeRenderer {
             p.arc(g.cx, g.cy, r * 0.93f, a0, (float) (a - a0), r * 0.06f);
         }
         for (int k = 0; k <= rpm && k <= max; k += 250) tick(p, g, k, max, red, true, accent);
-        // the blade needle: outer part only
-        double na = Math.toRadians(a), nx = Math.cos(na), ny = Math.sin(na), bw = r * 0.04;
-        float ri = r * (g.compact ? 0.62f : 0.56f), ro = r * 0.99f;
-        p.color(accent);
-        p.poly(new float[] {(float) (g.cx + ro * nx), (float) (g.cy + ro * ny),
-                (float) (g.cx + ri * nx - bw * ny), (float) (g.cy + ri * ny + bw * nx),
-                (float) (g.cx + ri * nx + bw * ny), (float) (g.cy + ri * ny - bw * nx)});
-        p.color(WHITE);
-        p.line(g.x(Math.toDegrees(na), r * 0.80), g.y(Math.toDegrees(na), r * 0.80), g.x(Math.toDegrees(na), ro), g.y(Math.toDegrees(na), ro),
-                Math.max(1.5f, r * 0.01f));
+        needle(p, g, a, accent);
         // centre: gear and speed
         String gear = GaugeMath.gearLabel(d.profile, d.selector, d.gear);
         p.color(d.shifting ? accent : WHITE);
@@ -157,12 +171,14 @@ public final class GaugeRenderer {
             p.text("RPM", lx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
             float rx = g.w - lx;
             String mode = Theme.name(theme);
-            if (mode.length() > 0) { // unknown drive mode: just the profile
-                p.color(accent);
-                p.text(mode, rx, g.cy, r * 0.17f, true, true, 0);
+            if (NavText.line(d).length() == 0) { // while a camera is ahead drawExtras' camera panel takes this place
+                if (mode.length() > 0) { // unknown drive mode: just the profile
+                    p.color(accent);
+                    p.text(mode, rx, g.cy, r * 0.17f, true, true, 0);
+                }
+                p.color(DIM);
+                p.text(profileName(d.profile), rx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
             }
-            p.color(DIM);
-            p.text(profileName(d.profile), rx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
         }
         // gear strip
         if (GaugeMath.showGearStrip(d.profile)) {
@@ -192,8 +208,7 @@ public final class GaugeRenderer {
         boolean flash = GaugeMath.shiftBlink(d.rpm, d.shiftRpm);
         for (int i = 0; i < LAMPS; i++) {
             boolean on = flash ? blinkOn : i < lit;
-            int c = flash ? RED : i < 3 ? GREEN : i < 6 ? AMBER : RED;
-            p.color(on ? c : LAMP_OFF);
+            p.color(on ? lampColor(i, flash) : LAMP_OFF);
             float lx, ly, lr;
             if (g.compact) { // a cluster at the start of the bar, not spread over its whole width
                 float[] b = bar(g);
@@ -220,6 +235,172 @@ public final class GaugeRenderer {
         p.color(WHITE);
         String kw = Double.isNaN(d.kw) ? "-- kW" : Math.round(d.kw) + " kW";
         p.text(kw, b[1] + b[3] * 1.5f, b[2] + b[4] * 0.36f, b[4], true, false, -1);
+    }
+
+    /** the blade needle at angle a (degrees): its outer part only, so the centre stays free for the gear */
+    static void needle(Painter p, Geo g, double a, int accent) {
+        float r = g.r;
+        double na = Math.toRadians(a), nx = Math.cos(na), ny = Math.sin(na), bw = r * 0.04;
+        float ri = r * (g.compact ? 0.62f : 0.56f), ro = r * 0.99f;
+        p.color(accent);
+        p.poly(new float[] {(float) (g.cx + ro * nx), (float) (g.cy + ro * ny),
+                (float) (g.cx + ri * nx - bw * ny), (float) (g.cy + ri * ny + bw * nx),
+                (float) (g.cx + ri * nx + bw * ny), (float) (g.cy + ri * ny - bw * nx)});
+        p.color(WHITE);
+        p.line(g.x(a, r * 0.80), g.y(a, r * 0.80), g.x(a, ro), g.y(a, ro), Math.max(1.5f, r * 0.01f));
+    }
+
+    /** lamp i of LAMPS lit: three green, three amber, three red; all red while flashing at the shift point */
+    static int lampColor(int i, boolean flash) {
+        return flash ? RED : i < 3 ? GREEN : i < 6 ? AMBER : RED;
+    }
+
+    // ------------------------------------------------------------------ the full gauge's extras (0.2.13)
+
+    /**
+     * The full gauge's (GaugeActivity, 1920x720 or the split 1281x720) extras over drawStatic + drawDynamic: the clock
+     * top-left (clockText from Clock.format, passed in so the output is deterministic), the VES on/off button
+     * top-right (at buttonRect: the app toggles on a tap inside it) and, while NavText.line(d) is not "", the camera
+     * panel in the right-hand zone where the profile label sits otherwise (drawDynamic leaves that place free): a
+     * speed-limit sign, the camera line and "현재 72", both red when NavText.over. Nothing on the compact strip (the main
+     * screen shows the clock and the camera line as TextViews). d may be null (vesd silent): the button shows "--".
+     */
+    public static void drawExtras(Painter p, LiveData d, String clockText, float w, float h) {
+        Geo g = new Geo(w, h);
+        if (g.compact) return;
+        float m = margin(h), cs = h * 0.044f;
+        if (clockText != null && clockText.length() > 0) {
+            p.color(WHITE);
+            p.text(clockText, m, m + cs * 0.9f, cs, false, false, -1);
+        }
+        // the on/off button: a pill, filled in the accent while on
+        int on = d == null ? -1 : d.on, accent = Theme.accent(Theme.NEUTRAL), ink;
+        float[] b = buttonRect(w, h);
+        float bh = b[3] - b[1];
+        String label;
+        if (on == 1) {
+            p.color(accent);
+            ink = INK;
+            label = "VES 켜짐";
+        } else if (on == 0) {
+            p.color(BUTTON_OFF);
+            ink = WHITE;
+            label = "VES 꺼짐";
+        } else {
+            p.color(BUTTON_UNKNOWN);
+            ink = 0xFF8A9096;
+            label = "VES --";
+        }
+        pill(p, b[0], b[1], b[2], b[3]);
+        p.color(ink);
+        float ts = bh * 0.42f;
+        p.text(label, (b[0] + b[2]) / 2, (b[1] + b[3]) / 2 + ts * 0.36f, ts, true, false, 0);
+        // the camera panel
+        String line = NavText.line(d);
+        if (line.length() == 0) return;
+        boolean over = NavText.over(d);
+        float r = g.r, left = g.cx + r * 1.12f, zone = w - left, rx = left + zone / 2;
+        float rs = Math.min(r * 0.22f, zone * 0.24f), sy = g.cy - r * 0.32f;
+        int lim = d.section == 1 || "section".equals(d.cam) ? (d.sectionLimit > 0 ? d.sectionLimit : d.camLimit) : d.camLimit;
+        if (lim > 0) { // the round limit sign
+            p.color(RED);
+            p.circle(rx, sy, rs);
+            p.color(WHITE);
+            p.circle(rx, sy, rs * 0.78f);
+            p.color(INK);
+            float ns = rs * (lim >= 100 ? 0.70f : 0.88f);
+            p.text(String.valueOf(lim), rx, sy + ns * 0.36f, ns, true, false, 0);
+        } else { // a warning triangle
+            p.color(AMBER);
+            p.poly(new float[] {rx, sy - rs, rx + rs * 1.1f, sy + rs * 0.85f, rx - rs * 1.1f, sy + rs * 0.85f});
+            p.color(INK);
+            float ns = rs * 0.9f;
+            p.text("!", rx, sy + rs * 0.2f + ns * 0.36f, ns, true, false, 0);
+        }
+        float ls = Math.min(r * 0.105f, zone / 12f), ly = g.cy + r * 0.12f;
+        p.color(over ? RED : WHITE);
+        p.text(line, rx, ly, ls, true, false, 0);
+        String kph = d.kph == d.kph ? String.valueOf(Math.round(d.kph)) : "--";
+        p.color(over ? RED : WHITE);
+        p.text("현재 " + kph, rx, ly + r * 0.24f, Math.min(r * 0.15f, zone / 6.5f), true, false, 0);
+    }
+
+    /**
+     * The on/off button's rect {left, top, right, bottom} in the full layout: top-right, clear of the shift lamps and
+     * the readouts at 1920x720 and 1281x720 (GA10). The app hit-tests taps against it.
+     */
+    public static float[] buttonRect(float w, float h) {
+        float m = margin(h), bw = h * 0.27f, bh = h * 0.085f, top = m * 0.8f;
+        return new float[] {w - m - bw, top, w - m, top + bh};
+    }
+
+    static float margin(float h) {
+        return h * 0.035f;
+    }
+
+    /** a filled pill in the current colour */
+    static void pill(Painter p, float x0, float y0, float x1, float y1) {
+        float rr = (y1 - y0) / 2, my = (y0 + y1) / 2;
+        p.circle(x0 + rr, my, rr);
+        p.circle(x1 - rr, my, rr);
+        p.poly(new float[] {x0 + rr, y0, x1 - rr, y0, x1 - rr, y1, x0 + rr, y1});
+    }
+
+    // ------------------------------------------------------------------ the split screen's panel page art (0.2.13)
+
+    /**
+     * The panel page's dial (rendered to PNG at build time by ves.tools.PanelArt): a dark disc with the scale (rail,
+     * ticks, numerals, the hatched redline on the ICE scale), a faint accent ribbon track and "rpm x1000", centred in a
+     * size x size square; outside the disc nothing is drawn (transparent). drawNeedle matches it.
+     */
+    public static void drawDial(Painter p, String profile, float size) {
+        Geo g = new Geo(size);
+        float r = g.r;
+        p.color(DIAL_BG);
+        p.circle(g.cx, g.cy, r * 1.08f);
+        p.color(0x1AFFFFFF); // a faint rim, so the disc reads on any page colour
+        p.arc(g.cx, g.cy, r * 1.07f, 0, 360, Math.max(1.5f, r * 0.008f));
+        p.color(0x2E000000 | (Theme.accent(Theme.NEUTRAL) & 0xFFFFFF));
+        p.arc(g.cx, g.cy, r * 0.93f, (float) GaugeMath.START_DEG, (float) GaugeMath.SWEEP_DEG, r * 0.06f);
+        scale(p, g, profile);
+        p.color(DIM);
+        p.text("rpm x1000", g.cx, g.cy + r * 0.74f, r * 0.065f, false, false, 0);
+    }
+
+    /**
+     * The panel page's needle alone, pointing at the START angle (140 degrees: 0 rpm), in a size x size square with
+     * the same centre and radius as drawDial. The app rotates it about the centre with a RotateDrawable:
+     * <pre>
+     * &lt;rotate android:drawable="@drawable/gp_needle" android:fromDegrees="0" android:toDegrees="260"
+     *         android:pivotX="50%" android:pivotY="50%" /&gt;
+     * </pre>
+     * level 0..10000 (PanelFrame.needle = GaugeMath.needleLevel) turns it 0..260 degrees clockwise, i.e. 0..max rpm.
+     * Keep the ImageView square (needle and dial the same size, scaleType fitCenter) so the pivot is the dial's centre.
+     */
+    public static void drawNeedle(Painter p, float size) {
+        needle(p, new Geo(size), GaugeMath.START_DEG, Theme.accent(Theme.NEUTRAL));
+    }
+
+    /**
+     * The panel page's shift-lamp strip for one level of its level-list: LAMPS round lamps across w x h, the first lit
+     * of them on (green, amber, red as the full gauge), or all red when flash (PanelFrame.LAMPS_FLASH).
+     */
+    public static void drawLamps(Painter p, int lit, boolean flash, float w, float h) {
+        float lr = Math.min(h * 0.38f, w / LAMPS * 0.34f);
+        for (int i = 0; i < LAMPS; i++) {
+            p.color(flash || i < lit ? lampColor(i, flash) : LAMP_OFF);
+            p.circle(w * (i + 0.5f) / LAMPS, h / 2, lr);
+        }
+    }
+
+    /**
+     * A full power bar for a ClipDrawable (w x h, the bar's middle half of the height): regen green (the widget clips
+     * it from the right: gravity right), drive in the accent (clipped from the left: gravity left); the level is
+     * PanelFrame.regen / drive.
+     */
+    public static void drawBar(Painter p, boolean regen, float w, float h) {
+        p.color(regen ? GREEN : Theme.accent(Theme.NEUTRAL));
+        p.poly(new float[] {0, h * 0.25f, w, h * 0.25f, w, h * 0.75f, 0, h * 0.75f});
     }
 
     static String rpmText(double rpm) {
