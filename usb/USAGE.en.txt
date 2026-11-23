@@ -1,4 +1,4 @@
-Virtual engine sound (HMG-API mod de22ev-ves 0.2.12) - for DE22EV.KOR V039 260902 only, test version
+Virtual engine sound (HMG-API mod de22ev-ves 0.2.13) - for DE22EV.KOR V039 260902 only, test version
 
 What it does
 - Makes an engine-like sound live from speed, accelerator pedal and motor power (read only) and plays
@@ -7,7 +7,8 @@ What it does
   Android Auto music. It pauses for navigation prompts, calls and voice recognition.
 - Does not touch the exterior pedestrian warning sound (VESS) or any vehicle control, and changes no
   system file.
-- Off after install.
+- Off after install. The engine sound always starts off when the head unit starts; turn it on
+  yourself each time (app, split screen or star key).
 Requires: NEMESIS, HMG-API 1.0.0-beta.5 (hooks on). The mod is signed with its author's own key, so
 install.txt carries a trusted-author warning; the install goes ahead.
 
@@ -26,7 +27,9 @@ Steps
    and follow the screens (test tones, navigation prompt overlap, chimes, then a short drive recording).
    Everything but the drive recording is done parked. Don't touch the screen while driving.
 4. Send the VES folder (probe-... folders) from the stick. If something is wrong, set MODE.txt to
-   status, insert the stick, choose Yes and send the VES_MOD_* folder too.
+   status, insert the stick, choose Yes and send the VES_MOD_* folder too. The status logs include
+   the navigation camera lines (logcat-nav.txt, cluster-dump.txt) and HMG-API's map state (map.txt,
+   map-check.json).
 
 Sound: 8 built-in packs (VEX 4-cyl default, VEX V10, AE86 4A-GE, AMG M156 V8, 911 GT3, GT-R VR38,
 S2000 F20C, S2000 Baked; sounds by 히릿, used with permission, see THIRD_PARTY.md) or user slots 1-8. Behaviour by default "like an
@@ -39,11 +42,22 @@ Own sound packs: put pack.txt and WAV loops (22050 Hz mono 16-bit) in VES/packs/
 stick and use "USB에서 소리 팩 가져오기" in the app (format: README on GitHub).
 Level: since 0.2.7 every volume value is 6 dB louder than in 0.2.6, and "speed boost" (speed_boost)
 raises the sound from 40 km/h up to +3/+6/+9 dB at 110 km/h (off/low/mid/high, default high).
-Settings: the app, the split-screen widget, the star key action, or HMG-API's Mods tab (there,
+Split screen: two pages from this mod, "계기판" (gauges, first) and "엔진 사운드" (on/off, volume);
+switch with ‹ ›. Pick the HMG-API slot in 설정 > 화면구성 > 분할 화면 (Settings > Display layout >
+Split screen).
+Settings: the app, the split-screen page, the star key action, or HMG-API's Mods tab (there,
 press "Save settings" at the bottom: leaving the screen without it drops the change; Apply
 changes isn't needed).
 Update: install the new version the same way; settings are kept. STATUS.txt UPDATED_IN_USE_NOW means
 it is in use at once (app and service replaced on the spot), no car restart needed.
+
+Split screen opens and bounces closed at once:
+1. Update HMG-API to 1.1.0-rc.8 or later (NEMESIS package; mods and settings are kept).
+2. In the HMG-API app: Settings > Check the map on this car (`hmgapid engine verify-map`).
+3. Restart the car.
+- Don't turn on "Try unchecked maps" unless asked to.
+- If the map check fails, set MODE.txt to status, insert the stick, choose Yes and send the
+  VES_MOD_* folder.
 
 Remove (MODE.txt = uninstall): turns the mod off and removes it and its app. Stock behaviour from the
 next boot.

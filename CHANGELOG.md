@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.13
+
+From the drive with 0.2.12 (2026-11-20) and the owner's requests:
+
+- Split screen: the app's screens (main, full gauge, car check) now narrow to the left area while the split
+  screen is shown, like the stock apps. This car's split panel floats over the right-hand 640 px and the
+  window manager resizes nothing; each app narrows itself while `split_screen_status` is 1 (1281 px, as the
+  stock EV app does).
+- New split-screen page **계기판** (first, before 엔진 사운드; switch with ‹ ›): the gauge with a rotating
+  needle, gear, speed, shift lamps, power / regen bar, the clock and a VES on/off button. It is an app widget
+  (HMG-API's panel hosts only widgets): the dial and needle images are drawn at build time by the same gauge
+  code, and the page is updated at up to 5 Hz, only while the split screen is shown.
+- Clock `2026.11.23. (월) 14:05:09` on the full gauge, the split page and the main screen.
+- VES on/off button on the full gauge (tap the button; anywhere else still closes) and the split page.
+- Speed camera information from the stock navigation on the full gauge and the main screen: limit, distance
+  and the current speed (red above the limit); section enforcement (구간단속) with its limit and average when
+  the navigation sends them. vesd reads the navigation's own cluster messages from the system log (no hooks,
+  nothing sent). Which camera / zone code is which is not known yet: unknown codes are only logged (`nav:`
+  lines in vesd.log) and a drive past cameras and a 구간단속 section will fill them in.
+- VES now always starts off when the head unit starts; turn it on yourself. A later vesd restart (an update,
+  a crash) keeps your choice.
+- Settings > 화면구성 > 분할 화면 bouncing back: caused by HMG-API 1.1.0-rc.2's own map on this car (its
+  split-screen editor stays off, and the stock editor crashes on the mod page). Fixed by HMG-API 1.1.0-rc.8,
+  which ships the official map for this firmware: update HMG-API, run 지도 확인 in its settings, restart.
+- The status kit also collects the navigation camera lines, the cluster service dump and HMG-API's map state.
+- The drive-mode value used for the gauge colours (VCU `CF_Vcu_EvMod`, 1/2/6) turned out to be the power-flow
+  state, not ECO / NORMAL / SPORT: the gauge stays neutral and vesd no longer logs each change.
+- The sound is unchanged.
+
 ## 0.2.12
 
 - New: an RPM + gear gauge in the app. A strip at the top of the main screen shows the virtual rpm, the gear,

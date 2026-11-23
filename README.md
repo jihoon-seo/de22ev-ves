@@ -6,7 +6,7 @@ An [HMG-API](https://github.com/VysseCodes/HMG-API) mod that adds a **virtual en
 the cabin** of a 1st-gen Kia Niro EV (Gen5W head unit): the sound is synthesized live from vehicle
 speed, accelerator pedal and motor power, with on/off and volume controls.
 
-> **Test version 0.2.12, for one car and firmware:** `DE22EV.KOR.0000.V039.001.260902` (onebin
+> **Test version 0.2.13, for one car and firmware:** `DE22EV.KOR.0000.V039.001.260902` (onebin
 > `de22ev_kr`). Unofficial; see [Disclaimer](#disclaimer).
 
 ## How it works
@@ -33,9 +33,10 @@ speed, accelerator pedal and motor power, with on/off and volume controls.
   Android Auto music. The channel is opened only while there is sound and closed after 2 s of
   silence. Navigation prompts, calls, voice recognition and similar voices make it fade out within
   150 ms and resume 1.5 s after they end.
-- **Controls.** The "엔진 사운드" app (big buttons; also a menu tile), a split-screen panel widget,
-  a ★ key action, and HMG-API's Mods tab. Volume is the mod's own (0–100, capped), independent of
-  the car's volume knob. Off after install.
+- **Controls.** The "엔진 사운드" app (big buttons; also a menu tile), two split-screen pages
+  ("계기판" gauges first, then "엔진 사운드"; switch with ‹ ›), a ★ key action, and HMG-API's Mods
+  tab. Volume is the mod's own (0–100, capped), independent of the car's volume knob. Off after
+  install, and it always starts off when the head unit starts (turning it on is up to you).
 - It never touches the exterior pedestrian warning sound (VESS), the amplifier's ASD settings or
   any system file.
 
@@ -69,7 +70,7 @@ import stay on your car; only use recordings you may use.
 
 | key | values |
 |---|---|
-| `enabled` | off (default) / on |
+| `enabled` | off (default) / on; starts off every time the head unit starts |
 | `volume` | 0–100 (default 40); since 0.2.7 every value is 6 dB louder than in 0.2.6 |
 | `sound` | `vex4` (default), `vex_v10`, `ae86`, `amg_v8`, `gt3`, `gtr`, `s2000`, `s2000_baked`, `user1`–`user8`; an empty or broken slot plays `vex4` |
 | `profile` | rpm model (and the synth's voice): `ice_smooth`, `ice_shift`, `ev_future` |
@@ -88,7 +89,13 @@ P, N, R or not Ready is always silent.
 ## Install
 
 Releases carry `de22ev-ves-<version>.USB.zip` (NEMESIS USB kit: install / status / uninstall) and the
-signed mod zip. See `usb/USAGE.en.txt`.
+signed mod zip. See `usb/USAGE.en.txt`. The status mode also collects the navigation camera lines
+(ClusterService) and HMG-API's map state.
+
+If the split screen opens and bounces closed at once: update HMG-API to 1.1.0-rc.8 or later (NEMESIS
+package; mods and settings are kept), run Settings > Check the map on this car in the HMG-API app
+(`hmgapid engine verify-map`), then restart the car. Leave "Try unchecked maps" off. If the map check
+fails, send the status logs.
 
 ## Build and test
 

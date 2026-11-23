@@ -6,7 +6,7 @@
       "type": "toggle",
       "default": false,
       "title": "가상 엔진 사운드",
-      "description": "실내 스피커로만 나옵니다. 차 밖 보행자 경고음은 바뀌지 않습니다."
+      "description": "실내 스피커로만 나옵니다. 차 밖 보행자 경고음은 바뀌지 않습니다. 내비가 켜질 때마다 꺼진 상태로 시작합니다."
     },
     {
       "key": "volume",
