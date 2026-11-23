@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the 계기판 page's VES button, on (GaugeRenderer.drawExtras colours) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFB8D8EE" />
+    <corners android:radius="24dp" />
+</shape>

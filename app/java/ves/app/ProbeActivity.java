@@ -66,17 +66,20 @@ public final class ProbeActivity extends Activity {
         buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.VERTICAL);
         root.addView(buttons);
-        setContentView(sv);
+        split = Split.wrap(this, sv, Color.rgb(16, 18, 22));
+        setContentView(split.root());
         at = savedStep();
         show();
     }
 
     private boolean resumed;
+    private Split split; // 0.2.13: narrow to the left while the split screen's panel covers the right
 
     @Override
     protected void onResume() {
         super.onResume();
         resumed = true;
+        split.resume();
         if (busy) return;
         at = savedStep();
         result.setText("");
@@ -108,6 +111,7 @@ public final class ProbeActivity extends Activity {
     @Override
     protected void onPause() {
         resumed = false;
+        split.pause();
         super.onPause();
     }
 

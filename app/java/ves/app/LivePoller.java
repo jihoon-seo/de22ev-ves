@@ -10,15 +10,20 @@ import ves.hmg.VesLink;
 
 /**
  * Asks vesd for LIVE 10 times a second on one long-lived thread while a gauge is shown (start in onResume, stop in
- * onPause); vesd not answering: every second, and the gauge shows "--".
+ * onPause); vesd not answering: every second, and the gauge shows "--". The answers go to a Sink on the UI thread.
  */
 final class LivePoller {
+    /** gets each LIVE answer on the UI thread (null: vesd doesn't answer) */
+    interface Sink {
+        void setData(LiveData d);
+    }
+
     static final long PERIOD_MS = 100, RETRY_MS = 1000;
-    private final GaugeView view;
+    private final Sink view;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private volatile Thread thread;
 
-    LivePoller(GaugeView view) {
+    LivePoller(Sink view) {
         this.view = view;
     }
 

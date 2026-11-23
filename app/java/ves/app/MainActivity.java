@@ -18,10 +18,14 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import ves.gauge.Clock;
+import ves.gauge.LiveData;
+import ves.gauge.NavText;
 import ves.hmg.Prefs;
 import ves.hmg.VesLink;
 
@@ -39,6 +43,11 @@ public final class MainActivity extends Activity {
     private final Map<String, String> packNames = new HashMap<String, String>();
     private boolean visible;
     private LivePoller gaugePoller; // 0.2.12: the compact gauge at the top; a tap opens GaugeActivity
+    // 0.2.13: the clock next to the title, the camera line under the status (from the gauge's LIVE answers), and the
+    // content narrowed to the left while the split screen's panel covers the right
+    private TextView clock, camera;
+    private Split split;
+    static final int CAMERA_OVER = 0xFFFF5A36;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -50,10 +59,17 @@ public final class MainActivity extends Activity {
         sv.addView(root);
         sv.setBackgroundColor(Color.rgb(16, 18, 22));
 
-        TextView title = text(root, "가상 엔진 사운드", 30, Color.WHITE);
+        LinearLayout top = row(root);
+        top.setGravity(Gravity.CENTER_VERTICAL);
+        TextView title = text(top, "가상 엔진 사운드", 30, Color.WHITE);
         title.setPadding(0, 0, 0, 8);
+        title.setLayoutParams(new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        clock = text(top, Clock.format(Calendar.getInstance()), 24, Color.WHITE);
+        clock.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         status = text(root, "…", 20, Color.rgb(150, 200, 255));
-        GaugeView gauge = new GaugeView(this);
+        camera = text(root, "", 22, Color.WHITE);
+        camera.setVisibility(View.GONE);
+        final GaugeView gauge = new GaugeView(this);
         gauge.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 startActivity(new Intent(MainActivity.this, GaugeActivity.class));
@@ -62,7 +78,12 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 300);
         glp.setMargins(0, 8, 0, 12);
         root.addView(gauge, glp);
-        gaugePoller = new LivePoller(gauge);
+        gaugePoller = new LivePoller(new LivePoller.Sink() {
+            public void setData(LiveData d) {
+                gauge.setData(d);
+                showCamera(d);
+            }
+        });
 
         LinearLayout row = row(root);
         power = big(row, "켜기", 2);
@@ -108,22 +129,49 @@ public final class MainActivity extends Activity {
         speedBoost = setting(root, Prefs.SPEED_BOOST, Actions.SPEED_BOOST);
 
         text(root, "주행 중에는 조작하지 마세요. 차 밖으로 나가는 보행자 경고음(VESS)은 바꾸지 않습니다.", 15, Color.GRAY);
-        setContentView(sv);
+        split = Split.wrap(this, sv, Color.rgb(16, 18, 22));
+        setContentView(split.root());
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         visible = true;
+        split.resume();
         gaugePoller.start();
+        h.removeCallbacks(clockTick);
+        clockTick.run();
         refresh();
+        PanelService.start(this); // the split page's feeder, in case it was stopped (it stops itself without a page)
     }
 
     @Override
     protected void onPause() {
         visible = false;
         gaugePoller.stop();
+        h.removeCallbacks(clockTick);
+        split.pause();
         super.onPause();
+    }
+
+    /** the clock, set just after each new second while the screen is shown */
+    private final Runnable clockTick = new Runnable() {
+        public void run() {
+            clock.setText(Clock.format(Calendar.getInstance()));
+            if (visible) h.postDelayed(this, 1000 - System.currentTimeMillis() % 1000 + 10);
+        }
+    };
+
+    /** the camera line (NavText), red above the limit, hidden without a camera or vesd */
+    private void showCamera(LiveData d) {
+        String line = NavText.line(d);
+        if (line.length() == 0) {
+            camera.setVisibility(View.GONE);
+            return;
+        }
+        camera.setText(line);
+        camera.setTextColor(NavText.over(d) ? CAMERA_OVER : Color.WHITE);
+        camera.setVisibility(View.VISIBLE);
     }
 
     interface Op {

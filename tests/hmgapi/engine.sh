@@ -57,8 +57,9 @@ python -I -c "
 import json,sys
 m=json.load(open(sys.argv[1],encoding='utf-8'))['mods']['$ID']
 assert m['settings']['enabled'] is False and m['settings']['volume']==40, m['settings']
-assert m['panel'][0]['widget']=='io.github.jihoonseo.ves/ves.app.VesWidget', m['panel']
-" "$T/root/data/hmgapi/public/state.json" && pass "state: off by default, volume 40, panel widget" || fail "state.json" "see above"
+# 0.2.13: two panel pages, the gauge (계기판) first, then the on/off + volume page
+assert [p['widget'] for p in m['panel']]==['io.github.jihoonseo.ves/ves.app.GaugeWidget','io.github.jihoonseo.ves/ves.app.VesWidget'], m['panel']
+" "$T/root/data/hmgapi/public/state.json" && pass "state: off by default, volume 40, panel pages GaugeWidget then VesWidget" || fail "state.json" "see above"
 eng remove "$ID"
 if [ $rc = 0 ] && [ ! -d "$M" ]; then pass "remove"
 elif echo "$out" | grep -q "rename"; then echo "SKIP remove: the engine's rename-over doesn't work on Windows"

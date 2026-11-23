@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 0.2.13: the split screen's 계기판 panel page (mod.json provides.panel), kept current by PanelService -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/gauge_widget"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen" />

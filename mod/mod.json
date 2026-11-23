@@ -61,6 +61,10 @@
     ],
     "panel": [
       {
+        "title": "계기판",
+        "widget": "io.github.jihoonseo.ves/ves.app.GaugeWidget"
+      },
+      {
         "title": "엔진 사운드",
         "widget": "io.github.jihoonseo.ves/ves.app.VesWidget"
       }

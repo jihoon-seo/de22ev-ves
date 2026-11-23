@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">엔진 사운드</string>
     <string name="probe_name">엔진 사운드 점검</string>
+    <string name="gauge_name">계기판</string>
 </resources>

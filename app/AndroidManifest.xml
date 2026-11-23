@@ -30,5 +30,13 @@
             </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/ves_widget" />
         </receiver>
+        <!-- 0.2.13: the split screen's first panel page, 계기판 (mod.json provides.panel), fed by PanelService -->
+        <receiver android:name="ves.app.GaugeWidget" android:label="@string/gauge_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gauge_widget" />
+        </receiver>
+        <service android:name="ves.app.PanelService" android:exported="false" />
     </application>
 </manifest>

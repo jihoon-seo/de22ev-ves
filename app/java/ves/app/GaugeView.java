@@ -6,6 +6,9 @@ import android.graphics.Canvas;
 import android.os.SystemClock;
 import android.view.View;
 
+import java.util.Calendar;
+
+import ves.gauge.Clock;
 import ves.gauge.GaugeRenderer;
 import ves.gauge.LiveData;
 import ves.gauge.Needle;
@@ -15,8 +18,10 @@ import ves.gauge.Theme;
  * The RPM + gear gauge (0.2.12), compact or full by its own aspect (GaugeRenderer). The static layer is drawn once
  * per size / profile / theme into a bitmap; each frame draws that and the dynamic layer. It animates only while the
  * needle is still moving or the shift lamps flash, so a settled gauge costs nothing between data points.
+ * With extras (the full gauge, 0.2.13) it also draws GaugeRenderer.drawExtras: the clock, redrawn at each new second
+ * while shown, the VES button (GaugeActivity hit-tests GaugeRenderer.buttonRect) and the camera panel.
  */
-final class GaugeView extends View {
+final class GaugeView extends View implements LivePoller.Sink {
     static final int BG = 0xFF07090C;
     private final AndroidPainter painter = new AndroidPainter();
     private final Needle needle = new Needle();
@@ -25,14 +30,26 @@ final class GaugeView extends View {
     private Bitmap layer;
     private String layerKey = "";
     private long lastFrame;
+    private boolean extras;
+    private final Runnable second = new Runnable() {
+        public void run() {
+            invalidate();
+        }
+    };
 
     GaugeView(Context c) {
         super(c);
         setBackgroundColor(BG);
     }
 
+    /** draw the clock, the VES button and the camera panel too (the full gauge) */
+    void setExtras(boolean on) {
+        extras = on;
+        invalidate();
+    }
+
     /** new data from LivePoller (null: vesd doesn't answer) */
-    void setData(LiveData d) {
+    public void setData(LiveData d) {
         data = d == null ? unknown() : d;
         invalidate();
     }
@@ -42,6 +59,12 @@ final class GaugeView extends View {
         d.rpm = Double.NaN;
         d.kph = Double.NaN;
         return d;
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        removeCallbacks(second);
+        super.onDetachedFromWindow();
     }
 
     @Override
@@ -72,6 +95,12 @@ final class GaugeView extends View {
         c.drawBitmap(layer, 0, 0, null);
         boolean blinkOn = (now / 250) % 2 == 0;
         GaugeRenderer.drawDynamic(painter.on(c), d, rpm, theme, blinkOn, w, h);
+        if (extras) {
+            GaugeRenderer.drawExtras(painter.on(c), d, Clock.format(Calendar.getInstance()), w, h);
+            // the clock ticks: one redraw just after the next second starts (no draw while hidden, so it stops there)
+            removeCallbacks(second);
+            postDelayed(second, 1000 - System.currentTimeMillis() % 1000 + 10);
+        }
         boolean moving = !Double.isNaN(d.rpm) && Math.abs(rpm - d.rpm) > 2;
         boolean flashing = ves.gauge.GaugeMath.shiftBlink(d.rpm, d.shiftRpm);
         if (moving || flashing) postInvalidateOnAnimation();

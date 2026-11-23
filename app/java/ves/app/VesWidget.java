@@ -56,6 +56,7 @@ public final class VesWidget extends AppWidgetProvider {
                 pr.finish();
             }
         }).start();
+        PanelService.start(ctx); // 0.2.13: the 계기판 page's feeder (harmless without one: it stops itself)
     }
 
     static void updateAll(Context ctx) {

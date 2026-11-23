@@ -131,6 +131,32 @@ for sk in mod['provides']['star_key']:
     check('star_key %s broadcast received' % sk['id'], any(sk['broadcast'] in v for v in recv.values()), sk['broadcast'])
     check('star_key broadcast == Actions.ACTION_TOGGLE', '"%s"' % sk['broadcast'] in actions, sk['broadcast'])
 
+# 0.2.13: the split screen's two panel pages, 계기판 (GaugeWidget, fed by PanelService) first, then 엔진 사운드
+def maybe(p):
+    try:
+        return read(p)
+    except OSError:
+        return ''
+
+
+gw_layout = maybe('app/res/layout/gauge_widget.xml')
+layout_ids = set(re.findall(r'@\+id/(\w+)', gw_layout))
+used_ids = set()
+for f in ('app/java/ves/app/GaugeWidget.java', 'app/java/ves/app/PanelService.java'):
+    used_ids |= set(re.findall(r'\bR\.id\.(\w+)', maybe(f)))
+check('MOD-P1 every R.id in GaugeWidget/PanelService is in res/layout/gauge_widget.xml',
+      bool(used_ids) and used_ids <= layout_ids, 'used %s, layout has %s' % (sorted(used_ids), sorted(layout_ids)))
+panels = mod['provides']['panel']
+titles = [p['title'] for p in panels]
+check('MOD-P2 panel titles distinct, 계기판 first', len(titles) == len(set(titles)) and titles[:1] == ['계기판'] and
+      [p['widget'] for p in panels] == [pkg + '/ves.app.GaugeWidget', pkg + '/ves.app.VesWidget'], str(titles))
+meta = {r.get(A + 'name'): [x.get(A + 'name') for x in r.iter('meta-data')] for r in man.iter('receiver')}
+for wc in ('ves.app.GaugeWidget', 'ves.app.VesWidget'):
+    check('MOD-P2 %s receiver with appwidget meta-data' % wc, wc in recv and
+          'android.appwidget.action.APPWIDGET_UPDATE' in recv[wc] and 'android.appwidget.provider' in meta.get(wc, []), wc)
+svcs = {s.get(A + 'name'): s.get(A + 'exported') for s in man.iter('service')}
+check('MOD-P2 PanelService declared, not exported', svcs.get('ves.app.PanelService') == 'false', str(svcs))
+
 svc = mod['services'][0]
 check('vesd class exists', svc['class'] == 'ves.android.Vesd', svc['class'])
 check('vesd runs as system', svc['user'] == 'system', svc['user'])

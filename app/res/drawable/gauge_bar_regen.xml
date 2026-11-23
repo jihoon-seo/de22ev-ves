@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the 계기판 page's regen bar (left half, grows from the centre to the left): level = PanelFrame.regen -->
+<clip xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/gp_bar_regen"
+    android:clipOrientation="horizontal" android:gravity="right" />
