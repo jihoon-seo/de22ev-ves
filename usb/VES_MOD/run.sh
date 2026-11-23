@@ -2,7 +2,8 @@
 # USB kit for the HMG-API mod de22ev-ves (virtual engine sound in the cabin).
 #   MODE.txt=install    install/update the signed mod and enable it (active after the next boot); on success
 #                       MODE.txt becomes status, so plugging the stick in again collects the logs
-#   MODE.txt=status     copy HMG-API's log, recent logcat and the mod state to USB
+#   MODE.txt=status     copy HMG-API's log, recent logcat, the navigation camera lines, HMG-API's map
+#                       state and the mod state to USB
 #   MODE.txt=uninstall  disable and remove the mod (stock behaviour after the next boot)
 export PATH=/system/bin:/system/xbin:/data/nemesis/bin
 umask 077
@@ -56,6 +57,11 @@ if [ "$MODE" = status ]; then
     grep -E "HMG-API|MicomAudio|AudioServiceHelper|AudioFlinger|AudioTrack|de22ev-ves|vesd" "$OUT/logcat-all.txt" > "$OUT/logcat-ves.txt"
     cp -r /data/hmgapi/logs/de22ev-ves "$OUT/service-logs" 2>/dev/null
     "$H" services > "$OUT/services.txt" 2>&1
+    # navigation camera lines and the cluster service state (speed camera display), HMG-API's map state
+    logcat -d -v time -b system -s ClusterService:D > "$OUT/logcat-nav.txt" 2>&1
+    dumpsys com.hkmc.micom.cluster > "$OUT/cluster-dump.txt" 2>&1
+    "$H" engine map > "$OUT/map.txt" 2>&1
+    cp /data/hmgapi/state/map-check.json "$OUT/" 2>/dev/null
     done_status STATUS_WRITTEN
     exit 0
 fi

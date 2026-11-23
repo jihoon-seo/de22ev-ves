@@ -25,15 +25,19 @@ case "$1" in
     version) echo "hmgapid 1.0.0-beta.5" ;;
     log) echo "I/HMG-API: [de22ev-ves] [de22ev-ves] service vesd started" ;;
     mods) echo "de22ev-wireless-aa	enabled"; [ -f "$MOCK/installed" ] && echo "de22ev-ves	enabled" ;;
-    engine) [ "$2" = install ] && touch "$MOCK/installed"; [ "$2" = remove ] && rm -f "$MOCK/installed" ;;
+    engine) [ "$2" = install ] && touch "$MOCK/installed"; [ "$2" = remove ] && rm -f "$MOCK/installed"
+        [ "$2" = map ] && echo "map: kor 2026 verified" ;;
 esac
 exit 0
 EOF
     printf '#!/bin/bash\necho "logcat $*" >> "$MOCK/calls"\necho "I/MicomAudioService: startAudio 69"\necho "I/Other: unrelated"\n' > "$M/bin/logcat"
+    printf '#!/bin/bash\necho "dumpsys $*" >> "$MOCK/calls"\necho "cluster: navi state"\n' > "$M/bin/dumpsys"
+    mkdir -p "$M/state"; echo '{"result":"verified"}' > "$M/state/map-check.json"
     mkdir -p "$M/logs/de22ev-ves"; echo "vesd: old run" > "$M/logs/de22ev-ves/vesd.log"
     chmod +x "$M/bin/"*
     sed -i -e "s#/system/bin/hmgapid#$M/bin/hmgapid#g" -e "s#/data/nemesis#$M/nemesis#g" \
         -e "s#/proc/self/status#$M/procstatus#g" -e "s#/data/hmgapi/logs#$M/logs#g" \
+        -e "s#/data/hmgapi/state#$M/state#g" \
         -e "s#^export PATH=.*#export PATH=$M/bin:\$PATH#" "$M/usb/VES_MOD/run.sh"
     : > "$M/calls"
     # the car's /system/bin/sh (Android 4.4 mksh, toolbox) has no printf: a kit line that uses it truncates its
@@ -90,6 +94,15 @@ if [ "$STATUS" = STATUS_WRITTEN ] && grep -q "service vesd started" "$OUTDIR/hmg
     && grep -q "MicomAudioService" "$OUTDIR/logcat-ves.txt" && ! grep -q unrelated "$OUTDIR/logcat-ves.txt"; then
     pass "status: HMG-API log and filtered logcat copied"
 else fail "status" "$STATUS"; fi
+# navigation camera lines (ClusterService), the cluster service dump and HMG-API's map state go into the report
+if grep -qF "logcat -d -v time -b system -s ClusterService:D" "$M/calls" && [ -s "$OUTDIR/logcat-nav.txt" ] \
+    && grep -qF "dumpsys com.hkmc.micom.cluster" "$M/calls" && grep -q "navi state" "$OUTDIR/cluster-dump.txt" 2>/dev/null; then
+    pass "status: ClusterService logcat and cluster dump written"
+else fail "status nav" "$(ls "$OUTDIR"); calls=$(tr '\n' ';' < "$M/calls")"; fi
+if grep -qF "hmgapid engine map" "$M/calls" && grep -q verified "$OUTDIR/map.txt" 2>/dev/null \
+    && grep -q verified "$OUTDIR/map-check.json" 2>/dev/null; then
+    pass "status: HMG-API map state (engine map, map-check.json) written"
+else fail "status map" "$(ls "$OUTDIR"); calls=$(tr '\n' ';' < "$M/calls")"; fi
 
 : > "$M/calls"
 run_kit uninstall
