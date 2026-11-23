@@ -45,7 +45,8 @@ public final class MainActivity extends Activity {
     private LivePoller gaugePoller; // 0.2.12: the compact gauge at the top; a tap opens GaugeActivity
     // 0.2.13: the clock next to the title, the camera line under the status (from the gauge's LIVE answers), and the
     // content narrowed to the left while the split screen's panel covers the right
-    private TextView clock, camera;
+    private TextView clock, camera, cameraAvg, cameraNow;
+    private LinearLayout cameraBox;
     private Split split;
     static final int CAMERA_OVER = 0xFFFF5A36;
 
@@ -67,8 +68,19 @@ public final class MainActivity extends Activity {
         clock = text(top, Clock.format(Calendar.getInstance()), 24, Color.WHITE);
         clock.setGravity(Gravity.RIGHT | Gravity.CENTER_VERTICAL);
         status = text(root, "…", 20, Color.rgb(150, 200, 255));
-        camera = text(root, "", 22, Color.WHITE);
-        camera.setVisibility(View.GONE);
+        // camera: the title, then the section average and the current speed, as big as each other (owner)
+        cameraBox = new LinearLayout(this);
+        cameraBox.setOrientation(LinearLayout.VERTICAL);
+        root.addView(cameraBox);
+        camera = text(cameraBox, "", 22, Color.WHITE);
+        LinearLayout speeds = row(cameraBox);
+        cameraAvg = text(speeds, "", 30, Color.WHITE);
+        cameraAvg.setPadding(8, 0, 40, 6);
+        cameraNow = text(speeds, "", 30, Color.WHITE);
+        cameraNow.setPadding(8, 0, 8, 6);
+        cameraAvg.setTypeface(null, android.graphics.Typeface.BOLD);
+        cameraNow.setTypeface(null, android.graphics.Typeface.BOLD);
+        cameraBox.setVisibility(View.GONE);
         final GaugeView gauge = new GaugeView(this);
         gauge.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -162,16 +174,25 @@ public final class MainActivity extends Activity {
         }
     };
 
-    /** the camera line (NavText), red above the limit, hidden without a camera or vesd */
+    /**
+     * The camera (NavText): the title ("구간단속 80", "단속 60 · 350 m"; red when over), then "평균 87" (a section only; red
+     * above the section limit) and "현재 84" (red above the limit); hidden without a camera or vesd.
+     */
     private void showCamera(LiveData d) {
-        String line = NavText.line(d);
-        if (line.length() == 0) {
-            camera.setVisibility(View.GONE);
+        String title = NavText.title(d);
+        if (title.length() == 0) {
+            cameraBox.setVisibility(View.GONE);
             return;
         }
-        camera.setText(line);
+        camera.setText(title);
         camera.setTextColor(NavText.over(d) ? CAMERA_OVER : Color.WHITE);
-        camera.setVisibility(View.VISIBLE);
+        String avg = NavText.sectionAvg(d);
+        cameraAvg.setText(avg);
+        cameraAvg.setTextColor(NavText.avgOver(d) ? CAMERA_OVER : Color.WHITE);
+        cameraAvg.setVisibility(avg.length() > 0 ? View.VISIBLE : View.GONE);
+        cameraNow.setText(NavText.now(d));
+        cameraNow.setTextColor(NavText.nowOver(d) ? CAMERA_OVER : Color.WHITE);
+        cameraBox.setVisibility(View.VISIBLE);
     }
 
     interface Op {

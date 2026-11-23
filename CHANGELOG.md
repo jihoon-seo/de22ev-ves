@@ -17,7 +17,8 @@ From the drive with 0.2.12 (2026-11-20) and the owner's requests:
 - Speed camera information from the stock navigation on the full gauge and the main screen: limit, distance
   and the current speed (red above the limit). On the full gauge it takes the left-hand zone (the rpm readout
   moves below it) with a limit sign, and the text under the sign leaves out the limit the sign already shows; in a section the average gets its
-  own line, as big as the current speed (each red above the limit); section enforcement (구간단속) with its limit and average when
+  own line, as big as the current speed (each red above the limit). The main screen shows the same: the camera
+  title (with the limit, there is no sign), then the section average and the current speed side by side; section enforcement (구간단속) with its limit and average when
   the navigation sends them. vesd reads the navigation's own cluster messages from the system log (no hooks,
   nothing sent). Which camera / zone code is which is not known yet: unknown codes are only logged (`nav:`
   lines in vesd.log) and a drive past cameras and a 구간단속 section will fill them in.

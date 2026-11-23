@@ -38,6 +38,19 @@ public final class NavText {
         return "speed".equals(d.cam) ? "단속 카메라" : "제한속도";
     }
 
+    /** the main screen's camera title (no sign there, so the limit stays): "구간단속 80", "단속 60 · 350 m" */
+    public static String title(LiveData d) {
+        if (!section(d)) return line(d);
+        int lim = limit(d);
+        return lim > 0 ? "구간단속 " + lim : "구간단속";
+    }
+
+    /** "현재 72" while a camera is ahead ("현재 --" with the speed unknown) */
+    public static String now(LiveData d) {
+        if (line(d).length() == 0) return "";
+        return "현재 " + (Double.isNaN(d.kph) ? "--" : String.valueOf(Math.round(d.kph)));
+    }
+
     /** the full gauge's section-average line under the camera line, "평균 87"; "" outside a section or unknown */
     public static String sectionAvg(LiveData d) {
         return section(d) && d.sectionAvg > 0 ? "평균 " + d.sectionAvg : "";

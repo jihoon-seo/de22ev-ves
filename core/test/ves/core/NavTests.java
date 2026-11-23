@@ -379,6 +379,21 @@ final class NavTests {
             }
         });
 
+        // ---------------- NT5 the main screen (no sign): the title keeps the limit, the section average and the current
+        // speed are their own big texts
+        l.add(new TestMain.T("NT5_main_screen_texts") {
+            void run() {
+                String rest = " zone=0 sec=0 slim=- savg=- ssrc=- sdist=-";
+                LiveData sec = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 84);
+                check("구간단속 80".equals(NavText.title(sec)), "section title without the average: " + NavText.title(sec));
+                check("평균 87".equals(NavText.sectionAvg(sec)) && "현재 84".equals(NavText.now(sec)), "average and current speed");
+                LiveData cam = live(" nav=1 cam=speed lim=60 dist=350" + rest, 72);
+                check("단속 60 · 350 m".equals(NavText.title(cam)) && "현재 72".equals(NavText.now(cam)), "speed camera");
+                check("".equals(NavText.title(live(" nav=1 cam=none lim=- dist=-" + rest, 50))) && "".equals(NavText.title(null)), "none");
+                check("현재 --".equals(NavText.now(live(" nav=1 cam=speed lim=60 dist=350" + rest, Double.NaN))), "speed unknown");
+            }
+        });
+
         // ---------------- NT3 over the limit: speed above the camera's limit (a section also by its average)
         l.add(new TestMain.T("NT3_over_flag") {
             void run() {
