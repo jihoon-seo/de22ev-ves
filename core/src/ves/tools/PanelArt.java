@@ -31,7 +31,7 @@ import ves.gauge.Theme;
 public final class PanelArt {
     public static final int DIAL = 480, LAMPS_W = 480, LAMPS_H = 40, BAR_W = 240, BAR_H = 24, PANEL_W = 640, PANEL_H = 670;
     /** the preview's state: ICE_SMOOTH in D at 3200 rpm, 72 km/h, 45 kW, VES on */
-    static final String PREVIEW = "rpm=3200 gear=0 sh=0 sel=5 kph=72 kw=45 shift=3500 dm=- profile=ice_smooth state=drive red=6500 max=8000 on=1";
+    static final String PREVIEW = "rpm=3200 gear=4 sh=0 sel=5 kph=72 kw=45 shift=3500 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1";
 
     private PanelArt() {}
 

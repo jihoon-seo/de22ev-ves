@@ -163,22 +163,21 @@ public final class GaugeRenderer {
             p.text(kph, g.cx, g.cy + r * 0.45f, r * 0.21f, true, false, 0);
             p.color(DIM);
             p.text("km/h", g.cx, g.cy + r * 0.57f, r * 0.065f, false, false, 0);
-            // side readouts
+            // side readouts: the rpm in the lower half of the left-hand zone, under drawExtras' camera panel (the
+            // owner's priority, 0.2.13); it stays there without a camera so the readout never jumps
             float lx = (g.cx - r * 1.12f) / 2;
             p.color(WHITE);
-            p.text(rpmText(d.rpm), lx, g.cy, r * 0.20f, true, false, 0);
+            p.text(rpmText(d.rpm), lx, g.cy + RPM_DY * r, r * 0.20f, true, false, 0);
             p.color(DIM);
-            p.text("RPM", lx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
+            p.text("RPM", lx, g.cy + (RPM_DY + 0.14f) * r, r * 0.065f, false, false, 0);
             float rx = g.w - lx;
             String mode = Theme.name(theme);
-            if (NavText.line(d).length() == 0) { // while a camera is ahead drawExtras' camera panel takes this place
-                if (mode.length() > 0) { // unknown drive mode: just the profile
-                    p.color(accent);
-                    p.text(mode, rx, g.cy, r * 0.17f, true, true, 0);
-                }
-                p.color(DIM);
-                p.text(profileName(d.profile), rx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
+            if (mode.length() > 0) { // unknown drive mode: just the profile
+                p.color(accent);
+                p.text(mode, rx, g.cy, r * 0.17f, true, true, 0);
             }
+            p.color(DIM);
+            p.text(profileName(d.profile), rx, g.cy + r * 0.14f, r * 0.065f, false, false, 0);
         }
         // gear strip
         if (GaugeMath.showGearStrip(d.profile)) {
@@ -261,7 +260,7 @@ public final class GaugeRenderer {
      * The full gauge's (GaugeActivity, 1920x720 or the split 1281x720) extras over drawStatic + drawDynamic: the clock
      * top-left (clockText from Clock.format, passed in so the output is deterministic), the VES on/off button
      * top-right (at buttonRect: the app toggles on a tap inside it) and, while NavText.line(d) is not "", the camera
-     * panel in the right-hand zone where the profile label sits otherwise (drawDynamic leaves that place free): a
+     * panel in the left-hand zone above the rpm readout (the owner's priority; drawDynamic draws the rpm lower): a
      * speed-limit sign, the camera line and "현재 72", both red when NavText.over. Nothing on the compact strip (the main
      * screen shows the clock and the camera line as TextViews). d may be null (vesd silent): the button shows "--".
      */
@@ -299,8 +298,9 @@ public final class GaugeRenderer {
         String line = NavText.line(d);
         if (line.length() == 0) return;
         boolean over = NavText.over(d);
-        float r = g.r, left = g.cx + r * 1.12f, zone = w - left, rx = left + zone / 2;
-        float rs = Math.min(r * 0.22f, zone * 0.24f), sy = g.cy - r * 0.32f;
+        // the left-hand zone, above the rpm readout (drawDynamic): sign, camera line, current speed
+        float r = g.r, zone = g.cx - r * 1.12f, rx = zone / 2;
+        float rs = Math.min(r * 0.20f, zone * 0.22f), sy = g.cy - r * 0.62f;
         int lim = d.section == 1 || "section".equals(d.cam) ? (d.sectionLimit > 0 ? d.sectionLimit : d.camLimit) : d.camLimit;
         if (lim > 0) { // the round limit sign
             p.color(RED);
@@ -317,12 +317,14 @@ public final class GaugeRenderer {
             float ns = rs * 0.9f;
             p.text("!", rx, sy + rs * 0.2f + ns * 0.36f, ns, true, false, 0);
         }
-        float ls = Math.min(r * 0.105f, zone / 12f), ly = g.cy + r * 0.12f;
+        float ly = g.cy - r * 0.24f;
         p.color(over ? RED : WHITE);
-        p.text(line, rx, ly, ls, true, false, 0);
+        String detail = NavText.signDetail(d); // the sign already shows the limit
+        p.text(detail, rx, ly, fit(detail, r * 0.105f, zone * 0.92f), true, false, 0);
         String kph = d.kph == d.kph ? String.valueOf(Math.round(d.kph)) : "--";
+        String now = "현재 " + kph;
         p.color(over ? RED : WHITE);
-        p.text("현재 " + kph, rx, ly + r * 0.24f, Math.min(r * 0.15f, zone / 6.5f), true, false, 0);
+        p.text(now, rx, ly + r * 0.24f, fit(now, r * 0.15f, zone * 0.92f), true, false, 0);
     }
 
     /**
@@ -407,6 +409,16 @@ public final class GaugeRenderer {
         if (Double.isNaN(rpm)) return "--";
         long v = Math.round(rpm);
         return v >= 1000 ? (v / 1000) + "," + String.valueOf(1000 + v % 1000).substring(1) : String.valueOf(v);
+    }
+
+    /** the rpm readout's baseline below the centre line, in radii (full layout): room above it for the camera panel */
+    static final float RPM_DY = 0.40f;
+
+    /** text size so s fits width: Hangul about 1 em wide, other characters about 0.6 em (no measuring in Painter) */
+    static float fit(String s, float size, float width) {
+        float em = 0;
+        for (int i = 0; i < s.length(); i++) em += s.charAt(i) >= 0xAC00 && s.charAt(i) <= 0xD7A3 ? 1f : 0.6f;
+        return em <= 0 ? size : Math.min(size, width / em);
     }
 
     static String profileName(String profile) {

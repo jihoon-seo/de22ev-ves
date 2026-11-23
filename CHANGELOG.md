@@ -15,7 +15,8 @@ From the drive with 0.2.12 (2026-11-20) and the owner's requests:
 - Clock `2026.11.23. (월) 14:05:09` on the full gauge, the split page and the main screen.
 - VES on/off button on the full gauge (tap the button; anywhere else still closes) and the split page.
 - Speed camera information from the stock navigation on the full gauge and the main screen: limit, distance
-  and the current speed (red above the limit); section enforcement (구간단속) with its limit and average when
+  and the current speed (red above the limit). On the full gauge it takes the left-hand zone (the rpm readout
+  moves below it) with a limit sign, and the text under the sign leaves out the limit the sign already shows; section enforcement (구간단속) with its limit and average when
   the navigation sends them. vesd reads the navigation's own cluster messages from the system log (no hooks,
   nothing sent). Which camera / zone code is which is not known yet: unknown codes are only logged (`nav:`
   lines in vesd.log) and a drive past cameras and a 구간단속 section will fill them in.

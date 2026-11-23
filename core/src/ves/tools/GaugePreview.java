@@ -46,7 +46,7 @@ public final class GaugePreview {
             {"ev-future", "2", "rpm=5200 gear=0 sh=0 sel=5 kph=84 kw=63 shift=8500 dm=- profile=ev_future state=drive red=- max=9000 on=1"},
             {"cam-speed-over", "0", "rpm=2600 gear=4 sh=0 sel=5 kph=72 kw=28 shift=3300 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1"
                     + CAM_SPEED},
-            {"cam-section-avg", "0", "rpm=2900 gear=0 sh=0 sel=5 kph=84 kw=35 shift=6000 dm=- profile=ice_smooth state=drive red=6500 max=8000 on=1"
+            {"cam-section-avg", "0", "rpm=2900 gear=5 sh=0 sel=5 kph=84 kw=35 shift=4700 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1"
                     + CAM_SECTION},
             {"cam-mobile-off", "0", "rpm=4100 gear=0 sh=0 sel=5 kph=64 kw=20 shift=8500 dm=- profile=ev_future state=drive red=- max=9000 on=0"
                     + CAM_MOBILE}};

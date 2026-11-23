@@ -86,6 +86,15 @@ final class PanelTests {
         });
 
         // ---------------- PF4 diff(prev): a bit per changed field, nothing for an identical frame, all for the first
+        // ---------------- PF5 the split page shows the virtual gear like the full gauge: D3 in the virtual-shift profile
+        l.add(new TestMain.T("PF5_gear_with_virtual_gear") {
+            void run() {
+                check("D3".equals(PanelFrame.of(d("3000", "5", "50", "40", "3500", "ice_shift", "1"), false).gear), "ice_shift D gear 3 -> D3");
+                check("D3".equals(PanelFrame.of(d("3000", "1", "50", "40", "3500", "ice_shift", "1"), false).gear), "B as D -> D3");
+                check("R".equals(PanelFrame.of(d("1000", "7", "5", "5", "3500", "ice_shift", "1"), false).gear), "R");
+                check("D".equals(PanelFrame.of(d("3000", "5", "50", "40", "3500", "ice_smooth", "1"), false).gear), "no virtual gears: D");
+            }
+        });
         l.add(new TestMain.T("PF4_diff_mask") {
             void run() {
                 PanelFrame a = PanelFrame.of(d("2000", "5", "50", "20", "6000", "ice_smooth", "1"), true);

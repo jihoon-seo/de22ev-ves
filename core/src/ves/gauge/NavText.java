@@ -26,6 +26,18 @@ public final class NavText {
         return d.camDist > 0 ? s + SEP + dist(d.camDist) : s;
     }
 
+    /** the full gauge's text under its limit sign (0.2.13): what the sign doesn't show already */
+    public static String signDetail(LiveData d) {
+        String full = line(d);
+        if (full.length() == 0) return "";
+        if (d.section == 1 || "section".equals(d.cam)) return d.sectionAvg > 0 ? "구간단속" + SEP + "평균 " + d.sectionAvg : "구간단속";
+        if (!(d.camLimit > 0)) return full; // a warning triangle instead of a sign: the whole line
+        String far = d.camDist > 0 ? dist(d.camDist) : "";
+        if ("mobile".equals(d.cam)) return far.length() > 0 ? "이동식" + SEP + far : "이동식";
+        if (far.length() > 0) return far;
+        return "speed".equals(d.cam) ? "단속 카메라" : "제한속도";
+    }
+
     /**
      * Driving above the limit: the speed above the camera's limit; in a section also an average above its limit.
      * False when the speed or the limit is unknown.

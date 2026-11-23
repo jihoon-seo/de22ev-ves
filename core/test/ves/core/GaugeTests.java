@@ -391,14 +391,19 @@ final class GaugeTests {
                                 check(ex.texts.size() == 2, what + ": no camera, clock and button only " + ex.texts);
                                 check(dy.texts.contains("VIRTUAL SHIFT"), what + ": the profile label stays without a camera " + dy.texts);
                             } else {
-                                int ni = ex.texts.indexOf(line), si = ex.texts.indexOf("현재 72");
-                                check(ni >= 0 && ex.anchors.get(ni)[0] > w / 2, what + ": camera line in the right-hand zone " + ex.texts);
-                                check(si >= 0 && ex.anchors.get(si)[0] > w / 2, what + ": current speed " + ex.texts);
+                                // 0.2.13 owner: the camera panel is the most important, so it takes the left-hand zone (above the
+                                // rpm readout, which moves below it); the profile label keeps the right-hand zone
+                                int ni = ex.texts.indexOf(NavText.signDetail(d)), si = ex.texts.indexOf("현재 72"), ri = dy.texts.indexOf("5,900");
+                                float leftEdge = dial[0] - dial[2];
+                                check(ni >= 0 && ex.anchors.get(ni)[0] < leftEdge, what + ": camera line in the left-hand zone " + ex.texts);
+                                check(si >= 0 && ex.anchors.get(si)[0] < leftEdge, what + ": current speed in the left-hand zone " + ex.texts);
+                                check(ri >= 0 && dy.anchors.get(ri)[0] < leftEdge && dy.anchors.get(ri)[1] > ex.anchors.get(si)[1] + 0.05f * h,
+                                        what + ": rpm below the camera panel " + dy.texts);
                                 boolean over = NavText.over(d);
                                 check(over == cam[0].endsWith("over"), what + ": over " + over);
                                 int red = 0xFFFF3B30;
                                 check((ex.textColors.get(ni) == red) == over && (ex.textColors.get(si) == red) == over, what + ": red exactly when over");
-                                check(!dy.texts.contains("VIRTUAL SHIFT"), what + ": the camera takes the profile label's place " + dy.texts);
+                                check(dy.texts.contains("VIRTUAL SHIFT"), what + ": the profile label stays on the right " + dy.texts);
                             }
                         }
                     }
