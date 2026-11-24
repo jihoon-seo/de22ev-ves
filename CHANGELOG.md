@@ -9,7 +9,11 @@ From the drive with 0.2.13 (2026-11-23/24) and the owner's requests:
 - Split page 계기판: the nine shift lamps now sit on a ring round the top of the dial, as on the full gauge,
   instead of a strip above it. The dark lamps are part of the dial art; the lit ones are one overlay revealed
   from the left (a ClipDrawable: the lamps run left to right on the ring) and the flash one all-red overlay,
-  so the page carries 7 build-time PNGs instead of 16. The dial is a little bigger, since the strip's row is gone.
+  so the page carries 5 build-time PNGs instead of 16.
+- Split page 계기판: the power / regen bar is gone, and the gauge is as big as the page allows: no disc round
+  the scale, the centre below the middle (the scale is open at the bottom), the dial box takes the whole page
+  under a thin band, and the clock and the on/off button lie over the square's empty top corners. The scale
+  radius grows from about 211 px to 301 px on the 640 px wide panel; gear, speed and km/h grow with it.
 
 ## 0.2.13
 
