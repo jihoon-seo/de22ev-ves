@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.14
+
+From the drive with 0.2.13 (2026-11-23/24) and the owner's requests:
+
+- Clock shorter: `11월 23일 (월) 14:05` (month and day, one-letter weekday, 24-hour time) on the full gauge,
+  the split page and the main screen.
+- Split page 계기판: the nine shift lamps now sit on a ring round the top of the dial, as on the full gauge,
+  instead of a strip above it. The dark lamps are part of the dial art; the lit ones are one overlay revealed
+  from the left (a ClipDrawable: the lamps run left to right on the ring) and the flash one all-red overlay,
+  so the page carries 7 build-time PNGs instead of 16. The dial is a little bigger, since the strip's row is gone.
+
 ## 0.2.13
 
 From the drive with 0.2.12 (2026-11-20) and the owner's requests:
