@@ -257,6 +257,11 @@ public final class NavCam {
         sLim = get(kv, "rangeCamSpdLimit");
         sAvg = get(kv, "rangeCamAvgMovingSpd");
         sDist = get(kv, "rangeCamDist");
+        // the car sends this line with every field at its all-ones "invalid" (rangeCamInfo 7, limit 15, distance 65535,
+        // average 255) when the navigation starts: no section (0.2.15)
+        if (get(kv, "rangeCamInfo") == 7 || sLim == 15) sLim = 0;
+        if (sAvg >= 255) sAvg = 0;
+        if (sDist >= 65535) sDist = 0;
         if (sLim <= 0) secOn = false;
     }
 

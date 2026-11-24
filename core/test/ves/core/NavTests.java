@@ -199,6 +199,34 @@ final class NavTests {
             }
         });
 
+        // ---------------- NC10 the car's SCC line at every navigation start (2026-11-23/24 logs): all fields at their
+        // all-ones "invalid" (rangeCamInfo 7, limit 15, distance 65535, average 255) is no section (0.2.14 showed
+        // "구간단속 15 · 평균 255" for a minute)
+        l.add(new TestMain.T("NC10_scc_invalid_no_section") {
+            void run() {
+                NavCam n = new NavCam();
+                feed(n, head(W) + "NaviCluster.updateSCC_HU_Navi_P() msgGroupNum1: 7 setDestStatus: 3 offRouteStatus: 7 nextTurnType1: 31"
+                        + " naviValidity: 7 nextTurnDist1: 4095 nextTurnDist2: 4095 curLinkCntLane: 15 curRoadClass: 15 curLinkClass: 15"
+                        + " nextTurnType2: 31 msgGroupNum2: 7 nextCamType: 15 nextCamDist: 1023 nextCamSpdLimit: 15 rangeCamInfo: 7"
+                        + " rangeCamDist: 65535 rangeCamSpdLimit: 15 rangeCamAvgMovingSpd: 255 msgGroupNum3: 7 msgGroupNum4: 7"
+                        + " msgGroupNum5: 7 frontPosUpdate: 3 msgGroupNum6: 7 curTrafLength: 16383 nextTrafDistance: 16383"
+                        + " nextPosTraffic: 15 curPosTraffic: 15", 0);
+                String s = n.liveFields(U + 100);
+                is(s, "sec", "0");
+                is(s, "slim", "-");
+                is(s, "savg", "-");
+                check(!"section".equals(f(s, "cam")), "no section: " + s);
+                feed(n, scc(W + 1000, 1, 1500, 80, 255), 1000);
+                s = n.liveFields(U + 1100);
+                is(s, "sec", "1");
+                is(s, "slim", "80");
+                is(s, "sdist", "1500");
+                is(s, "savg", "-");
+                feed(n, scc(W + 2000, 1, 65535, 80, 87), 2000);
+                is(n.liveFields(U + 2100), "sdist", "-");
+            }
+        });
+
         // ---------------- NC2 an all-zero trap line clears the camera (and its distance)
         l.add(new TestMain.T("NC2_zero_trap_clears") {
             void run() {
