@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the 계기판 page's shift flash (0.2.14): every lamp red, shown whole (level 10000) in the flash's on phase, else
+     hidden (level 0): PanelFrame.flashLevel -->
+<clip xmlns:android="http://schemas.android.com/apk/res/android"
+    android:clipOrientation="horizontal"
+    android:drawable="@drawable/gp_lamps_flash"
+    android:gravity="left" />

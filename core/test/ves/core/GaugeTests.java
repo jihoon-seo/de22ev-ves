@@ -473,6 +473,55 @@ final class GaugeTests {
                 check(n.texts.isEmpty() && n.circles.isEmpty(), "the needle only");
             }
         });
+
+        // ---------------- GA12 the panel page's shift lamps (0.2.14, owner): round lamps on a ring above the dial's scale
+        // as on the full gauge (same angles, 1.11 x the scale radius), on the dial's disc; off lamps in the dial art,
+        // lit ones in one overlay (green, amber, red) and all red for the flash
+        l.add(new TestMain.T("GA12_panel_lamps_ring") {
+            void run() {
+                float size = 480, c = size / 2;
+                Rec full = new Rec(1920, 720);
+                GaugeRenderer.draw(full, LiveData.parse("ok\nrpm=3000 gear=3 sh=0 sel=5 kph=50 kw=20 shift=3200 dm=- profile=ice_shift"
+                        + " state=drive red=6500 max=8000\n"), 3000, Theme.NEUTRAL, true, 1920, 720);
+                List<Double> fullDeg = new ArrayList<Double>();
+                for (float[] k : full.circles)
+                    fullDeg.add((Math.toDegrees(Math.atan2(k[1] - 720 * 0.54f, k[0] - 960)) + 360) % 360);
+                check(fullDeg.size() == 9, "full gauge: 9 lamps " + fullDeg.size());
+                for (boolean flash : new boolean[] {false, true}) {
+                    Rec r = new Rec(size, size);
+                    GaugeRenderer.drawLamps(r, flash, size);
+                    check(r.bad == null && r.circles.size() == 9 && r.texts.isEmpty(), "9 lamps in the square: bad " + r.bad + " n " + r.circles.size());
+                    double ring = -1;
+                    for (int i = 0; i < r.circles.size(); i++) {
+                        float[] k = r.circles.get(i);
+                        double dist = Math.hypot(k[0] - c, k[1] - c), deg = (Math.toDegrees(Math.atan2(k[1] - c, k[0] - c)) + 360) % 360;
+                        if (ring < 0) ring = dist;
+                        near(dist, ring, 0.01, "lamp " + i + " on one ring");
+                        if (i < fullDeg.size()) near(deg, fullDeg.get(i), 0.01, "lamp " + i + " at the full gauge's angle");
+                        check(k[1] + k[2] < c, "lamp " + i + " above the centre");
+                        check(dist + k[2] < size * 0.5f, "lamp " + i + " inside the square");
+                        int want = flash ? 0xFFFF3B30 : i < 3 ? 0xFF46D17A : i < 6 ? 0xFFFFB020 : 0xFFFF3B30;
+                        check(r.circleColors.get(i) == want, (flash ? "flash " : "") + "lamp " + i + " colour " + Integer.toHexString(r.circleColors.get(i)));
+                    }
+                    near(ring / (size * GaugeRenderer.DIAL_R), 1.11, 0.001, "ring at 1.11 x the scale radius");
+                }
+                Rec d = new Rec(size, size);
+                GaugeRenderer.drawDial(d, "ice_shift", size);
+                float disc = d.circles.get(0)[2];
+                check(Math.abs(d.circles.get(0)[0] - c) < 0.01 && disc <= size * 0.5f, "the disc first, inside the square");
+                Rec lit = new Rec(size, size);
+                GaugeRenderer.drawLamps(lit, false, size);
+                int off = 0;
+                for (int i = 1; i < d.circles.size(); i++) {
+                    float[] k = d.circles.get(i);
+                    if (d.circleColors.get(i) != 0x2EFFFFFF) continue;
+                    float[] m = lit.circles.get(off++);
+                    check(Math.abs(k[0] - m[0]) < 0.01 && Math.abs(k[1] - m[1]) < 0.01 && Math.abs(k[2] - m[2]) < 0.01, "off lamp " + off + " under its lit one");
+                    check(Math.hypot(k[0] - c, k[1] - c) + k[2] < disc, "off lamp " + off + " on the disc");
+                }
+                check(off == 9, "the dial carries 9 off lamps: " + off);
+            }
+        });
     }
 
     static String rect(float[] b) {
@@ -486,7 +535,7 @@ final class GaugeTests {
         String bad;
         final List<String> texts = new ArrayList<String>();
         /** every colour set; the colour each text was drawn in */
-        final List<Integer> colors = new ArrayList<Integer>(), textColors = new ArrayList<Integer>();
+        final List<Integer> colors = new ArrayList<Integer>(), textColors = new ArrayList<Integer>(), circleColors = new ArrayList<Integer>();
         /** text anchors (x, baseline y); every point checked; arcs cx, cy, r; circles cx, cy, r */
         final List<float[]> anchors = new ArrayList<float[]>(), points = new ArrayList<float[]>(), arcs = new ArrayList<float[]>(),
                 circles = new ArrayList<float[]>(), polys = new ArrayList<float[]>();
@@ -529,6 +578,7 @@ final class GaugeTests {
 
         public void circle(float cx, float cy, float r) {
             circles.add(new float[] {cx, cy, r});
+            circleColors.add(color);
             in("circle", cx - r, cy - r, cx + r, cy + r);
         }
 

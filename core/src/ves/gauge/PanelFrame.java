@@ -6,7 +6,8 @@ package ves.gauge;
  * <pre>
  * dial    ev: the 0-9000 EV dial, else the 0-8000 ICE dial with the 6500 redline
  * needle  RotateDrawable level 0..10000 (GaugeMath.needleLevel, steps of 25)
- * lamps   level-list: 0..9 lamps lit; at the shift point 10 (flash on) or 0 (flash off)
+ * lamps   0..9 lamps lit; at the shift point 10 (flash on) or 0 (flash off); the ring's two ClipDrawables take
+ *         lampsLevel() (lit lamps) and flashLevel() (all red) (0.2.14)
  * drive   ClipDrawable level: kwBar x 10000 in steps of 100 (drive side), regen the same for regen
  * gear    P / R / N / D / D4 / "-"   speed  km/h rounded, "-" unknown   on  1 / 0 / -1 unknown
  * </pre>
@@ -14,7 +15,7 @@ package ves.gauge;
 public final class PanelFrame {
     public static final int F_DIAL = 1, F_NEEDLE = 2, F_LAMPS = 4, F_DRIVE = 8, F_REGEN = 16, F_GEAR = 32, F_SPEED = 64, F_ON = 128;
     public static final int ALL = F_DIAL | F_NEEDLE | F_LAMPS | F_DRIVE | F_REGEN | F_GEAR | F_SPEED | F_ON;
-    /** lamps in the strip; LAMPS_FLASH is the level-list item with all of them lit for the flash's on phase */
+    /** lamps on the ring; LAMPS_FLASH is lamps' value for the flash's on phase (all of them red) */
     public static final int LAMPS = 9, LAMPS_FLASH = 10;
     static final int BAR_STEP = 100;
 
@@ -36,6 +37,21 @@ public final class PanelFrame {
         f.speed = Double.isNaN(d.kph) ? "-" : String.valueOf(Math.round(d.kph));
         f.on = d.on;
         return f;
+    }
+
+    /** the lit-lamps ClipDrawable's level for lit lamps (GaugeRenderer.lampClip) */
+    public static int lampClip(int lit) {
+        return GaugeRenderer.lampClip(lit);
+    }
+
+    /** the lit-lamps overlay's level: the first lamps lit, nothing during the flash */
+    public int lampsLevel() {
+        return lamps == LAMPS_FLASH ? 0 : lampClip(lamps);
+    }
+
+    /** the all-red overlay's level: everything in the flash's on phase, else nothing */
+    public int flashLevel() {
+        return lamps == LAMPS_FLASH ? 10000 : 0;
     }
 
     private static int bar(double share) {

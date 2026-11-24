@@ -68,7 +68,7 @@ cp -r app/res/. build/apk/res/
 mkdir -p build/apk/res/drawable
 "$PY" -I tools/make_icon.py build/apk/res/drawable/ic_ves.png 96
 "$PY" -I tools/make_icon.py build/mod/tile.png 192
-# 0.2.13: the split screen's 계기판 page art (dial, needle, shift lamps, power bars: 16 PNGs) drawn by ves.tools.PanelArt
+# 0.2.13: the split screen's 계기판 page art (dial, needle, shift lamps, power bars: 7 PNGs) drawn by ves.tools.PanelArt
 # with the gauge's own renderer (ves.gauge over AWT); generated here, never kept in app/res
 mkdir -p build/art
 mapfile -t ART < <(srcs core/src/ves/gauge core/src/ves/tools/GaugePreview.java core/src/ves/tools/PanelArt.java)
@@ -99,7 +99,7 @@ fi
     --ks-pass "file:$(native "$APP_KEYSTORE_PASS")" --min-sdk-version 19 \
     --v1-signing-enabled true --v2-signing-enabled false --v3-signing-enabled false \
     --out "$(native build/mod/app/EngineSound.apk)" "$(native build/apk/aligned.apk)"
-# the APK carries the 계기판 page: its 16 PanelArt PNGs and the widget's classes
+# the APK carries the 계기판 page: its 7 PanelArt PNGs and the widget's classes
 "$PY" - build/mod/app/EngineSound.apk <<'PYEOF'
 import re, sys, zipfile
 z = zipfile.ZipFile(sys.argv[1])
@@ -107,8 +107,8 @@ art = sorted(n for n in z.namelist() if re.match(r'res/drawable-nodpi[^/]*/gp_[a
 dex = z.read('classes.dex')
 missing = [c for c in (b'Lves/app/GaugeWidget;', b'Lves/app/PanelService;', b'Lves/app/Split;') if c not in dex]
 print('apk: %d panel PNGs (gp_*), classes.dex: %s' % (len(art), 'GaugeWidget PanelService Split' if not missing else 'MISSING %s' % missing))
-if len(art) != 16 or missing:
-    sys.exit('EngineSound.apk: want 16 res/drawable-nodpi/gp_*.png and GaugeWidget/PanelService/Split in classes.dex')
+if len(art) != 7 or missing:
+    sys.exit('EngineSound.apk: want 7 res/drawable-nodpi/gp_*.png and GaugeWidget/PanelService/Split in classes.dex')
 PYEOF
 
 # the mod folder (its source and licence travel with it)

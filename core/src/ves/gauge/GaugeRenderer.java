@@ -22,8 +22,14 @@ public final class GaugeRenderer {
     /** the on/off pill while off / unknown: opaque (its circles and rect overlap, a translucent fill would band) */
     static final int BUTTON_OFF = 0xFF3A3E44, BUTTON_UNKNOWN = 0xFF1C2024;
     static final int LAMPS = 9;
-    /** the panel dial's scale radius as a share of its square (the disc reaches 1.08 x this: inside the square) */
-    static final float DIAL_R = 0.44f;
+    /**
+     * the panel dial's scale radius as a share of its square (0.2.14: 0.42, the disc reaches 1.16 x this so the ring
+     * of shift lamps at LAMP_RING sits on it, inside the square)
+     */
+    public static final float DIAL_R = 0.42f;
+    /** the shift lamps' ring and lamp radius as shares of the scale radius (full gauge and panel page alike) */
+    static final double LAMP_RING = 1.11;
+    static final float LAMP_SIZE = 0.034f;
 
     private GaugeRenderer() {}
 
@@ -216,10 +222,10 @@ public final class GaugeRenderer {
                 ly = g.h * 0.20f;
                 lr = g.h * 0.045f;
             } else {
-                double la = 270 - 36 + 72.0 * i / (LAMPS - 1);
-                lx = g.x(la, r * 1.11);
-                ly = g.y(la, r * 1.11);
-                lr = r * 0.034f;
+                double la = lampDeg(i);
+                lx = g.x(la, r * LAMP_RING);
+                ly = g.y(la, r * LAMP_RING);
+                lr = r * LAMP_SIZE;
             }
             p.circle(lx, ly, lr);
         }
@@ -367,9 +373,11 @@ public final class GaugeRenderer {
         Geo g = new Geo(size);
         float r = g.r;
         p.color(DIAL_BG);
-        p.circle(g.cx, g.cy, r * 1.08f);
+        p.circle(g.cx, g.cy, r * 1.16f);
         p.color(0x1AFFFFFF); // a faint rim, so the disc reads on any page colour
-        p.arc(g.cx, g.cy, r * 1.07f, 0, 360, Math.max(1.5f, r * 0.008f));
+        p.arc(g.cx, g.cy, r * 1.15f, 0, 360, Math.max(1.5f, r * 0.008f));
+        p.color(LAMP_OFF); // the shift lamps while dark (drawLamps' overlays light them)
+        for (int i = 0; i < LAMPS; i++) p.circle(g.x(lampDeg(i), r * LAMP_RING), g.y(lampDeg(i), r * LAMP_RING), r * LAMP_SIZE);
         p.color(0x2E000000 | (Theme.accent(Theme.NEUTRAL) & 0xFFFFFF));
         p.arc(g.cx, g.cy, r * 0.93f, (float) GaugeMath.START_DEG, (float) GaugeMath.SWEEP_DEG, r * 0.06f);
         scale(p, g, profile);
@@ -392,15 +400,33 @@ public final class GaugeRenderer {
     }
 
     /**
-     * The panel page's shift-lamp strip for one level of its level-list: LAMPS round lamps across w x h, the first lit
-     * of them on (green, amber, red as the full gauge), or all red when flash (PanelFrame.LAMPS_FLASH).
+     * The panel page's shift lamps lit (0.2.14: a ring above the scale as on the full gauge, not a strip), in a size x
+     * size square matching drawDial: green, amber, red as the full gauge, or all red when flash. The widget shows it
+     * through a ClipDrawable (clipped from the left, level lampClip(lit): the lamps run left to right on the ring) and
+     * the flash one through another (level 0 / 10000); the dark lamps are in the dial.
      */
-    public static void drawLamps(Painter p, int lit, boolean flash, float w, float h) {
-        float lr = Math.min(h * 0.38f, w / LAMPS * 0.34f);
+    public static void drawLamps(Painter p, boolean flash, float size) {
+        Geo g = new Geo(size);
         for (int i = 0; i < LAMPS; i++) {
-            p.color(flash || i < lit ? lampColor(i, flash) : LAMP_OFF);
-            p.circle(w * (i + 0.5f) / LAMPS, h / 2, lr);
+            p.color(lampColor(i, flash));
+            p.circle(g.x(lampDeg(i), g.r * LAMP_RING), g.y(lampDeg(i), g.r * LAMP_RING), g.r * LAMP_SIZE);
         }
+    }
+
+    /**
+     * The lit-lamps ClipDrawable's level (0..10000, horizontal from the left) that shows the first lit lamps of the
+     * panel page's ring and none of the rest: the cut halfway between lamp lit-1 and lamp lit.
+     */
+    public static int lampClip(int lit) {
+        if (lit <= 0) return 0;
+        if (lit >= LAMPS) return 10000;
+        double a = Math.cos(Math.toRadians(lampDeg(lit - 1))), b = Math.cos(Math.toRadians(lampDeg(lit)));
+        return (int) Math.round((0.5 + DIAL_R * LAMP_RING * (a + b) / 2) * 10000);
+    }
+
+    /** lamp i's angle on the ring: nine lamps over 72 degrees about 12 o'clock, left to right */
+    static double lampDeg(int i) {
+        return 270 - 36 + 72.0 * i / (LAMPS - 1);
     }
 
     /**

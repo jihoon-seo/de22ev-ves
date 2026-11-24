@@ -16,12 +16,14 @@ import ves.gauge.PanelFrame;
 import ves.gauge.Theme;
 
 /**
- * The split screen's "계기판" panel page art (0.2.13): GaugeRenderer's drawDial / drawNeedle / drawLamps / drawBar
+ * The split screen's "계기판" panel page art (0.2.13; 0.2.14 the shift lamps on a ring round the dial): GaugeRenderer's drawDial / drawNeedle / drawLamps / drawBar
  * through AWT into transparent PNGs for the AppWidget's drawables (build.sh puts them in drawable-nodpi):
  * <pre>
- * gp_dial_ice.png  gp_dial_ev.png   480x480  the dial (0-8000 + 6500 redline / 0-9000), transparent outside the disc
+ * gp_dial_ice.png  gp_dial_ev.png   480x480  the dial (0-8000 + 6500 redline / 0-9000) with the dark shift lamps on
+ *                                            its ring, transparent outside the disc
  * gp_needle.png                     480x480  the needle at 0 rpm: &lt;rotate fromDegrees=0 toDegrees=260 pivot 50% 50%&gt;
- * gp_lamps_0..9.png gp_lamps_flash  480x40   the shift-lamp level-list: 0..9 lit, flash = level 10 (all red)
+ * gp_lamps_lit.png gp_lamps_flash   480x480  the ring's lamps lit (green, amber, red) / all red, over the dial in
+ *                                            ClipDrawables: levels PanelFrame.lampsLevel / flashLevel
  * gp_bar_regen.png gp_bar_drive.png 240x24   full bars for ClipDrawables: regen left half (gravity right), drive right
  *                                            half (gravity left), levels PanelFrame.regen / drive
  * </pre>
@@ -29,7 +31,7 @@ import ves.gauge.Theme;
  * art composed like the planned widget (clock, on/off button, lamps, dial + needle at 3200 rpm, gear, speed, bars).
  */
 public final class PanelArt {
-    public static final int DIAL = 480, LAMPS_W = 480, LAMPS_H = 40, BAR_W = 240, BAR_H = 24, PANEL_W = 640, PANEL_H = 670;
+    public static final int DIAL = 480, BAR_W = 240, BAR_H = 24, PANEL_W = 640, PANEL_H = 670;
     /** the preview's state: ICE_SMOOTH in D at 3200 rpm, 72 km/h, 45 kW, VES on */
     static final String PREVIEW = "rpm=3200 gear=4 sh=0 sel=5 kph=72 kw=45 shift=3500 dm=- profile=ice_shift state=drive red=6500 max=8000 on=1";
 
@@ -50,11 +52,11 @@ public final class PanelArt {
         write(dial("ev_future"), out, "gp_dial_ev.png");
         write(needle(), out, "gp_needle.png");
         n += 3;
-        for (int k = 0; k <= PanelFrame.LAMPS; k++, n++) write(lamps(k, false), out, "gp_lamps_" + k + ".png");
-        write(lamps(PanelFrame.LAMPS, true), out, "gp_lamps_flash.png");
+        write(lamps(false), out, "gp_lamps_lit.png");
+        write(lamps(true), out, "gp_lamps_flash.png");
         write(bar(true), out, "gp_bar_regen.png");
         write(bar(false), out, "gp_bar_drive.png");
-        n += 3;
+        n += 4;
         if (preview) write(preview(), out, "panel-preview.png");
         System.out.println("panel art: " + n + " PNGs" + (preview ? " + panel-preview.png" : "") + " in " + out);
     }
@@ -79,10 +81,10 @@ public final class PanelArt {
         return img;
     }
 
-    static BufferedImage lamps(int lit, boolean flash) {
-        BufferedImage img = clear(LAMPS_W, LAMPS_H);
+    static BufferedImage lamps(boolean flash) {
+        BufferedImage img = clear(DIAL, DIAL);
         Graphics2D g = GaugePreview.smooth(img.createGraphics());
-        GaugeRenderer.drawLamps(new GaugePreview.Awt(g), lit, flash, LAMPS_W, LAMPS_H);
+        GaugeRenderer.drawLamps(new GaugePreview.Awt(g), flash, DIAL);
         g.dispose();
         return img;
     }
@@ -116,10 +118,13 @@ public final class PanelArt {
         g.fill(new RoundRectangle2D.Float(PANEL_W - 20 - 150, 16, 150, 48, 48, 48));
         p.color(f.on == 1 ? 0xFF0B0E12 : white);
         p.text(f.on == 1 ? "VES 켜짐" : "VES 꺼짐", PANEL_W - 20 - 75, 40 + 7, 20, true, false, 0);
-        // lamps, dial, needle (RotateDrawable: fromDegrees 0, toDegrees 260, pivot 50% 50%)
-        int x0 = (PANEL_W - DIAL) / 2, lampY = 78, dialY = 116;
-        g.drawImage(lamps(f.lamps == PanelFrame.LAMPS_FLASH ? PanelFrame.LAMPS : f.lamps, f.lamps == PanelFrame.LAMPS_FLASH), x0, lampY, null);
+        // dial (dark lamps), lit lamps and flash clipped from the left (ClipDrawables), needle (RotateDrawable: fromDegrees
+        // 0, toDegrees 260, pivot 50% 50%)
+        int x0 = (PANEL_W - DIAL) / 2, dialY = 84;
         g.drawImage(dial(f.ev ? "ev_future" : "ice_smooth"), x0, dialY, null);
+        int lw = DIAL * f.lampsLevel() / 10000, fw = DIAL * f.flashLevel() / 10000;
+        if (lw > 0) g.drawImage(lamps(false).getSubimage(0, 0, lw, DIAL), x0, dialY, null);
+        if (fw > 0) g.drawImage(lamps(true).getSubimage(0, 0, fw, DIAL), x0, dialY, null);
         AffineTransform keep = g.getTransform();
         g.rotate(Math.toRadians(GaugeMath.SWEEP_DEG * f.needle / 10000.0), x0 + DIAL / 2.0, dialY + DIAL / 2.0);
         g.drawImage(needle(), x0, dialY, null);

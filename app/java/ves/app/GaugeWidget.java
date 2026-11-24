@@ -60,7 +60,10 @@ public final class GaugeWidget extends AppWidgetProvider {
         if (clock != null) v.setTextViewText(R.id.g_clock, clock);
         if ((mask & PanelFrame.F_DIAL) != 0) v.setImageViewResource(R.id.g_dial, f.ev ? R.drawable.gp_dial_ev : R.drawable.gp_dial_ice);
         if ((mask & PanelFrame.F_NEEDLE) != 0) v.setInt(R.id.g_needle, "setImageLevel", f.needle);
-        if ((mask & PanelFrame.F_LAMPS) != 0) v.setInt(R.id.g_lamps, "setImageLevel", f.lamps);
+        if ((mask & PanelFrame.F_LAMPS) != 0) {
+            v.setInt(R.id.g_lamps, "setImageLevel", f.lampsLevel());
+            v.setInt(R.id.g_flash, "setImageLevel", f.flashLevel());
+        }
         if ((mask & PanelFrame.F_DRIVE) != 0) v.setInt(R.id.g_drive, "setImageLevel", f.drive);
         if ((mask & PanelFrame.F_REGEN) != 0) v.setInt(R.id.g_regen, "setImageLevel", f.regen);
         if ((mask & PanelFrame.F_GEAR) != 0) v.setTextViewText(R.id.g_gear, f.gear);

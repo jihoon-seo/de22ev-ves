@@ -125,14 +125,13 @@ N=$(ls "$WORK/gauge" | grep -c '\.png$')
 [ "$N" = 41 ] || fail "gauge preview: $N PNGs (want 40 + sheet)"
 echo "PASS gauge preview: $N PNGs"
 
-# the split screen's panel page art (0.2.13): 16 PNGs for the widget's drawables + the composed preview
+# the split screen's panel page art (0.2.13; 0.2.14 ring lamps): 7 PNGs for the widget's drawables + the composed preview
 "$JAVA" -Djava.awt.headless=true -cp "$CLS" ves.tools.PanelArt "$WORK/panel" --preview > "$WORK/panel.txt" 2>&1 || fail "panel art: $(cat "$WORK/panel.txt")"
-for f in gp_dial_ice gp_dial_ev gp_needle gp_lamps_0 gp_lamps_1 gp_lamps_2 gp_lamps_3 gp_lamps_4 gp_lamps_5 gp_lamps_6 gp_lamps_7 \
-        gp_lamps_8 gp_lamps_9 gp_lamps_flash gp_bar_drive gp_bar_regen panel-preview; do
+for f in gp_dial_ice gp_dial_ev gp_needle gp_lamps_lit gp_lamps_flash gp_bar_drive gp_bar_regen panel-preview; do
     [ -s "$WORK/panel/$f.png" ] || fail "panel art: no $f.png"
 done
 N=$(ls "$WORK/panel" | grep -c '\.png$')
-[ "$N" = 17 ] || fail "panel art: $N PNGs (want 16 + panel-preview)"
+[ "$N" = 8 ] || fail "panel art: $N PNGs (want 7 + panel-preview)"
 echo "PASS panel art: $N PNGs"
 
 echo "CORE TESTS PASSED"

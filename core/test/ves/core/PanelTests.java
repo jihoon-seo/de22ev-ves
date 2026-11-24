@@ -3,7 +3,9 @@ package ves.core;
 import java.util.List;
 
 import ves.gauge.GaugeMath;
+import ves.gauge.GaugeRenderer;
 import ves.gauge.LiveData;
+import ves.gauge.Painter;
 import ves.gauge.PanelFrame;
 
 import static ves.core.TestMain.check;
@@ -85,6 +87,38 @@ final class PanelTests {
             }
         });
 
+        // ---------------- PF6 the ring lamps' ClipDrawables (0.2.14): the lit overlay clipped from the left shows exactly
+        // the first lit lamps (they run left to right on the ring); the flash overlay all (on phase) or nothing
+        l.add(new TestMain.T("PF6_lamp_clip_levels") {
+            void run() {
+                final float size = 480;
+                final List<float[]> lamps = new java.util.ArrayList<float[]>();
+                GaugeRenderer.drawLamps(new Painter() {
+                    public void color(int argb) {}
+                    public void line(float x1, float y1, float x2, float y2, float w) {}
+                    public void arc(float cx, float cy, float r, float s, float sw, float w) {}
+                    public void circle(float cx, float cy, float r) { lamps.add(new float[] {cx, cy, r}); }
+                    public void poly(float[] xy) {}
+                    public void text(String s, float x, float y, float sz, boolean b, boolean i, int a) {}
+                }, false, size);
+                check(lamps.size() == PanelFrame.LAMPS, "lamps " + lamps.size());
+                check(PanelFrame.lampClip(0) == 0 && PanelFrame.lampClip(PanelFrame.LAMPS) == 10000, "ends 0 / 10000");
+                for (int k = 0; k <= PanelFrame.LAMPS; k++) {
+                    int lv = PanelFrame.lampClip(k);
+                    float cut = size * lv / 10000f;
+                    for (int i = 0; i < lamps.size(); i++) {
+                        float[] m = lamps.get(i);
+                        if (i < k) check(m[0] + m[2] < cut, k + " lit: lamp " + i + " shown, cut " + cut);
+                        else check(m[0] - m[2] > cut, k + " lit: lamp " + i + " hidden, cut " + cut);
+                    }
+                }
+                PanelFrame on = PanelFrame.of(d("3000", "0", "3000"), true), off = PanelFrame.of(d("3200", "0", "3000"), false);
+                check(on.lampsLevel() == 0 && on.flashLevel() == 10000, "flash on: all red " + on.lampsLevel() + "/" + on.flashLevel());
+                check(off.lampsLevel() == 0 && off.flashLevel() == 0, "flash off: dark");
+                PanelFrame mid = PanelFrame.of(d("2700", "0", "3000"), true);
+                check(mid.lampsLevel() == PanelFrame.lampClip(mid.lamps) && mid.flashLevel() == 0, "between: clip of " + mid.lamps);
+            }
+        });
         // ---------------- PF4 diff(prev): a bit per changed field, nothing for an identical frame, all for the first
         // ---------------- PF5 the split page shows the virtual gear like the full gauge: D3 in the virtual-shift profile
         l.add(new TestMain.T("PF5_gear_with_virtual_gear") {
