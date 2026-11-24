@@ -294,19 +294,19 @@ final class GaugeTests {
             }
         });
 
-        // ---------------- GA7 the clock: yyyy.MM.dd. (요일) HH:mm:ss, weekday from a fixed table (not the locale)
+        // ---------------- GA7 the clock (0.2.14, owner): M월 d일 (요일) HH:mm, weekday from a fixed table (not the locale)
         l.add(new TestMain.T("GA7_clock_format") {
             void run() {
                 Locale was = Locale.getDefault();
                 try {
                     Locale.setDefault(Locale.US);
                     Calendar c = new GregorianCalendar(2026, Calendar.NOVEMBER, 23, 14, 5, 9);
-                    check("2026.11.23. (월) 14:05:09".equals(Clock.format(c)), "Monday: " + Clock.format(c));
+                    check("11월 23일 (월) 14:05".equals(Clock.format(c)), "Monday: " + Clock.format(c));
                     c = new GregorianCalendar(2026, Calendar.NOVEMBER, 23, 23, 59, 59);
                     c.add(Calendar.SECOND, 1);
-                    check("2026.11.24. (화) 00:00:00".equals(Clock.format(c)), "rolls to Tuesday: " + Clock.format(c));
+                    check("11월 24일 (화) 00:00".equals(Clock.format(c)), "rolls to Tuesday: " + Clock.format(c));
                     c = new GregorianCalendar(2027, Calendar.JANUARY, 4, 7, 8, 9);
-                    check("2027.01.04. (월) 07:08:09".equals(Clock.format(c)), "padding: " + Clock.format(c));
+                    check("1월 4일 (월) 07:08".equals(Clock.format(c)), "month and day unpadded, time padded: " + Clock.format(c));
                     String[] week = {"일", "월", "화", "수", "목", "금", "토"};
                     for (int i = 0; i < 7; i++) {
                         c = new GregorianCalendar(2026, Calendar.NOVEMBER, 22 + i, 12, 0, 0); // 22 = Sunday
@@ -316,9 +316,9 @@ final class GaugeTests {
                     Calendar z = new GregorianCalendar(TimeZone.getTimeZone("UTC"));
                     z.clear();
                     z.set(2026, Calendar.NOVEMBER, 23, 5, 5, 9);
-                    check("2026.11.23. (월) 14:05:09".equals(Clock.format(z.getTimeInMillis(), seoul)), "epoch ms in KST: "
+                    check("11월 23일 (월) 14:05".equals(Clock.format(z.getTimeInMillis(), seoul)), "epoch ms in KST: "
                             + Clock.format(z.getTimeInMillis(), seoul));
-                    check("yyyy.MM.dd. (E) HH:mm:ss".equals(Clock.PATTERN), "TextClock pattern " + Clock.PATTERN);
+                    check("M월 d일 (E) HH:mm".equals(Clock.PATTERN), "TextClock pattern " + Clock.PATTERN);
                 } finally {
                     Locale.setDefault(was);
                 }
@@ -349,7 +349,7 @@ final class GaugeTests {
                         {"section over", " nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500"},
                         {"zone", " nav=1 cam=zone lim=- dist=350 zone=2 sec=0 slim=- savg=- ssrc=- sdist=-"}};
                 String[] ons = {" on=1", " on=0", ""};
-                String clock = "2026.11.23. (월) 14:05:09";
+                String clock = "11월 23일 (월) 14:05";
                 float[][] sizes = {{1920, 720}, {1281, 720}};
                 for (float[] wh : sizes) {
                     float w = wh[0], h = wh[1];

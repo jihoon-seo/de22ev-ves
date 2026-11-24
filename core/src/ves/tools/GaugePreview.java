@@ -31,7 +31,7 @@ import ves.gauge.Theme;
 public final class GaugePreview {
     static final int BG = 0xFF07090C;
     /** the full gauge's clock in every preview (Clock.format of a fixed time: deterministic PNGs) */
-    static final String CLOCK = "2026.11.23. (월) 14:05:09";
+    static final String CLOCK = "11월 23일 (월) 14:05";
     static final String CAM_SPEED = " nav=1 cam=speed lim=60 dist=350 zone=0 sec=0 slim=- savg=- ssrc=- sdist=-",
             CAM_SECTION = " nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500",
             CAM_MOBILE = " nav=1 cam=mobile lim=80 dist=1200 zone=0 sec=0 slim=- savg=- ssrc=- sdist=-";
