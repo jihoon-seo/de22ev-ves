@@ -2,11 +2,13 @@ package ves.gauge;
 
 /**
  * The camera line on the main screen and the full gauge (0.2.13), Korean and short, from LIVE's camera fields:
- * "단속 60 · 350 m", "이동식 단속 50 · 1.2 km", "제한속도 80", "주의 구간 · 350 m", "구간단속 80 · 평균 87"; "" when there is no
- * camera or nothing is known (an older vesd).
+ * "단속 60 · 350 m", "신호·과속 50 · 300 m", "어린이보호구역 30 · 120 m", "이동식 단속 50 · 1.2 km", "제한속도 80",
+ * "과속방지턱", "주의 구간 · 350 m", "구간단속 80 · 평균 87"; "" when there is no camera or nothing is known (an older vesd).
  */
 public final class NavText {
     static final String SEP = " · ";
+    /** zone names by the trap line's warningZone, in the cluster's Navigation$WarningZone order (0.2.15; 2 and 8 seen on the car) */
+    static final String[] ZONES = {"주의 구간", "사고 다발", "어린이보호구역", "낙석 주의", "철길 건널목", "안개 주의", "내리막길", "동물 출현", "과속방지턱"};
 
     private NavText() {}
 
@@ -19,9 +21,11 @@ public final class NavText {
         }
         String s;
         if ("speed".equals(d.cam)) s = withLimit("단속", d.camLimit);
+        else if ("signal".equals(d.cam)) s = withLimit("신호·과속", d.camLimit);
+        else if ("school".equals(d.cam)) s = withLimit("어린이보호구역", d.camLimit);
         else if ("mobile".equals(d.cam)) s = withLimit("이동식 단속", d.camLimit);
         else if ("limit".equals(d.cam)) s = withLimit("제한속도", d.camLimit);
-        else if ("zone".equals(d.cam)) s = "주의 구간";
+        else if ("zone".equals(d.cam)) s = zoneName(d.zone);
         else return "";
         return d.camDist > 0 ? s + SEP + dist(d.camDist) : s;
     }
@@ -34,6 +38,8 @@ public final class NavText {
         if (!(d.camLimit > 0)) return full; // a warning triangle instead of a sign: the whole line
         String far = d.camDist > 0 ? dist(d.camDist) : "";
         if ("mobile".equals(d.cam)) return far.length() > 0 ? "이동식" + SEP + far : "이동식";
+        if ("signal".equals(d.cam)) return far.length() > 0 ? "신호·과속" + SEP + far : "신호·과속";
+        if ("school".equals(d.cam)) return far.length() > 0 ? "어린이보호구역" + SEP + far : "어린이보호구역";
         if (far.length() > 0) return far;
         return "speed".equals(d.cam) ? "단속 카메라" : "제한속도";
     }
@@ -89,6 +95,10 @@ public final class NavText {
         if (!(lim > 0)) return false;
         if (section && d.sectionAvg > lim) return true;
         return !Double.isNaN(d.kph) && d.kph > lim;
+    }
+
+    static String zoneName(int code) {
+        return code > 0 && code < ZONES.length ? ZONES[code] : ZONES[0];
     }
 
     private static String withLimit(String what, int lim) {

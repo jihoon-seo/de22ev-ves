@@ -51,6 +51,19 @@ final class NavTests {
                 + " speedLimitUnit: 1 speedInfoType: 0 warningZone2: 0 warningZone3: 0 warningZone4: 0 displayCountry: 0cameraSafetyAlert0";
     }
 
+    /**
+     * the car's camera lines (vesd.log, 2026-11-23/24 drives): fixedSpeed and mobileSpeed stay 0, a camera comes as
+     * speedLimit + speedInfoType (1 or 5) + cameraSafetyAlert (1, 3, 5, 6); a zone as warningZone (2, 8) + cameraSafetyAlert
+     * 51 + warningZone (53, 59)
+     */
+    static String carTrap(long at, int alarm, int zone, int limit, int infoType, int alert) {
+        return head(at) + "NaviCluster.updateTBTTrapInfo() fixedSpeed: 0 mobileSpeed: 0 overSpeedAlarm: " + alarm
+                + " redlineSpeed: 0 nonSpeed: 0 warningZone: " + zone + " curveWarning: 0 mergeWarning: 0 tollGateCurrency: 0"
+                + " tollGate: 0 displayTG: 0 barGraphLevel: 0 speedLimit: " + limit + " busSpeed: 0 speedLimitType: 0"
+                + " speedLimitUnit: 1 speedInfoType: " + infoType + " warningZone2: 0 warningZone3: 0 warningZone4: 0"
+                + " displayCountry: 1cameraSafetyAlert" + alert;
+    }
+
     /** updateTBTTrapInfo(IIIIIIIIIIIIIIIII): the 17-field variant */
     static String trap17(long at, int fixed, int mobile, int limit, int zone) {
         return head(at) + "NaviCluster.updateTBTTrapInfo() fixedSpeed: " + fixed + " mobileSpeed: " + mobile + " overSpeedAlarm: 0"
@@ -146,6 +159,43 @@ final class NavTests {
                 is(n.liveFields(U + 5100), "lim", "60");
                 feed(n, trap(W + 6000, -1, 50, 0, 0), 6000);
                 is(n.liveFields(U + 6100), "cam", "mobile");
+            }
+        });
+
+        // ---------------- NC9 the camera kinds as the car sends them (0.2.15, the 2026-11-23/24 drive logs): speedInfoType 1
+        // a speed camera, 5 a signal + speed camera, cameraSafetyAlert 5 / 6 a school-zone camera; a limit with no
+        // speedInfoType stays a limit; a zone keeps its warningZone code; the 65535 m "no distance" is no distance
+        l.add(new TestMain.T("NC9_car_camera_kinds") {
+            void run() {
+                NavCam n = new NavCam();
+                feed(n, carTrap(W, 3, 0, 80, 1, 1), 0);
+                feed(n, warn10(W + 10, 600, 0, 0), 10);
+                String s = n.liveFields(U + 100);
+                is(s, "cam", "speed");
+                is(s, "lim", "80");
+                is(s, "dist", "600");
+                feed(n, carTrap(W + 1000, 1, 0, 50, 5, 3), 1000);
+                s = n.liveFields(U + 1100);
+                is(s, "cam", "signal");
+                is(s, "lim", "50");
+                feed(n, carTrap(W + 2000, 1, 0, 30, 5, 6), 2000);
+                is(n.liveFields(U + 2100), "cam", "school");
+                is(n.liveFields(U + 2100), "lim", "30");
+                feed(n, carTrap(W + 3000, 1, 0, 50, 1, 5), 3000);
+                is(n.liveFields(U + 3100), "cam", "school");
+                is(n.liveFields(U + 3100), "lim", "50");
+                feed(n, carTrap(W + 4000, 3, 2, 0, 0, 53), 4000);
+                feed(n, warn10(W + 4010, 65535, 0, 0), 4010);
+                s = n.liveFields(U + 4100);
+                is(s, "cam", "zone");
+                is(s, "zone", "2");
+                is(s, "lim", "-");
+                is(s, "dist", "-");
+                feed(n, carTrap(W + 5000, 3, 8, 0, 0, 59), 5000);
+                is(n.liveFields(U + 5100), "zone", "8");
+                feed(n, carTrap(W + 6000, 3, 0, 0, 0, 0), 6000);
+                is(n.liveFields(U + 6100), "cam", "none");
+                check(NavCam.distMeters(65535, 0, 0) == -1 && NavCam.distMeters(65534, 0, 0) == 65534, "65535 is no distance");
             }
         });
 
@@ -341,11 +391,33 @@ final class NavTests {
                 check("단속 60".equals(NavText.line(live(" nav=1 cam=speed lim=60 dist=-" + rest, 50))), "no distance");
                 check("이동식 단속 50 · 350 m".equals(NavText.line(live(" nav=1 cam=mobile lim=50 dist=350" + rest, 50))), "mobile");
                 check("제한속도 80 · 350 m".equals(NavText.line(live(" nav=1 cam=limit lim=80 dist=350" + rest, 50))), "limit");
-                check("주의 구간 · 350 m".equals(NavText.line(live(" nav=1 cam=zone lim=- dist=350 zone=2 sec=0 slim=- savg=- ssrc=- sdist=-", 50))),
-                        "zone: " + NavText.line(live(" nav=1 cam=zone lim=- dist=350 zone=2 sec=0 slim=- savg=- ssrc=- sdist=-", 50)));
+                check("주의 구간 · 350 m".equals(NavText.line(live(" nav=1 cam=zone lim=- dist=350 zone=9 sec=0 slim=- savg=- ssrc=- sdist=-", 50))),
+                        "unnamed zone: " + NavText.line(live(" nav=1 cam=zone lim=- dist=350 zone=9 sec=0 slim=- savg=- ssrc=- sdist=-", 50)));
                 check("".equals(NavText.line(live(" nav=1 cam=none lim=- dist=-" + rest, 50))), "none");
                 check("".equals(NavText.line(live(" nav=- cam=- lim=- dist=- zone=- sec=0 slim=- savg=- ssrc=- sdist=-", 50))), "unknown");
                 check("".equals(NavText.line(live("", 50))) && "".equals(NavText.line(null)), "old vesd / no data");
+            }
+        });
+
+        // ---------------- NT6 the car's camera kinds and zone names (0.2.15): warningZone counts in the cluster's
+        // Navigation$WarningZone order (1 black spot .. 8 speed bump; cameraSafetyAlert = 51 + it on the car)
+        l.add(new TestMain.T("NT6_text_car_kinds") {
+            void run() {
+                String rest = " zone=0 sec=0 slim=- savg=- ssrc=- sdist=-";
+                check("신호·과속 50 · 300 m".equals(NavText.line(live(" nav=1 cam=signal lim=50 dist=300" + rest, 50))), "signal");
+                check("신호·과속 · 300 m".equals(NavText.signDetail(live(" nav=1 cam=signal lim=50 dist=300" + rest, 50))), "signal sign detail");
+                check("신호·과속".equals(NavText.signDetail(live(" nav=1 cam=signal lim=50 dist=-" + rest, 50))), "signal, no distance");
+                check("어린이보호구역 30 · 120 m".equals(NavText.line(live(" nav=1 cam=school lim=30 dist=120" + rest, 30))), "school");
+                check("어린이보호구역 · 120 m".equals(NavText.signDetail(live(" nav=1 cam=school lim=30 dist=120" + rest, 30))), "school sign detail");
+                check("어린이보호구역 30 · 120 m".equals(NavText.title(live(" nav=1 cam=school lim=30 dist=120" + rest, 30))), "school title");
+                check(NavText.over(live(" nav=1 cam=school lim=30 dist=120" + rest, 35)), "school over 30");
+                String z = " nav=1 cam=zone lim=- dist=- zone=%d sec=0 slim=- savg=- ssrc=- sdist=-";
+                String[] names = {"주의 구간", "사고 다발", "어린이보호구역", "낙석 주의", "철길 건널목", "안개 주의", "내리막길", "동물 출현", "과속방지턱", "주의 구간"};
+                for (int i = 0; i < names.length; i++) {
+                    String got = NavText.line(live(z.replace("%d", String.valueOf(i)), 40));
+                    check(names[i].equals(got), "zone " + i + ": " + got);
+                }
+                check("과속방지턱 · 50 m".equals(NavText.line(live(" nav=1 cam=zone lim=- dist=50 zone=8 sec=0 slim=- savg=- ssrc=- sdist=-", 40))), "bump with distance");
             }
         });
 
@@ -368,7 +440,7 @@ final class NavTests {
                 check("단속 카메라".equals(NavText.signDetail(live(" nav=1 cam=speed lim=60 dist=-" + rest, 50))), "speed, no distance");
                 check("이동식 · 1.2 km".equals(NavText.signDetail(live(" nav=1 cam=mobile lim=50 dist=1200" + rest, 50))), "mobile");
                 check("350 m".equals(NavText.signDetail(live(" nav=1 cam=limit lim=80 dist=350" + rest, 50))), "limit");
-                check("주의 구간 · 350 m".equals(NavText.signDetail(live(" nav=1 cam=zone lim=- dist=350 zone=2 sec=0 slim=- savg=- ssrc=- sdist=-", 50))), "zone: no sign number");
+                check("주의 구간 · 350 m".equals(NavText.signDetail(live(" nav=1 cam=zone lim=- dist=350 zone=9 sec=0 slim=- savg=- ssrc=- sdist=-", 50))), "zone: no sign number");
                 LiveData sec = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 50);
                 check("구간단속".equals(NavText.signDetail(sec)), "section: the average has its own line");
                 check("평균 87".equals(NavText.sectionAvg(sec)), "section average line");

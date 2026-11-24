@@ -18,7 +18,7 @@ public final class LiveData {
     public int camLimit = -1, camDist = -1, zone = -1;
     /** section enforcement: 1 active / 0 not, its limit km/h, average km/h, remaining distance (raw rangeCamDist) */
     public int section = -1, sectionLimit = -1, sectionAvg = -1, sectionDist = -1;
-    /** cam: none|speed|mobile|limit|zone|section, "-" unknown; sectionSrc: nav|own, "-" none */
+    /** cam: none|speed|signal|school|mobile|limit|zone|section (signal, school: 0.2.15), "-" unknown; sectionSrc: nav|own, "-" none */
     public String cam = "-", sectionSrc = "-";
 
     /** null for an error answer, no answer or a line without rpm */

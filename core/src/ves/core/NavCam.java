@@ -18,7 +18,15 @@ import java.util.regex.Pattern;
  * NaviCluster.updateSLIFNaviInformation()::speedLimit:60 / linkClass:2 / ...   (logged raw only)
  * </pre>
  * Camera priority: section (SCC rangeCamSpdLimit &gt; 0) &gt; fixedSpeed &gt; mobileSpeed &gt; speedLimit &gt; warningZone; a speed of
- * -1 or 0 is none, so a trap line without any clears the camera (and its distance). Event times come from the logcat
+ * -1 or 0 is none, so a trap line without any clears the camera (and its distance).
+ * <p>The car's navigation (0.2.15, from the 2026-11-23/24 drive logs) never fills fixedSpeed or mobileSpeed: a camera
+ * comes as speedLimit (its limit) + speedInfoType + cameraSafetyAlert, with the warning distance counting down to it
+ * and the line cleared after it. speedInfoType 1 is a speed camera (cameraSafetyAlert 1; 80 km/h roads too), 5 a
+ * signal + speed camera (cameraSafetyAlert 3), and cameraSafetyAlert 5 (type 1) / 6 (type 5) one at a school zone (30
+ * km/h, the school-zone warning right after). A zone comes as warningZone in the order of the cluster's
+ * Navigation$WarningZone names (1 black spot .. 8 speed bump, not its bit values) with cameraSafetyAlert 51 + it (2 school
+ * zone / 53, 8 speed bump / 59). A speedLimit with speedInfoType 0 stays a plain limit. The 0.2.14 vesd showed all of the
+ * car's cameras as "제한속도". Event times come from the logcat
  * stamp (this year; last year when that is over a day ahead); a line older than HOLD_MS when read (vesd's startup
  * backlog) never becomes active, it only counts for the nav age. A camera no trap or distance line refreshed for
  * STALE_MS, or a section no SCC line refreshed, goes unknown. The camera enums are not known yet (0.2.14 from drive
@@ -56,7 +64,7 @@ public final class NavCam {
     private long navAt;
     private boolean trapKnown;
     private long trapAt;
-    private int fixed, mobile, limit, zone;
+    private int fixed, mobile, limit, zone, infoType, alert;
     private int distM = -1;
     private long distAt = Long.MIN_VALUE / 2;
     private boolean sccKnown;
@@ -151,7 +159,7 @@ public final class NavCam {
             cam = "mobile";
             lim = mobile;
         } else if (limit > 0) {
-            cam = "limit";
+            cam = limitKind(infoType, alert);
             lim = limit;
         } else {
             cam = zone > 0 ? "zone" : "none";
@@ -189,9 +197,16 @@ public final class NavCam {
         return t;
     }
 
-    /** warning distance in m: over + under/10 in the unit of scale (0 m, 1 km, 2 mile, 3 feet); -1 unknown */
+    /** speedLimit's kind from speedInfoType and cameraSafetyAlert (the car's codes, see the class comment) */
+    static String limitKind(int infoType, int alert) {
+        if (infoType <= 0) return "limit";
+        if (alert == 5 || alert == 6) return "school";
+        return infoType == 5 ? "signal" : "speed";
+    }
+
+    /** warning distance in m: over + under/10 in the unit of scale (0 m, 1 km, 2 mile, 3 feet); -1 unknown (over 65535 = none) */
     public static int distMeters(int over, int under, int scale) {
-        if (over < 0 || under < 0) return -1;
+        if (over < 0 || under < 0 || over >= 65535) return -1;
         double f;
         switch (scale) {
             case 0:
@@ -220,6 +235,8 @@ public final class NavCam {
         mobile = get(kv, "mobileSpeed");
         limit = get(kv, "speedLimit");
         zone = get(kv, "warningZone");
+        infoType = get(kv, "speedInfoType");
+        alert = get(kv, "cameraSafetyAlert");
         if (fixed <= 0 && mobile <= 0 && limit <= 0 && zone <= 0) distM = -1; // cleared: the distance went with it
     }
 
