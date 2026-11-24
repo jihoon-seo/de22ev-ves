@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.15
+
+From the camera lines in the 2026-11-23/24 drive logs (no new drive needed for these):
+
+- Camera kinds as this car's navigation sends them. It never fills the fixed / mobile camera fields: every camera
+  comes as a limit plus two codes, so 0.2.14 called all of them `제한속도`. Now: speedInfoType 1 is `단속`
+  (speed camera, also on the 80 km/h roads), 5 is `신호·과속` (signal + speed camera), and cameraSafetyAlert 5 / 6
+  is `어린이보호구역` (a camera in a school zone, 30 km/h, the school-zone warning right after it). The codes'
+  meanings are inferred from the drive (the navigation's own table is in its native library, not in the
+  firmware image); a kind not seen yet falls back to `단속`.
+- Warning zones by name: the zone code counts in the cluster's own zone-name order (1 사고 다발 .. 8 과속방지턱;
+  cameraSafetyAlert is 51 + the code on the car), so `주의 구간` becomes `과속방지턱` (code 8, the most frequent
+  line on the drive) or `어린이보호구역` (code 2).
+- The navigation's "no distance" (65535 m) no longer shows as `65.5 km`.
+- No more `구간단속 15 · 평균 255` for a minute after each navigation start: the car's section line then carries
+  only all-invalid values, which now mean no section.
+
 ## 0.2.14
 
 From the drive with 0.2.13 (2026-11-23/24) and the owner's requests:
