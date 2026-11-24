@@ -452,7 +452,7 @@ final class GaugeTests {
                         check(r.texts.contains(String.valueOf(k)) == (k <= 8 || ev), prof + ": numeral " + k + " " + r.texts);
                     check(r.colors.contains(0xFFFF3B30) == !ev, prof + ": redline only on the ICE dial");
                     check(r.arcs.size() > 0, prof + ": the rail arc");
-                    for (float[] a : r.arcs) check(Math.abs(a[0] - size / 2) < 0.01 && Math.abs(a[1] - size / 2) < 0.01, prof + ": arcs centred");
+                    for (float[] a : r.arcs) check(Math.abs(a[0] - size / 2) < 0.01 && Math.abs(a[1] - size * GaugeRenderer.DIAL_CY) < 0.01, prof + ": arcs about the dial centre");
                 }
                 Rec n = new Rec(size, size);
                 GaugeRenderer.drawNeedle(n, size);
@@ -460,7 +460,7 @@ final class GaugeTests {
                 double far = 0, farDeg = 0;
                 for (float[] xy : n.polys)
                     for (int i = 0; i + 1 < xy.length; i += 2) {
-                        double dx = xy[i] - size / 2, dy = xy[i + 1] - size / 2, dist = Math.hypot(dx, dy);
+                        double dx = xy[i] - size / 2, dy = xy[i + 1] - size * GaugeRenderer.DIAL_CY, dist = Math.hypot(dx, dy);
                         double deg = (Math.toDegrees(Math.atan2(dy, dx)) + 360) % 360;
                         check(Math.abs(deg - GaugeMath.START_DEG) < 12, "needle vertex off the START ray: " + deg);
                         if (dist > far) {
@@ -475,11 +475,12 @@ final class GaugeTests {
         });
 
         // ---------------- GA12 the panel page's shift lamps (0.2.14, owner): round lamps on a ring above the dial's scale
-        // as on the full gauge (same angles, 1.11 x the scale radius), on the dial's disc; off lamps in the dial art,
-        // lit ones in one overlay (green, amber, red) and all red for the flash
+        // as on the full gauge (same angles, 1.11 x the scale radius); off lamps in the dial art, lit ones in one overlay
+        // (green, amber, red) and all red for the flash. The gauge as big as the square allows: no disc, the centre
+        // below the middle (the scale is open at the bottom), the lamps and the scale just inside the square
         l.add(new TestMain.T("GA12_panel_lamps_ring") {
             void run() {
-                float size = 480, c = size / 2;
+                float size = 480, c = size / 2, cy = size * GaugeRenderer.DIAL_CY;
                 Rec full = new Rec(1920, 720);
                 GaugeRenderer.draw(full, LiveData.parse("ok\nrpm=3000 gear=3 sh=0 sel=5 kph=50 kw=20 shift=3200 dm=- profile=ice_shift"
                         + " state=drive red=6500 max=8000\n"), 3000, Theme.NEUTRAL, true, 1920, 720);
@@ -494,12 +495,12 @@ final class GaugeTests {
                     double ring = -1;
                     for (int i = 0; i < r.circles.size(); i++) {
                         float[] k = r.circles.get(i);
-                        double dist = Math.hypot(k[0] - c, k[1] - c), deg = (Math.toDegrees(Math.atan2(k[1] - c, k[0] - c)) + 360) % 360;
+                        double dist = Math.hypot(k[0] - c, k[1] - cy), deg = (Math.toDegrees(Math.atan2(k[1] - cy, k[0] - c)) + 360) % 360;
                         if (ring < 0) ring = dist;
                         near(dist, ring, 0.01, "lamp " + i + " on one ring");
                         if (i < fullDeg.size()) near(deg, fullDeg.get(i), 0.01, "lamp " + i + " at the full gauge's angle");
-                        check(k[1] + k[2] < c, "lamp " + i + " above the centre");
-                        check(dist + k[2] < size * 0.5f, "lamp " + i + " inside the square");
+                        check(k[1] + k[2] < cy, "lamp " + i + " above the centre");
+                        check(k[1] - k[2] >= 0, "lamp " + i + " inside the square");
                         int want = flash ? 0xFFFF3B30 : i < 3 ? 0xFF46D17A : i < 6 ? 0xFFFFB020 : 0xFFFF3B30;
                         check(r.circleColors.get(i) == want, (flash ? "flash " : "") + "lamp " + i + " colour " + Integer.toHexString(r.circleColors.get(i)));
                     }
@@ -507,17 +508,22 @@ final class GaugeTests {
                 }
                 Rec d = new Rec(size, size);
                 GaugeRenderer.drawDial(d, "ice_shift", size);
-                float disc = d.circles.get(0)[2];
-                check(Math.abs(d.circles.get(0)[0] - c) < 0.01 && disc <= size * 0.5f, "the disc first, inside the square");
+                check(d.bad == null, "the dial inside the square: " + d.bad);
+                check(GaugeRenderer.DIAL_R >= 0.47f, "the scale fills the square (as big as the page allows): " + GaugeRenderer.DIAL_R);
+                float top = size, side = 0;
+                for (float[] pt : d.points) {
+                    top = Math.min(top, pt[1]);
+                    side = Math.max(side, Math.abs(pt[0] - c));
+                }
+                check(top < size * 0.03f && side > size * 0.45f, "the art reaches the square's top and sides: top " + top + " side " + side);
                 Rec lit = new Rec(size, size);
                 GaugeRenderer.drawLamps(lit, false, size);
                 int off = 0;
-                for (int i = 1; i < d.circles.size(); i++) {
+                for (int i = 0; i < d.circles.size(); i++) {
                     float[] k = d.circles.get(i);
                     if (d.circleColors.get(i) != 0x2EFFFFFF) continue;
                     float[] m = lit.circles.get(off++);
                     check(Math.abs(k[0] - m[0]) < 0.01 && Math.abs(k[1] - m[1]) < 0.01 && Math.abs(k[2] - m[2]) < 0.01, "off lamp " + off + " under its lit one");
-                    check(Math.hypot(k[0] - c, k[1] - c) + k[2] < disc, "off lamp " + off + " on the disc");
                 }
                 check(off == 9, "the dial carries 9 off lamps: " + off);
             }

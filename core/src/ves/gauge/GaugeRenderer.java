@@ -12,21 +12,22 @@ package ves.gauge;
  * (left, green) and power (right, theme colour).
  *
  * 0.2.13: drawExtras adds the full gauge's clock, VES on/off button (buttonRect) and camera panel; drawDial,
- * drawNeedle, drawLamps and drawBar draw the split screen's panel page art (ves.tools.PanelArt, PNGs at build time).
+ * drawNeedle and drawLamps draw the split screen's panel page art (ves.tools.PanelArt, PNGs at build time).
  */
 public final class GaugeRenderer {
     static final int WHITE = 0xFFF2F6FA, DIM = 0x59FFFFFF, FAINT = 0x24FFFFFF, RED = 0xFFFF3B30, RED_ZONE = 0x66FF3B30,
             GREEN = 0xFF46D17A, AMBER = 0xFFFFB020, LAMP_OFF = 0x2EFFFFFF;
-    /** text on light fills (the accent button, the limit sign); the panel dial's disc */
-    static final int INK = 0xFF0B0E12, DIAL_BG = 0xFF0B0E12;
+    /** text on light fills (the accent button, the limit sign) */
+    static final int INK = 0xFF0B0E12;
     /** the on/off pill while off / unknown: opaque (its circles and rect overlap, a translucent fill would band) */
     static final int BUTTON_OFF = 0xFF3A3E44, BUTTON_UNKNOWN = 0xFF1C2024;
     static final int LAMPS = 9;
     /**
-     * the panel dial's scale radius as a share of its square (0.2.14: 0.42, the disc reaches 1.16 x this so the ring
-     * of shift lamps at LAMP_RING sits on it, inside the square)
+     * the panel dial's scale radius and centre height as shares of its square (0.2.14, as big as the page allows): no
+     * disc, and the centre below the middle since the scale is open at the bottom, so the lamp ring (LAMP_RING) just
+     * clears the top and the rail the sides. The needle's RotateDrawable pivots at 50% / DIAL_CY (gauge_needle.xml).
      */
-    public static final float DIAL_R = 0.42f;
+    public static final float DIAL_R = 0.48f, DIAL_CY = 0.56f;
     /** the shift lamps' ring and lamp radius as shares of the scale radius (full gauge and panel page alike) */
     static final double LAMP_RING = 1.11;
     static final float LAMP_SIZE = 0.034f;
@@ -62,7 +63,8 @@ public final class GaugeRenderer {
         Geo(float size) {
             w = h = size;
             compact = false;
-            cx = cy = size / 2;
+            cx = size / 2;
+            cy = size * DIAL_CY;
             r = size * DIAL_R;
         }
 
@@ -365,17 +367,14 @@ public final class GaugeRenderer {
     // ------------------------------------------------------------------ the split screen's panel page art (0.2.13)
 
     /**
-     * The panel page's dial (rendered to PNG at build time by ves.tools.PanelArt): a dark disc with the scale (rail,
-     * ticks, numerals, the hatched redline on the ICE scale), a faint accent ribbon track and "rpm x1000", centred in a
-     * size x size square; outside the disc nothing is drawn (transparent). drawNeedle matches it.
+     * The panel page's dial (rendered to PNG at build time by ves.tools.PanelArt): the scale (rail, ticks, numerals,
+     * the hatched redline on the ICE scale), a faint accent ribbon track, "rpm x1000" and the dark shift lamps, about
+     * (DIAL_CY) in a size x size square, the rest transparent (0.2.14: no disc, the gauge as big as the square
+     * allows). drawNeedle and drawLamps match it.
      */
     public static void drawDial(Painter p, String profile, float size) {
         Geo g = new Geo(size);
         float r = g.r;
-        p.color(DIAL_BG);
-        p.circle(g.cx, g.cy, r * 1.16f);
-        p.color(0x1AFFFFFF); // a faint rim, so the disc reads on any page colour
-        p.arc(g.cx, g.cy, r * 1.15f, 0, 360, Math.max(1.5f, r * 0.008f));
         p.color(LAMP_OFF); // the shift lamps while dark (drawLamps' overlays light them)
         for (int i = 0; i < LAMPS; i++) p.circle(g.x(lampDeg(i), r * LAMP_RING), g.y(lampDeg(i), r * LAMP_RING), r * LAMP_SIZE);
         p.color(0x2E000000 | (Theme.accent(Theme.NEUTRAL) & 0xFFFFFF));
@@ -387,10 +386,10 @@ public final class GaugeRenderer {
 
     /**
      * The panel page's needle alone, pointing at the START angle (140 degrees: 0 rpm), in a size x size square with
-     * the same centre and radius as drawDial. The app rotates it about the centre with a RotateDrawable:
+     * the same centre (50%, DIAL_CY) and radius as drawDial. The app rotates it about the centre with a RotateDrawable:
      * <pre>
      * &lt;rotate android:drawable="@drawable/gp_needle" android:fromDegrees="0" android:toDegrees="260"
-     *         android:pivotX="50%" android:pivotY="50%" /&gt;
+     *         android:pivotX="50%" android:pivotY="56%" /&gt;
      * </pre>
      * level 0..10000 (PanelFrame.needle = GaugeMath.needleLevel) turns it 0..260 degrees clockwise, i.e. 0..max rpm.
      * Keep the ImageView square (needle and dial the same size, scaleType fitCenter) so the pivot is the dial's centre.
@@ -427,16 +426,6 @@ public final class GaugeRenderer {
     /** lamp i's angle on the ring: nine lamps over 72 degrees about 12 o'clock, left to right */
     static double lampDeg(int i) {
         return 270 - 36 + 72.0 * i / (LAMPS - 1);
-    }
-
-    /**
-     * A full power bar for a ClipDrawable (w x h, the bar's middle half of the height): regen green (the widget clips
-     * it from the right: gravity right), drive in the accent (clipped from the left: gravity left); the level is
-     * PanelFrame.regen / drive.
-     */
-    public static void drawBar(Painter p, boolean regen, float w, float h) {
-        p.color(regen ? GREEN : Theme.accent(Theme.NEUTRAL));
-        p.poly(new float[] {0, h * 0.25f, w, h * 0.25f, w, h * 0.75f, 0, h * 0.75f});
     }
 
     static String rpmText(double rpm) {

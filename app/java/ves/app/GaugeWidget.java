@@ -64,8 +64,6 @@ public final class GaugeWidget extends AppWidgetProvider {
             v.setInt(R.id.g_lamps, "setImageLevel", f.lampsLevel());
             v.setInt(R.id.g_flash, "setImageLevel", f.flashLevel());
         }
-        if ((mask & PanelFrame.F_DRIVE) != 0) v.setInt(R.id.g_drive, "setImageLevel", f.drive);
-        if ((mask & PanelFrame.F_REGEN) != 0) v.setInt(R.id.g_regen, "setImageLevel", f.regen);
         if ((mask & PanelFrame.F_GEAR) != 0) v.setTextViewText(R.id.g_gear, f.gear);
         if ((mask & PanelFrame.F_SPEED) != 0) v.setTextViewText(R.id.g_speed, "-".equals(f.speed) ? "--" : f.speed);
         if ((mask & PanelFrame.F_ON) != 0) {

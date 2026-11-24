@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- the 계기판 page's needle (0.2.13): gp_needle points at 0 rpm; level 0..10000 (PanelFrame.needle) turns it 0..260
-     degrees about the dial's centre (GaugeRenderer.drawNeedle). gp_* PNGs are made at build time by ves.tools.PanelArt. -->
+     degrees about the dial's centre, 56% down (GaugeRenderer.DIAL_CY, drawNeedle). gp_* PNGs are made at build time by ves.tools.PanelArt. -->
 <rotate xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@drawable/gp_needle"
     android:fromDegrees="0" android:toDegrees="260"
-    android:pivotX="50%" android:pivotY="50%" />
+    android:pivotX="50%" android:pivotY="56%" />

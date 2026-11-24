@@ -65,25 +65,12 @@ final class PanelTests {
             }
         });
 
-        // ---------------- PF3 drive / regen ClipDrawable levels: kwBar x 10000 in steps of 100
-        l.add(new TestMain.T("PF3_bar_levels") {
+        // ---------------- PF3 no power bar on the page (0.2.14, owner): the power alone changes nothing
+        l.add(new TestMain.T("PF3_no_power_bar") {
             void run() {
-                PanelFrame f = PanelFrame.of(d("2000", "75", "6000"), true);
-                check(f.drive == 5000 && f.regen == 0, "75 kW: " + f.drive + "/" + f.regen);
-                f = PanelFrame.of(d("2000", "-20", "6000"), true);
-                check(f.drive == 0 && f.regen == 5000, "-20 kW: " + f.drive + "/" + f.regen);
-                f = PanelFrame.of(d("2000", "-80", "6000"), true);
-                check(f.regen == 10000, "full regen clamped " + f.regen);
-                f = PanelFrame.of(d("2000", "151", "6000"), true);
-                check(f.drive == 10000, "full drive clamped " + f.drive);
-                f = PanelFrame.of(d("2000", "1", "6000"), true);
-                check(f.drive == 100, "1 kW rounds to one step: " + f.drive);
-                f = PanelFrame.of(d("2000", "-", "6000"), true);
-                check(f.drive == 0 && f.regen == 0, "unknown kW: empty");
-                for (int kw = -50; kw <= 160; kw += 3) {
-                    f = PanelFrame.of(d("2000", String.valueOf(kw), "6000"), true);
-                    check(f.drive % 100 == 0 && f.regen % 100 == 0 && (f.drive == 0 || f.regen == 0), "kw " + kw);
-                }
+                PanelFrame a = PanelFrame.of(d("2000", "75", "6000"), true);
+                for (String kw : new String[] {"-80", "-20", "0", "1", "151", "-"})
+                    check(PanelFrame.of(d("2000", kw, "6000"), true).diff(a) == 0, "kW " + kw + " changes nothing");
             }
         });
 
@@ -137,15 +124,13 @@ final class PanelTests {
                 check(PanelFrame.of(d("2400", "5", "50", "20", "6000", "ice_smooth", "1"), true).diff(a) == PanelFrame.F_NEEDLE, "rpm");
                 check(PanelFrame.of(d("2000", "0", "50", "20", "6000", "ice_smooth", "1"), true).diff(a) == PanelFrame.F_GEAR, "selector");
                 check(PanelFrame.of(d("2000", "5", "51", "20", "6000", "ice_smooth", "1"), true).diff(a) == PanelFrame.F_SPEED, "kph");
-                check(PanelFrame.of(d("2000", "5", "50", "-20", "6000", "ice_smooth", "1"), true).diff(a)
-                        == (PanelFrame.F_DRIVE | PanelFrame.F_REGEN), "drive -> regen");
                 check(PanelFrame.of(d("2000", "5", "50", "20", "6000", "ice_smooth", "0"), true).diff(a) == PanelFrame.F_ON, "on");
                 check(PanelFrame.of(d("5000", "5", "50", "20", "4500", "ice_smooth", "1"), true).diff(a) == (PanelFrame.F_NEEDLE | PanelFrame.F_LAMPS),
                         "needle + lamps");
                 int ev = PanelFrame.of(d("2000", "5", "50", "20", "6000", "ev_future", "1"), true).diff(a);
                 check((ev & PanelFrame.F_DIAL) != 0 && (ev & PanelFrame.F_NEEDLE) != 0, "EV: dial and needle " + ev);
-                int[] bits = {PanelFrame.F_DIAL, PanelFrame.F_NEEDLE, PanelFrame.F_LAMPS, PanelFrame.F_DRIVE, PanelFrame.F_REGEN,
-                        PanelFrame.F_GEAR, PanelFrame.F_SPEED, PanelFrame.F_ON};
+                int[] bits = {PanelFrame.F_DIAL, PanelFrame.F_NEEDLE, PanelFrame.F_LAMPS, PanelFrame.F_GEAR, PanelFrame.F_SPEED,
+                        PanelFrame.F_ON};
                 int all = 0;
                 for (int b : bits) {
                     check(b != 0 && (all & b) == 0, "distinct bit " + b);

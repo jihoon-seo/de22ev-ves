@@ -125,13 +125,15 @@ N=$(ls "$WORK/gauge" | grep -c '\.png$')
 [ "$N" = 41 ] || fail "gauge preview: $N PNGs (want 40 + sheet)"
 echo "PASS gauge preview: $N PNGs"
 
-# the split screen's panel page art (0.2.13; 0.2.14 ring lamps): 7 PNGs for the widget's drawables + the composed preview
+# the split screen's panel page art (0.2.13; 0.2.14 ring lamps, no power bar): 5 PNGs for the widget's drawables + the composed preview
 "$JAVA" -Djava.awt.headless=true -cp "$CLS" ves.tools.PanelArt "$WORK/panel" --preview > "$WORK/panel.txt" 2>&1 || fail "panel art: $(cat "$WORK/panel.txt")"
-for f in gp_dial_ice gp_dial_ev gp_needle gp_lamps_lit gp_lamps_flash gp_bar_drive gp_bar_regen panel-preview; do
+for f in gp_dial_ice gp_dial_ev gp_needle gp_lamps_lit gp_lamps_flash panel-preview; do
     [ -s "$WORK/panel/$f.png" ] || fail "panel art: no $f.png"
 done
 N=$(ls "$WORK/panel" | grep -c '\.png$')
-[ "$N" = 8 ] || fail "panel art: $N PNGs (want 7 + panel-preview)"
+[ "$N" = 6 ] || fail "panel art: $N PNGs (want 5 + panel-preview)"
+# the needle's RotateDrawable turns about the dial's centre: GaugeRenderer.DIAL_CY (0.56) below the top
+grep -q 'android:pivotX="50%" android:pivotY="56%"' app/res/drawable/gauge_needle.xml || fail "gauge_needle.xml: pivot not 50% 56% (GaugeRenderer.DIAL_CY)"
 echo "PASS panel art: $N PNGs"
 
 echo "CORE TESTS PASSED"
