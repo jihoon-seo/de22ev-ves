@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.16
+
+From the 2026-11-23..25 drive logs (the same 80 km/h section four times, both directions):
+
+- Section enforcement (구간단속) recognised. This car's navigation sends no section data at all: the start camera
+  comes as an ordinary `단속 80` camera, and after it the camera line simply stays while the distance jumps to the
+  section's remaining km. 0.2.15 therefore showed `단속 80 · 4.4 km` and no average. Now, once the start camera is
+  passed: `구간단속 80 · 남은 4.4 km`, our own section average (`평균 76`, from the car's speed, after 10 s) on its
+  own line as before, and the limit sign stays. The camera inside the section counts down as `카메라 600 m`
+  (the remaining distance carries on behind it), and the section ends at the end camera.
+- The approach to the start camera still shows as `단속 80 · 600 m`: nothing tells it apart from a single camera.
+
 ## 0.2.15
 
 From the camera lines in the 2026-11-23/24 drive logs (no new drive needed for these):
