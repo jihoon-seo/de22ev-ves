@@ -3,7 +3,8 @@ package ves.gauge;
 /**
  * The camera line on the main screen and the full gauge (0.2.13), Korean and short, from LIVE's camera fields:
  * "단속 60 · 350 m", "신호·과속 50 · 300 m", "어린이보호구역 30 · 120 m", "이동식 단속 50 · 1.2 km", "제한속도 80",
- * "과속방지턱", "주의 구간 · 350 m", "구간단속 80 · 평균 87"; "" when there is no camera or nothing is known (an older vesd).
+ * "과속방지턱", "주의 구간 · 350 m", "구간단속 80 · 평균 87 · 남은 2.5 km", "구간단속 80 · 평균 87 · 카메라 400 m" (a camera
+ * inside the section); "" when there is no camera or nothing is known (an older vesd).
  */
 public final class NavText {
     static final String SEP = " · ";
@@ -17,7 +18,9 @@ public final class NavText {
         if (d.section == 1 || "section".equals(d.cam)) {
             int lim = d.sectionLimit > 0 ? d.sectionLimit : d.camLimit;
             String s = lim > 0 ? "구간단속 " + lim : "구간단속";
-            return d.sectionAvg > 0 ? s + SEP + "평균 " + d.sectionAvg : s;
+            if (d.sectionAvg > 0) s += SEP + "평균 " + d.sectionAvg;
+            String far = sectionFar(d);
+            return far.length() > 0 ? s + SEP + far : s;
         }
         String s;
         if ("speed".equals(d.cam)) s = withLimit("단속", d.camLimit);
@@ -34,7 +37,10 @@ public final class NavText {
     public static String signDetail(LiveData d) {
         String full = line(d);
         if (full.length() == 0) return "";
-        if (section(d)) return "구간단속"; // the average gets its own line (sectionAvg)
+        if (section(d)) { // the average gets its own line (sectionAvg)
+            String far = sectionFar(d);
+            return far.length() > 0 ? "구간단속" + SEP + far : "구간단속";
+        }
         if (!(d.camLimit > 0)) return full; // a warning triangle instead of a sign: the whole line
         String far = d.camDist > 0 ? dist(d.camDist) : "";
         if ("mobile".equals(d.cam)) return far.length() > 0 ? "이동식" + SEP + far : "이동식";
@@ -48,7 +54,15 @@ public final class NavText {
     public static String title(LiveData d) {
         if (!section(d)) return line(d);
         int lim = limit(d);
-        return lim > 0 ? "구간단속 " + lim : "구간단속";
+        String s = lim > 0 ? "구간단속 " + lim : "구간단속";
+        String far = sectionFar(d);
+        return far.length() > 0 ? s + SEP + far : s;
+    }
+
+    /** in a section (0.2.16): "카메라 400 m" while a camera inside it is ahead, else "남은 2.5 km"; "" unknown */
+    static String sectionFar(LiveData d) {
+        if (d.camDist > 0) return "카메라 " + dist(d.camDist);
+        return d.sectionDist > 0 ? "남은 " + dist(d.sectionDist) : "";
     }
 
     /** "현재 72" while a camera is ahead ("현재 --" with the speed unknown) */

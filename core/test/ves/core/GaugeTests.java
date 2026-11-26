@@ -413,7 +413,7 @@ final class GaugeTests {
                                     check(ai >= 0 && ex.anchors.get(ni)[1] < ex.anchors.get(ai)[1] && ex.anchors.get(ai)[1] < ex.anchors.get(si)[1],
                                             what + ": average between the camera line and the current speed");
                                     check(ai >= 0 && ex.textColors.get(ai) == red, what + ": average 87 above 80 in red");
-                                    check("구간단속".equals(ex.texts.get(ni)), what + ": camera line is just 구간단속 " + ex.texts);
+                                    check("구간단속 · 남은 1.5 km".equals(ex.texts.get(ni)), what + ": camera line is 구간단속 and the remaining distance " + ex.texts);
                                 } else {
                                     check(ai < 0, what + ": no average line " + ex.texts);
                                 }

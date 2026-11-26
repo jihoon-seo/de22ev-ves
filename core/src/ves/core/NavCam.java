@@ -26,7 +26,15 @@ import java.util.regex.Pattern;
  * km/h, the school-zone warning right after). A zone comes as warningZone in the order of the cluster's
  * Navigation$WarningZone names (1 black spot .. 8 speed bump, not its bit values) with cameraSafetyAlert 51 + it (2 school
  * zone / 53, 8 speed bump / 59). A speedLimit with speedInfoType 0 stays a plain limit. The 0.2.14 vesd showed all of the
- * car's cameras as "제한속도". Event times come from the logcat
+ * car's cameras as "제한속도".
+ * <p>The car sends no SCC section either (0.2.16, the same 80 km/h section in the 2026-11-24/25 logs): its start
+ * camera comes as a plain camera (speedLimit 80, speedInfoType 1) counting down to it, then the trap line stays and the
+ * warning distance jumps from the camera's few metres to the section's remaining km (4.4 km, scale 1), counts down
+ * and switches to metres below 1 km; a camera inside the section counts down from 600 m in between (the remaining
+ * distance comes back 600 m shorter after it), and the trap line clears at the end camera. So a limit camera whose
+ * distance jumps from at most SEC_AT_M to at least SEC_MIN_M with no new limit is a section (the trap section), a drop
+ * of more than SEC_DROP_M from at least SEC_MIN_M left is the inside camera until the distance jumps back up, and the trap line clearing
+ * or changing its limit ends it. Event times come from the logcat
  * stamp (this year; last year when that is over a day ahead); a line older than HOLD_MS when read (vesd's startup
  * backlog) never becomes active, it only counts for the nav age. A camera no trap or distance line refreshed for
  * STALE_MS, or a section no SCC line refreshed, goes unknown. The camera enums are not known yet (0.2.14 from drive
@@ -42,6 +50,8 @@ public final class NavCam {
     public static final long LOG_GAP_MS = 1000;
     /** our own section average is shown after this much driving in the section; speed tick gaps count this much at most */
     public static final long OWN_MIN_MS = 10000, TICK_CAP_MS = 2000;
+    /** the trap section (see the class comment): passed the start camera, the remaining distance, a drop to an inside camera */
+    static final int SEC_AT_M = 60, SEC_MIN_M = 1000, SEC_DROP_M = 400;
     static final long DAY_MS = 86400000L;
     static final int LOG_MAX = 16384;
 
@@ -73,6 +83,10 @@ public final class NavCam {
     private boolean secOn;
     private long secMs, lastTick;
     private double secMeters;
+    // the trap section: its limit, the last remaining distance (and secMeters then), the inside camera's distance
+    private boolean tSec, tMid;
+    private int tLim, tLeft, tMidDist;
+    private double tLeftMeters;
     private final StringBuilder log = new StringBuilder();
     private final Map<String, String> logArgs = new HashMap<String, String>();
     private final Map<String, Long> logAt = new HashMap<String, Long>();
@@ -126,6 +140,7 @@ public final class NavCam {
             secOn = true;
             secMs = 0;
             secMeters = 0;
+            tLeftMeters = 0;
             lastTick = uptimeMs;
             return;
         }
@@ -147,9 +162,10 @@ public final class NavCam {
         boolean trap = trapKnown && now - Math.max(trapAt, distAt) <= STALE_MS;
         String cam;
         int lim = -1;
+        boolean scc = sccActive(now);
         if (sec) {
             cam = "section";
-            lim = sLim;
+            lim = scc ? sLim : tLim;
         } else if (!trap) {
             cam = "-";
         } else if (fixed > 0) {
@@ -166,6 +182,13 @@ public final class NavCam {
         }
         boolean camera = !"-".equals(cam) && !"none".equals(cam);
         int dist = camera && now - distAt <= STALE_MS ? distM : -1;
+        int left = sDist;
+        if (sec && !scc) { // the trap section: dist is the inside camera's, sdist the remaining (driven off during it)
+            dist = tMid ? tMidDist : -1;
+            left = tMid ? (int) Math.round(tLeft - Math.max(0, secMeters - tLeftMeters)) : tLeft;
+        } else if (sec) {
+            dist = -1;
+        }
         int avg = -1;
         String src = "-";
         if (sec && sAvg > 0) {
@@ -182,10 +205,10 @@ public final class NavCam {
         b.append(" dist=").append(pos(dist));
         b.append(" zone=").append(trap ? String.valueOf(zone) : "-");
         b.append(" sec=").append(sec ? 1 : 0);
-        b.append(" slim=").append(sec ? pos(sLim) : "-");
+        b.append(" slim=").append(sec ? pos(lim) : "-");
         b.append(" savg=").append(pos(avg));
         b.append(" ssrc=").append(src);
-        b.append(" sdist=").append(sec ? pos(sDist) : "-");
+        b.append(" sdist=").append(sec ? pos(left) : "-");
         return b.toString();
     }
 
@@ -238,6 +261,12 @@ public final class NavCam {
         infoType = get(kv, "speedInfoType");
         alert = get(kv, "cameraSafetyAlert");
         if (fixed <= 0 && mobile <= 0 && limit <= 0 && zone <= 0) distM = -1; // cleared: the distance went with it
+        if (tSec && (limit != tLim || fixed > 0 || mobile > 0)) tSec = false; // cleared or another camera: the section ended
+    }
+
+    /** a limit camera of the car's kind (speedLimit + speedInfoType) is ahead */
+    private boolean limitCamera() {
+        return fixed <= 0 && mobile <= 0 && limit > 0 && infoType > 0;
     }
 
     private void warnDist(Map<String, Integer> kv, long at) {
@@ -246,8 +275,35 @@ public final class NavCam {
         else if (kv.containsKey("warnDistOverDec"))
             d = distMeters(get(kv, "warnDistOverDec"), get(kv, "warnDistUnderDec"), get(kv, "warnDistScale"));
         else return; // unit1.. / popup.. lines of the 10-arg call
+        int prev = distM;
         distM = d;
         distAt = at;
+        if (d <= 0) return;
+        if (!tSec) {
+            if (limitCamera() && prev > 0 && prev <= SEC_AT_M && d >= SEC_MIN_M) { // passed the start camera
+                tSec = true;
+                tMid = false;
+                tLim = limit;
+                left(d);
+            }
+        } else if (tMid) {
+            if (d > tMidDist + SEC_DROP_M) { // passed the inside camera: the remaining distance again
+                tMid = false;
+                left(d);
+            } else {
+                tMidDist = d;
+            }
+        } else if (tLeft >= SEC_MIN_M && d < tLeft - SEC_DROP_M) { // a camera inside the section (km still to go)
+            tMid = true;
+            tMidDist = d;
+        } else {
+            left(d);
+        }
+    }
+
+    private void left(int d) {
+        tLeft = d;
+        tLeftMeters = secMeters;
     }
 
     private void scc(Map<String, Integer> kv, long at) {
@@ -262,10 +318,14 @@ public final class NavCam {
         if (get(kv, "rangeCamInfo") == 7 || sLim == 15) sLim = 0;
         if (sAvg >= 255) sAvg = 0;
         if (sDist >= 65535) sDist = 0;
-        if (sLim <= 0) secOn = false;
+        if (sLim <= 0 && !tSec) secOn = false; // the trap section keeps its own average
     }
 
     private boolean sectionActive(long now) {
+        return sccActive(now) || tSec && trapKnown && now - Math.max(trapAt, distAt) <= STALE_MS;
+    }
+
+    private boolean sccActive(long now) {
         return sccKnown && sLim > 0 && now - sccAt <= STALE_MS;
     }
 

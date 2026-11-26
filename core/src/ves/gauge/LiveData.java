@@ -16,7 +16,7 @@ public final class LiveData {
     public int on = -1, navAge = -1;
     /** the camera ahead: its limit km/h, distance m, the trap line's raw warningZone */
     public int camLimit = -1, camDist = -1, zone = -1;
-    /** section enforcement: 1 active / 0 not, its limit km/h, average km/h, remaining distance (raw rangeCamDist) */
+    /** section enforcement: 1 active / 0 not, its limit km/h, average km/h, remaining distance m (0.2.16: dist is then a camera inside it) */
     public int section = -1, sectionLimit = -1, sectionAvg = -1, sectionDist = -1;
     /** cam: none|speed|signal|school|mobile|limit|zone|section (signal, school: 0.2.15), "-" unknown; sectionSrc: nav|own, "-" none */
     public String cam = "-", sectionSrc = "-";

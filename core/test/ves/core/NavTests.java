@@ -114,6 +114,11 @@ final class NavTests {
         n.onLine(line, W + offMs + 50, U + offMs + 50);
     }
 
+    /** vesd's speed ticks every 100 ms from fromMs (exclusive) to toMs (inclusive) */
+    static void drive(NavCam n, long fromMs, long toMs, double kph) {
+        for (long t = fromMs + 100; t <= toMs; t += 100) n.tickSpeed(kph, U + t);
+    }
+
     static LiveData live(String suffix, double kph) {
         return LiveData.parse("ok\nrpm=800 gear=0 sh=0 sel=5 kph=" + kph + " kw=0 shift=- dm=- profile=ice_smooth state=drive red=6500"
                 + " max=8000 on=1" + suffix + "\n");
@@ -196,6 +201,100 @@ final class NavTests {
                 feed(n, carTrap(W + 6000, 3, 0, 0, 0, 0), 6000);
                 is(n.liveFields(U + 6100), "cam", "none");
                 check(NavCam.distMeters(65535, 0, 0) == -1 && NavCam.distMeters(65534, 0, 0) == 65534, "65535 is no distance");
+            }
+        });
+
+        // ---------------- NC11 a section as the car sends it (2026-11-24/25 logs, the same 80 km/h section three times; no
+        // SCC): an 80 camera counts down to the start camera, then the line stays and the distance jumps to the section's
+        // remaining km; a camera inside the section counts down from 600 m (the remaining km paused), the trap line clears
+        // at the end camera
+        l.add(new TestMain.T("NC11_car_section_from_trap") {
+            void run() {
+                NavCam n = new NavCam();
+                feed(n, carTrap(W, 0, 0, 80, 1, 1), 0);
+                feed(n, warn10(W, 600, 0, 0), 0);
+                feed(n, warn10(W + 30000, 10, 0, 0), 30000);
+                String s = n.liveFields(U + 30100);
+                is(s, "cam", "speed");
+                is(s, "dist", "10");
+                is(s, "sec", "0");
+                feed(n, warn10(W + 32000, 4, 4, 1), 32000);
+                s = n.liveFields(U + 32100);
+                is(s, "cam", "section");
+                is(s, "sec", "1");
+                is(s, "lim", "80");
+                is(s, "slim", "80");
+                is(s, "sdist", "4400");
+                is(s, "dist", "-");
+                drive(n, 32100, 44000, 72);
+                s = n.liveFields(U + 44000);
+                is(s, "ssrc", "own");
+                is(s, "savg", "72");
+                feed(n, warn10(W + 44000, 4, 2, 1), 44000);
+                feed(n, carTrap(W + 45000, 1, 0, 80, 1, 1), 45000); // over the limit: the same camera again
+                drive(n, 44000, 49000, 72);
+                is(n.liveFields(U + 49000), "sdist", "4200"); // the navigation's own value until the inside camera
+                // the camera inside the section
+                feed(n, warn10(W + 49000, 600, 0, 0), 49000);
+                drive(n, 49000, 54000, 72);
+                s = n.liveFields(U + 54000);
+                is(s, "cam", "section");
+                is(s, "dist", "600");
+                int left = Integer.parseInt(f(s, "sdist"));
+                check(left >= 3950 && left <= 4050, "remaining 4.2 km less 10 s at 72 km/h: " + s);
+                feed(n, warn10(W + 70000, 20, 0, 0), 70000);
+                is(n.liveFields(U + 70100), "dist", "20");
+                feed(n, warn10(W + 72000, 1, 3, 1), 72000);
+                s = n.liveFields(U + 72100);
+                is(s, "dist", "-");
+                is(s, "sdist", "1300");
+                feed(n, warn10(W + 80000, 1, 0, 1), 80000);
+                feed(n, warn10(W + 85000, 900, 0, 0), 85000);
+                s = n.liveFields(U + 85100);
+                is(s, "sdist", "900");
+                is(s, "dist", "-");
+                for (int m = 800; m >= 100; m -= 100) feed(n, warn10(W + 85000 + (900 - m) * 40, m, 0, 0), 85000 + (900 - m) * 40);
+                feed(n, warn10(W + 120000, 20, 0, 0), 120000);
+                is(n.liveFields(U + 120100), "sdist", "20");
+                // the end camera: the line clears
+                feed(n, carTrap(W + 121000, 3, 0, 0, 0, 0), 121000);
+                s = n.liveFields(U + 121100);
+                is(s, "sec", "0");
+                is(s, "cam", "none");
+                is(s, "savg", "-");
+                is(s, "sdist", "-");
+            }
+        });
+
+        // ---------------- NC12 no section: a camera passed and cleared; a camera passed and the next one's metres without a
+        // new line; a different limit ends a section
+        l.add(new TestMain.T("NC12_car_no_false_section") {
+            void run() {
+                NavCam n = new NavCam();
+                feed(n, carTrap(W, 0, 0, 50, 1, 1), 0);
+                feed(n, warn10(W, 300, 0, 0), 0);
+                feed(n, warn10(W + 20000, 10, 0, 0), 20000);
+                feed(n, carTrap(W + 21000, 3, 0, 0, 0, 0), 21000);
+                feed(n, warn10(W + 21000, 65535, 15, 15), 21000);
+                is(n.liveFields(U + 21100), "sec", "0");
+                feed(n, carTrap(W + 30000, 0, 0, 80, 1, 1), 30000);
+                feed(n, warn10(W + 30000, 600, 0, 0), 30000);
+                feed(n, warn10(W + 50000, 10, 0, 0), 50000);
+                feed(n, warn10(W + 52000, 600, 0, 0), 52000);
+                String s = n.liveFields(U + 52100);
+                is(s, "sec", "0");
+                is(s, "cam", "speed");
+                is(s, "dist", "600");
+                // a section, then a line with another limit
+                feed(n, warn10(W + 70000, 10, 0, 0), 70000);
+                feed(n, warn10(W + 72000, 2, 5, 1), 72000);
+                is(n.liveFields(U + 72100), "sec", "1");
+                feed(n, carTrap(W + 80000, 0, 0, 60, 5, 3), 80000);
+                feed(n, warn10(W + 80000, 300, 0, 0), 80000);
+                s = n.liveFields(U + 80100);
+                is(s, "sec", "0");
+                is(s, "cam", "signal");
+                is(s, "dist", "300");
             }
         });
 
@@ -449,11 +548,28 @@ final class NavTests {
             }
         });
 
+        // ---------------- NT7 a section's remaining distance and the camera inside it (0.2.16)
+        l.add(new TestMain.T("NT7_text_section_left") {
+            void run() {
+                LiveData left = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=76 ssrc=own sdist=2500", 78);
+                check("구간단속 80 · 평균 76 · 남은 2.5 km".equals(NavText.line(left)), "line: " + NavText.line(left));
+                check("구간단속 80 · 남은 2.5 km".equals(NavText.title(left)), "title: " + NavText.title(left));
+                check("구간단속 · 남은 2.5 km".equals(NavText.signDetail(left)), "detail: " + NavText.signDetail(left));
+                LiveData cam = live(" nav=1 cam=section lim=80 dist=400 zone=0 sec=1 slim=80 savg=76 ssrc=own sdist=2100", 78);
+                check("구간단속 80 · 평균 76 · 카메라 400 m".equals(NavText.line(cam)), "line: " + NavText.line(cam));
+                check("구간단속 80 · 카메라 400 m".equals(NavText.title(cam)), "title: " + NavText.title(cam));
+                check("구간단속 · 카메라 400 m".equals(NavText.signDetail(cam)), "detail: " + NavText.signDetail(cam));
+                LiveData start = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=- ssrc=- sdist=4400", 78);
+                check("구간단속 80 · 남은 4.4 km".equals(NavText.line(start)), "no average yet: " + NavText.line(start));
+                check("평균 76".equals(NavText.sectionAvg(left)) && "".equals(NavText.sectionAvg(start)), "average line");
+            }
+        });
+
         // ---------------- NT2 section enforcement: limit and average
         l.add(new TestMain.T("NT2_text_section") {
             void run() {
                 String s = NavText.line(live(" nav=1 cam=section lim=80 dist=- zone=- sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 70));
-                check("구간단속 80 · 평균 87".equals(s), "section: " + s);
+                check("구간단속 80 · 평균 87 · 남은 1.5 km".equals(s), "section: " + s);
                 check("구간단속 80".equals(NavText.line(live(" nav=1 cam=section lim=80 dist=- zone=- sec=1 slim=80 savg=- ssrc=- sdist=-", 70))),
                         "no average yet");
             }
@@ -470,7 +586,7 @@ final class NavTests {
                 check("350 m".equals(NavText.signDetail(live(" nav=1 cam=limit lim=80 dist=350" + rest, 50))), "limit");
                 check("주의 구간 · 350 m".equals(NavText.signDetail(live(" nav=1 cam=zone lim=- dist=350 zone=9 sec=0 slim=- savg=- ssrc=- sdist=-", 50))), "zone: no sign number");
                 LiveData sec = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 50);
-                check("구간단속".equals(NavText.signDetail(sec)), "section: the average has its own line");
+                check("구간단속 · 남은 1.5 km".equals(NavText.signDetail(sec)), "section: the average has its own line");
                 check("평균 87".equals(NavText.sectionAvg(sec)), "section average line");
                 check(NavText.avgOver(sec) && !NavText.nowOver(sec), "average 87 over 80, current 50 not");
                 check("".equals(NavText.sectionAvg(live(" nav=1 cam=speed lim=60 dist=350" + rest, 50))), "no section: no average line");
@@ -485,7 +601,7 @@ final class NavTests {
             void run() {
                 String rest = " zone=0 sec=0 slim=- savg=- ssrc=- sdist=-";
                 LiveData sec = live(" nav=1 cam=section lim=80 dist=- zone=0 sec=1 slim=80 savg=87 ssrc=nav sdist=1500", 84);
-                check("구간단속 80".equals(NavText.title(sec)), "section title without the average: " + NavText.title(sec));
+                check("구간단속 80 · 남은 1.5 km".equals(NavText.title(sec)), "section title without the average: " + NavText.title(sec));
                 check("평균 87".equals(NavText.sectionAvg(sec)) && "현재 84".equals(NavText.now(sec)), "average and current speed");
                 LiveData cam = live(" nav=1 cam=speed lim=60 dist=350" + rest, 72);
                 check("단속 60 · 350 m".equals(NavText.title(cam)) && "현재 72".equals(NavText.now(cam)), "speed camera");
